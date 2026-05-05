@@ -1,0 +1,61 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  /* Color Palette - Ultra Premium Dark */
+  --bg-main: #050505;
+  --bg-card: #0d0d0f;
+  --bg-sidebar: #08080a;
+  --accent-primary: #e2b04c; /* Richer Gold */
+  --accent-secondary: #c28e2a;
+  --accent-glow: rgba(226, 176, 76, 0.15);
+  
+  --text-main: #f0f0f2;
+  --text-secondary: #b0b0b5;
+  --text-muted: #6e6e73;
+  
+  --border-color: rgba(226, 176, 76, 0.1);
+  --glass-bg: rgba(13, 13, 15, 0.6);
+  --glass-border: rgba(255, 255, 255, 0.04);
+  
+  /* Status Colors with Glows */
+  --success: #32d74b;
+  --success-glow: rgba(50, 215, 75, 0.15);
+  --error: #ff453a;
+  --error-glow: rgba(255, 69, 58, 0.15);
+  --warning: #ffd60a;
+  --info: #0a84ff;
+
+  /* Spacing & Radii */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  
+  /* Transitions */
+  --transition-bounce: 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+}
+
+input, select, textarea {
+  font-family: inherit;
+}
