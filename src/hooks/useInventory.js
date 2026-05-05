@@ -1,248 +1,263 @@
 import { useState, useEffect, useCallback } from 'react';
 
-const STORAGE_KEY = 'alta_densidad_data_v2';
+const API_URL = 'http://localhost:5000/api';
 
 export const useInventory = (notify) => {
-  const [data, setData] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    const initial = {
-      inventory: [],
-      sales: [],
-      purchases: [],
-      expenses: [],
-      suppliers: []
-    };
-    try {
-      return saved ? { ...initial, ...JSON.parse(saved) } : initial;
-    } catch (e) {
-      console.error("Error loading data:", e);
-      return initial;
-    }
+  const [data, setData] = useState({
+    inventory: [],
+    sales: [],
+    purchases: [],
+    expenses: [],
+    suppliers: []
   });
 
+  const fetchData = useCallback(async () => {
+    try {
+      const [inventory, sales, purchases, expenses, suppliers] = await Promise.all([
+        fetch(`${API_URL}/products`).then(res => res.json()),
+        fetch(`${API_URL}/sales`).then(res => res.json()),
+        fetch(`${API_URL}/purchases`).then(res => res.json()),
+        fetch(`${API_URL}/expenses`).then(res => res.json()),
+        fetch(`${API_URL}/suppliers`).then(res => res.json())
+      ]);
+
+      setData({ inventory, sales, purchases, expenses, suppliers });
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      notify?.('Error al conectar con el servidor', 'error');
+    }
+  }, [notify]);
+
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [data]);
+    fetchData();
+  }, [fetchData]);
 
   // --- INVENTORY LOGIC ---
-  const addProduct = useCallback((product) => {
-    setData(prev => ({
-      ...prev,
-      inventory: [...prev.inventory, { 
-        ...product, 
-        id: Date.now(), 
-        price: parseFloat(product.price) || 0,
-        costPrice: parseFloat(product.costPrice) || 0,
-        stock: parseInt(product.stock) || 0,
-        createdAt: new Date().toISOString()
-      }]
-    }));
-    notify?.('Producto añadido al inventario', 'success');
-  }, [notify]);
+  const addProduct = useCallback(async (product) => {
+    try {
+      const response = await fetch(`${API_URL}/products`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(product)
+      });
+      if (response.ok) {
+        fetchData();
+        notify?.('Producto añadido al inventario', 'success');
+      }
+    } catch (error) {
+      notify?.('Error al añadir producto', 'error');
+    }
+  }, [fetchData, notify]);
 
-  const updateProduct = useCallback((id, updates) => {
-    setData(prev => ({
-      ...prev,
-      inventory: prev.inventory.map(p => p.id === id ? { 
-        ...p, 
-        ...updates,
-        price: updates.price !== undefined ? parseFloat(updates.price) : p.price,
-        costPrice: updates.costPrice !== undefined ? parseFloat(updates.costPrice) : p.costPrice,
-        stock: updates.stock !== undefined ? parseInt(updates.stock) : p.stock,
-      } : p)
-    }));
-    notify?.('Producto actualizado correctamente', 'success');
-  }, [notify]);
+  const updateProduct = useCallback(async (id, updates) => {
+    try {
+      const response = await fetch(`${API_URL}/products/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      if (response.ok) {
+        fetchData();
+        notify?.('Producto actualizado correctamente', 'success');
+      }
+    } catch (error) {
+      notify?.('Error al actualizar producto', 'error');
+    }
+  }, [fetchData, notify]);
 
-  const deleteProduct = useCallback((id) => {
-    setData(prev => ({
-      ...prev,
-      inventory: prev.inventory.filter(p => p.id !== id)
-    }));
-    notify?.('Producto eliminado', 'info');
-  }, [notify]);
+  const deleteProduct = useCallback(async (id) => {
+    try {
+      const response = await fetch(`${API_URL}/products/${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        fetchData();
+        notify?.('Producto eliminado', 'info');
+      }
+    } catch (error) {
+      notify?.('Error al eliminar producto', 'error');
+    }
+  }, [fetchData, notify]);
 
-  // --- SALES LOGIC (UPGRADED FOR INSTALLMENTS) ---
-  const addSale = useCallback((sale) => {
-    const productId = parseInt(sale.productId);
-    const quantity = parseInt(sale.quantity);
-
-    setData(prev => {
-      const product = prev.inventory.find(p => p.id === productId);
+  // --- SALES LOGIC ---
+  const addSale = useCallback(async (sale) => {
+    try {
+      const product = data.inventory.find(p => p.id === parseInt(sale.productId));
       if (!product) {
         notify?.('Producto no encontrado', 'error');
-        return prev;
+        return;
       }
       
-      const availableStock = Number(product.stock) || 0;
-      if (availableStock < quantity) {
-        notify?.(`Stock insuficiente. Disponible: ${availableStock}`, 'error');
-        return prev;
+      if (product.stock < parseInt(sale.quantity)) {
+        notify?.(`Stock insuficiente. Disponible: ${product.stock}`, 'error');
+        return;
       }
 
-      const newStock = availableStock - quantity;
-      const unitPrice = parseFloat(product.price) || 0;
-      const totalAmount = parseFloat(sale.total || sale.amount) || (unitPrice * quantity);
-      
-      // Handle Initial Payment
+      const totalAmount = parseFloat(sale.total || sale.amount) || (parseFloat(product.price) * parseInt(sale.quantity));
       const initialPayment = parseFloat(sale.initialPayment) || 0;
       const status = initialPayment >= totalAmount ? 'paid' : 'pending';
-      const payments = initialPayment > 0 ? [{ id: Date.now(), amount: initialPayment, date: sale.date, method: sale.method || 'Efectivo' }] : [];
 
-      return {
-        ...prev,
-        sales: [...prev.sales, { 
-          ...sale, 
-          productId,
-          quantity,
-          id: Date.now(), 
-          costAtSale: parseFloat(product.costPrice) || 0,
+      const response = await fetch(`${API_URL}/sales`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...sale,
           total: totalAmount,
-          productName: product.name,
-          customerName: sale.customerName || 'Cliente General',
+          costAtSale: product.costPrice,
           status,
-          payments
-        }],
-        inventory: prev.inventory.map(p => 
-          p.id === productId ? { ...p, stock: newStock } : p
-        )
-      };
-    });
-    notify?.('Venta registrada con éxito', 'success');
-  }, [notify]);
+          initialPayment
+        })
+      });
 
-  const addPaymentToSale = useCallback((saleId, payment) => {
-    setData(prev => {
-      const sale = prev.sales.find(s => s.id === saleId);
-      if (!sale) return prev;
+      if (response.ok) {
+        fetchData();
+        notify?.('Venta registrada con éxito', 'success');
+      }
+    } catch (error) {
+      notify?.('Error al registrar venta', 'error');
+    }
+  }, [data.inventory, fetchData, notify]);
 
-      const newPayments = [...(sale.payments || []), { ...payment, id: Date.now() }];
-      const totalPaid = newPayments.reduce((acc, curr) => acc + parseFloat(curr.amount), 0);
-      const status = totalPaid >= sale.total ? 'paid' : 'pending';
+  const addPaymentToSale = useCallback(async (saleId, payment) => {
+    try {
+      const response = await fetch(`${API_URL}/sales/${saleId}/payments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payment)
+      });
+      if (response.ok) {
+        fetchData();
+        notify?.('Abono registrado correctamente', 'success');
+      }
+    } catch (error) {
+      notify?.('Error al registrar abono', 'error');
+    }
+  }, [fetchData, notify]);
 
-      return {
-        ...prev,
-        sales: prev.sales.map(s => s.id === saleId ? { ...s, payments: newPayments, status } : s)
-      };
-    });
-    notify?.('Abono registrado correctamente', 'success');
-  }, [notify]);
-
-  const deleteSale = useCallback((saleId) => {
-    setData(prev => {
-      const sale = prev.sales.find(s => s.id === saleId);
-      if (!sale) return prev;
-      
-      return {
-        ...prev,
-        sales: prev.sales.filter(s => s.id !== saleId),
-        inventory: prev.inventory.map(p => 
-          p.id === sale.productId ? { ...p, stock: Number(p.stock) + (parseInt(sale.quantity) || 0) } : p
-        )
-      };
-    });
-    notify?.('Venta eliminada y stock revertido', 'info');
-  }, [notify]);
+  const deleteSale = useCallback(async (saleId) => {
+    try {
+      const response = await fetch(`${API_URL}/sales/${saleId}`, { method: 'DELETE' });
+      if (response.ok) {
+        fetchData();
+        notify?.('Venta eliminada y stock revertido', 'info');
+      }
+    } catch (error) {
+      notify?.('Error al eliminar venta', 'error');
+    }
+  }, [fetchData, notify]);
 
   // --- PURCHASES LOGIC ---
-  const addPurchase = useCallback((purchase) => {
-    const productId = Number(purchase.productId);
-    const quantity = Number(purchase.quantity);
-    const totalAmount = parseFloat(purchase.amount || purchase.total || 0);
-    const unitPrice = parseFloat(purchase.unitPrice) || (totalAmount / (quantity || 1));
-    const supplierId = purchase.supplierId ? Number(purchase.supplierId) : null;
+  const addPurchase = useCallback(async (purchase) => {
+    try {
+      const totalAmount = parseFloat(purchase.amount || purchase.total || 0);
+      const quantity = parseInt(purchase.quantity);
+      const unitPrice = parseFloat(purchase.unitPrice) || (totalAmount / (quantity || 1));
 
-    setData(prev => {
-      const product = prev.inventory.find(p => Number(p.id) === productId);
-      const supplier = prev.suppliers?.find(s => Number(s.id) === supplierId);
-      
-      return {
-        ...prev,
-        purchases: [...prev.purchases, { 
-          ...purchase, 
-          productId,
-          supplierId,
-          supplierName: supplier?.name || 'Sin Proveedor',
-          quantity,
+      const response = await fetch(`${API_URL}/purchases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...purchase,
           amount: totalAmount,
-          unitPrice,
-          id: Date.now(),
-          productName: product?.name || 'Desconocido'
-        }],
-        inventory: prev.inventory.map(p => 
-          Number(p.id) === productId ? { ...p, stock: Number(p.stock) + quantity } : p
-        )
-      };
-    });
-    notify?.('Compra registrada. Stock incrementado', 'success');
-  }, [notify]);
+          unitPrice
+        })
+      });
 
-  const deletePurchase = useCallback((purchaseId) => {
-    setData(prev => {
-      const purchase = prev.purchases.find(p => p.id === purchaseId);
-      if (!purchase) return prev;
-      
-      return {
-        ...prev,
-        purchases: prev.purchases.filter(p => p.id !== purchaseId),
-        inventory: prev.inventory.map(p => 
-          p.id === purchase.productId ? { ...p, stock: Math.max(0, Number(p.stock) - (parseInt(purchase.quantity) || 0)) } : p
-        )
-      };
-    });
-    notify?.('Compra eliminada y stock ajustado', 'info');
-  }, [notify]);
+      if (response.ok) {
+        fetchData();
+        notify?.('Compra registrada. Stock incrementado', 'success');
+      }
+    } catch (error) {
+      notify?.('Error al registrar compra', 'error');
+    }
+  }, [fetchData, notify]);
+
+  const deletePurchase = useCallback(async (purchaseId) => {
+    try {
+      const response = await fetch(`${API_URL}/purchases/${purchaseId}`, { method: 'DELETE' });
+      if (response.ok) {
+        fetchData();
+        notify?.('Compra eliminada y stock ajustado', 'info');
+      }
+    } catch (error) {
+      notify?.('Error al eliminar compra', 'error');
+    }
+  }, [fetchData, notify]);
 
   // --- EXPENSES LOGIC ---
-  const addExpense = useCallback((expense) => {
-    const amount = parseFloat(expense.amount) || 0;
-    setData(prev => ({
-      ...prev,
-      expenses: [...prev.expenses, { ...expense, amount, id: Date.now() }]
-    }));
-    notify?.('Gasto operativo registrado', 'success');
-  }, [notify]);
+  const addExpense = useCallback(async (expense) => {
+    try {
+      const response = await fetch(`${API_URL}/expenses`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(expense)
+      });
+      if (response.ok) {
+        fetchData();
+        notify?.('Gasto operativo registrado', 'success');
+      }
+    } catch (error) {
+      notify?.('Error al registrar gasto', 'error');
+    }
+  }, [fetchData, notify]);
 
-  const deleteExpense = useCallback((expenseId) => {
-    setData(prev => ({
-      ...prev,
-      expenses: prev.expenses.filter(e => e.id !== expenseId)
-    }));
-    notify?.('Gasto eliminado', 'info');
-  }, [notify]);
+  const deleteExpense = useCallback(async (expenseId) => {
+    try {
+      const response = await fetch(`${API_URL}/expenses/${expenseId}`, { method: 'DELETE' });
+      if (response.ok) {
+        fetchData();
+        notify?.('Gasto eliminado', 'info');
+      }
+    } catch (error) {
+      notify?.('Error al eliminar gasto', 'error');
+    }
+  }, [fetchData, notify]);
 
   // --- SUPPLIERS LOGIC ---
-  const addSupplier = useCallback((supplier) => {
-    setData(prev => ({
-      ...prev,
-      suppliers: [...(prev.suppliers || []), { 
-        ...supplier, 
-        id: Date.now(),
-        createdAt: new Date().toISOString()
-      }]
-    }));
-    notify?.('Proveedor añadido correctamente', 'success');
-  }, [notify]);
+  const addSupplier = useCallback(async (supplier) => {
+    try {
+      const response = await fetch(`${API_URL}/suppliers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(supplier)
+      });
+      if (response.ok) {
+        fetchData();
+        notify?.('Proveedor añadido correctamente', 'success');
+      }
+    } catch (error) {
+      notify?.('Error al añadir proveedor', 'error');
+    }
+  }, [fetchData, notify]);
 
-  const updateSupplier = useCallback((id, updates) => {
-    setData(prev => ({
-      ...prev,
-      suppliers: (prev.suppliers || []).map(s => s.id === id ? { ...s, ...updates } : s)
-    }));
-    notify?.('Proveedor actualizado', 'success');
-  }, [notify]);
+  const updateSupplier = useCallback(async (id, updates) => {
+    try {
+      const response = await fetch(`${API_URL}/suppliers/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      if (response.ok) {
+        fetchData();
+        notify?.('Proveedor actualizado', 'success');
+      }
+    } catch (error) {
+      notify?.('Error al actualizar proveedor', 'error');
+    }
+  }, [fetchData, notify]);
 
-  const deleteSupplier = useCallback((id) => {
-    setData(prev => ({
-      ...prev,
-      suppliers: (prev.suppliers || []).filter(s => s.id !== id)
-    }));
-    notify?.('Proveedor eliminado', 'info');
-  }, [notify]);
+  const deleteSupplier = useCallback(async (id) => {
+    try {
+      const response = await fetch(`${API_URL}/suppliers/${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        fetchData();
+        notify?.('Proveedor eliminado', 'info');
+      }
+    } catch (error) {
+      notify?.('Error al eliminar proveedor', 'error');
+    }
+  }, [fetchData, notify]);
 
   const getMostFrequentSupplierId = useCallback(() => {
     if (!data.purchases || data.purchases.length === 0) return null;
-    
     const counts = {};
     let maxCount = 0;
     let mostFrequentId = null;
@@ -256,15 +271,8 @@ export const useInventory = (notify) => {
         }
       }
     });
-
     return mostFrequentId;
   }, [data.purchases]);
-
-  // --- SYSTEM LOGIC ---
-  const clearAllData = useCallback(() => {
-    setData({ inventory: [], sales: [], purchases: [], expenses: [] });
-    notify?.('Sistema reiniciado. Todos los datos borrados.', 'warning');
-  }, [notify]);
 
   const exportData = useCallback(() => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -292,7 +300,7 @@ export const useInventory = (notify) => {
     updateSupplier,
     deleteSupplier,
     getMostFrequentSupplierId,
-    clearAllData,
-    exportData
+    exportData,
+    fetchData
   };
 };

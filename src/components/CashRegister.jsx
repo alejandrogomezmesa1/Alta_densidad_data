@@ -3,15 +3,28 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Wallet, ArrowDownCircle, ArrowUpCircle, Calculator, CheckCircle, Save, History, DollarSign, Trash2, X } from 'lucide-react';
 
 const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
-  const [closingHistory, setClosingHistory] = useState(() => {
-    const saved = localStorage.getItem('alta_densidad_cash_history');
-    return saved ? JSON.parse(saved) : [];
-  });
-
+  const [closingHistory, setClosingHistory] = useState([]);
   const [selectedHistory, setSelectedHistory] = useState(null);
   const [lastClosingId, setLastClosingId] = useState(() => {
     return Number(localStorage.getItem('alta_densidad_last_closing_id')) || 0;
   });
+
+  const fetchData = React.useCallback(async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/cash-closings');
+      const data = await response.json();
+      setClosingHistory(data.map(h => ({
+        ...h,
+        movements: h.notes ? JSON.parse(h.notes) : []
+      })));
+    } catch (error) {
+      console.error("Error fetching cash closings:", error);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -82,31 +95,49 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
       return;
     }
 
-    confirm('¿Estás seguro de cerrar la caja actual? El resumen se reiniciará para nuevos movimientos.', () => {
+    confirm('¿Estás seguro de cerrar la caja actual? El resumen se reiniciará para nuevos movimientos.', async () => {
       const closeId = Date.now();
       const newClosing = {
-        id: closeId,
         date: today,
-        ...dailyStats,
-        timestamp: new Date().toLocaleTimeString()
+        initialCash: 0, // Could be improved if tracking cash on hand
+        finalCash: dailyStats.net,
+        difference: 0,
+        salesTotal: dailyStats.cashIn,
+        purchasesTotal: 0, // Could track if purchases were cash
+        expensesTotal: dailyStats.cashOut,
+        notes: JSON.stringify(dailyStats.movements)
       };
       
-      const updatedHistory = [newClosing, ...closingHistory];
-      setClosingHistory(updatedHistory);
-      setLastClosingId(closeId);
-      localStorage.setItem('alta_densidad_cash_history', JSON.stringify(updatedHistory));
-      localStorage.setItem('alta_densidad_last_closing_id', closeId.toString());
-      
-      notify('Cierre de caja guardado con éxito.', 'success');
+      try {
+        const response = await fetch('http://localhost:5000/api/cash-closings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newClosing)
+        });
+
+        if (response.ok) {
+          setLastClosingId(closeId);
+          localStorage.setItem('alta_densidad_last_closing_id', closeId.toString());
+          fetchData();
+          notify('Cierre de caja guardado con éxito.', 'success');
+        }
+      } catch (error) {
+        notify('Error al guardar cierre de caja.', 'error');
+      }
     });
   };
 
   const deleteHistoryItem = (id) => {
-    confirm('¿Eliminar este registro del historial?', () => {
-      const updated = closingHistory.filter(h => h.id !== id);
-      setClosingHistory(updated);
-      localStorage.setItem('alta_densidad_cash_history', JSON.stringify(updated));
-      notify('Registro eliminado.', 'info');
+    confirm('¿Eliminar este registro del historial?', async () => {
+      try {
+        const response = await fetch(`http://localhost:5000/api/cash-closings/${id}`, { method: 'DELETE' });
+        if (response.ok) {
+          fetchData();
+          notify('Registro eliminado.', 'info');
+        }
+      } catch (error) {
+        notify('Error al eliminar registro.', 'error');
+      }
     });
   };
 

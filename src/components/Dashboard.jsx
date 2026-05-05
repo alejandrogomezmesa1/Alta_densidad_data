@@ -100,11 +100,16 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
       cashInToday += todayP.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
     });
 
+    const totalCOGS = currentSales.reduce((acc, curr) => {
+      const cost = (parseFloat(curr.costAtSale) || 0) * (parseInt(curr.quantity) || 0);
+      return acc + cost;
+    }, 0);
+
     return { 
       totalSales, totalExpenses, netProfit: totalProfitToday - totalExpenses, 
       lowStockCount, outOfStockCount, inventoryValue, potentialRevenue,
       accountsReceivable, topProducts: [], // Simplified for now
-      currentSales, cashInToday,
+      currentSales, cashInToday, totalCOGS,
       avgTicket: currentSales.length > 0 ? totalSales / currentSales.length : 0,
       salesCount: currentSales.length
     };
