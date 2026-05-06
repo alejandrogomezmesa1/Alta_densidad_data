@@ -13,10 +13,18 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
     try {
       const response = await fetch('http://localhost:5000/api/cash-closings');
       const data = await response.json();
-      setClosingHistory(data.map(h => ({
-        ...h,
-        movements: h.notes ? JSON.parse(h.notes) : []
-      })));
+      setClosingHistory(data.map(h => {
+        let movements = [];
+        try {
+          movements = h.notes ? JSON.parse(h.notes) : [];
+        } catch (e) {
+          console.error("Error parsing movements JSON:", e);
+        }
+        return {
+          ...h,
+          movements
+        };
+      }));
     } catch (error) {
       console.error("Error fetching cash closings:", error);
     }
@@ -29,14 +37,18 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
   const today = new Date().toISOString().split('T')[0];
 
   const dailyStats = useMemo(() => {
+    // Safely handle inputs
+    const salesArr = Array.isArray(sales) ? sales : [];
+    const expensesArr = Array.isArray(expenses) ? expenses : [];
+
     // Only count transactions AFTER the last closing
-    const activeExpenses = expenses.filter(e => e.date === today && e.id > lastClosingId);
+    const activeExpenses = expensesArr.filter(e => e.date === today && e.id > lastClosingId);
     
     // CASH IN: All payments made today, even from old sales
     let cashSales = 0;
     const movements = [];
 
-    sales.forEach(s => {
+    salesArr.forEach(s => {
       const paymentsThisSession = (s.payments || []).filter(p => p.id > lastClosingId);
       if (paymentsThisSession.length > 0) {
         const paidThisSession = paymentsThisSession.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
@@ -62,7 +74,7 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
 
     // NEW PROFIT LOGIC: Only recognize profit when sale is FULLY PAID since last closing
     let totalProfit = 0;
-    sales.forEach(s => {
+    salesArr.forEach(s => {
       const totalAmount = parseFloat(s.total) || 0;
       const payments = s.payments || [];
       const totalPaid = payments.reduce((pAcc, pCurr) => pAcc + (parseFloat(pCurr.amount) || 0), 0);
@@ -99,12 +111,13 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
       const closeId = Date.now();
       const newClosing = {
         date: today,
-        initialCash: 0, // Could be improved if tracking cash on hand
+        initialCash: 0,
         finalCash: dailyStats.net,
         difference: 0,
         salesTotal: dailyStats.cashIn,
-        purchasesTotal: 0, // Could track if purchases were cash
+        purchasesTotal: 0,
         expensesTotal: dailyStats.cashOut,
+        profit: dailyStats.profit,
         notes: JSON.stringify(dailyStats.movements)
       };
       
@@ -236,11 +249,11 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
               >
                 <div>
                   <div style={{ fontWeight: 800, fontSize: '0.9rem' }}>{h.date}</div>
-                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{h.timestamp}</div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{new Date(h.createdAt).toLocaleTimeString()}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Gastos</div>
-                  <div style={{ fontWeight: 700, color: 'var(--error)', fontSize: '0.85rem' }}>-${(h.cashOut || 0).toLocaleString('es-CO')}</div>
+                  <div style={{ fontWeight: 700, color: 'var(--error)', fontSize: '0.85rem' }}>-${(h.expensesTotal || 0).toLocaleString('es-CO')}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Ganancia</div>
@@ -249,7 +262,7 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
                 <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1rem' }}>
                   <div>
                     <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Saldo Final</div>
-                    <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--accent-primary)' }}>${h.net.toLocaleString('es-CO')}</div>
+                    <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--accent-primary)' }}>${(h.initialCash + h.salesTotal - h.expensesTotal).toLocaleString('es-CO')}</div>
                   </div>
                   <button 
                     onClick={(e) => { e.stopPropagation(); deleteHistoryItem(h.id); }}
@@ -276,7 +289,7 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                 <div>
                   <h3 style={{ fontSize: '1.5rem', color: 'var(--accent-primary)' }}>DETALLE DE CIERRE</h3>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{selectedHistory.date} • {selectedHistory.timestamp}</p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{selectedHistory.date} • {new Date(selectedHistory.createdAt).toLocaleTimeString()}</p>
                 </div>
                 <button onClick={() => setSelectedHistory(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={24} /></button>
               </div>
@@ -284,27 +297,27 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
                 <div className="glass" style={{ padding: '1.5rem', borderRadius: '16px', textAlign: 'center' }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Movimientos</div>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{selectedHistory.salesCount}</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{selectedHistory.movements.length}</div>
                 </div>
                 <div className="glass" style={{ padding: '1.5rem', borderRadius: '16px', textAlign: 'center' }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Efectivo Total</div>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--accent-primary)' }}>${selectedHistory.net.toLocaleString('es-CO')}</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--accent-primary)' }}>${(selectedHistory.initialCash + selectedHistory.salesTotal - selectedHistory.expensesTotal).toLocaleString('es-CO')}</div>
                 </div>
               </div>
 
               <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '20px', padding: '1.5rem', border: '1px solid var(--glass-border)', marginBottom: '2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.2rem' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Ingresos (Ventas/Abonos)</span>
-                  <span style={{ fontWeight: 700, color: 'var(--success)' }}>+${selectedHistory.cashIn.toLocaleString('es-CO')}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--success)' }}>+${(selectedHistory.salesTotal || 0).toLocaleString('es-CO')}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.2rem' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Egresos (Gastos)</span>
-                  <span style={{ fontWeight: 700, color: 'var(--error)' }}>-${selectedHistory.cashOut.toLocaleString('es-CO')}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--error)' }}>-${(selectedHistory.expensesTotal || 0).toLocaleString('es-CO')}</span>
                 </div>
                 <div style={{ height: '1px', background: 'var(--glass-border)', margin: '1.2rem 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ fontWeight: 800 }}>GANANCIA REAL</span>
-                  <span style={{ fontWeight: 900, color: 'var(--success)', fontSize: '1.2rem' }}>+${selectedHistory.profit.toLocaleString('es-CO')}</span>
+                  <span style={{ fontWeight: 900, color: 'var(--success)', fontSize: '1.2rem' }}>+${(selectedHistory.profit || 0).toLocaleString('es-CO')}</span>
                 </div>
               </div>
 

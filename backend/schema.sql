@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS cierres_caja (
     total_ventas DECIMAL(15, 2) DEFAULT 0.00,
     total_compras DECIMAL(15, 2) DEFAULT 0.00,
     total_gastos DECIMAL(15, 2) DEFAULT 0.00,
+    ganancia DECIMAL(15, 2) DEFAULT 0.00,
     notas TEXT,
     fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP
 );

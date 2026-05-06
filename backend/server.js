@@ -339,7 +339,7 @@ app.get('/api/cash-closings', async (req, res) => {
         const [rows] = await db.query(`
             SELECT id, fecha as date, efectivo_inicial as initialCash, efectivo_final as finalCash, 
                    diferencia as difference, total_ventas as salesTotal, total_compras as purchasesTotal, 
-                   total_gastos as expensesTotal, notas as notes, fecha_creacion as createdAt 
+                   total_gastos as expensesTotal, ganancia as profit, notas as notes, fecha_creacion as createdAt 
             FROM cierres_caja ORDER BY fecha DESC
         `);
         res.json(rows);
@@ -349,11 +349,11 @@ app.get('/api/cash-closings', async (req, res) => {
 });
 
 app.post('/api/cash-closings', async (req, res) => {
-    const { date, initialCash, finalCash, difference, salesTotal, purchasesTotal, expensesTotal, notes } = req.body;
+    const { date, initialCash, finalCash, difference, salesTotal, purchasesTotal, expensesTotal, profit, notes } = req.body;
     try {
         const [result] = await db.query(
-            'INSERT INTO cierres_caja (fecha, efectivo_inicial, efectivo_final, diferencia, total_ventas, total_compras, total_gastos, notas) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [date, initialCash, finalCash, difference, salesTotal, purchasesTotal, expensesTotal, notes]
+            'INSERT INTO cierres_caja (fecha, efectivo_inicial, efectivo_final, diferencia, total_ventas, total_compras, total_gastos, ganancia, notas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [date, initialCash, finalCash, difference, salesTotal, purchasesTotal, expensesTotal, profit, notes]
         );
         res.status(201).json({ id: result.insertId, ...req.body });
     } catch (error) {
