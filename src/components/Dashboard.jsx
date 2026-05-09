@@ -425,6 +425,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
               )}
             </tbody>
           </table>
+          </div>
         </div>
 
         {/* Stock Status Radial */}
