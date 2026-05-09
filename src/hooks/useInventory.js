@@ -10,9 +10,10 @@ export const useInventory = (notify) => {
     suppliers: [],
     customers: []
   });
-  const [isDemo, setIsDemo] = useState(api.getDemoMode());
+  const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
+    setLoading(true);
     try {
       const [inventory, sales, purchases, expenses, suppliers, customers] = await Promise.all([
         api.get('/products'),
@@ -31,30 +32,19 @@ export const useInventory = (notify) => {
         suppliers: Array.isArray(suppliers) ? suppliers : [],
         customers: Array.isArray(customers) ? customers : []
       });
-      setIsDemo(api.getDemoMode());
     } catch (error) {
       console.error("Error fetching data:", error);
-      if (!api.getDemoMode()) {
-        notify?.('Error de conexión. Cambiando a Modo Demo (Local).', 'warning');
-        api.setDemoMode(true);
-        setIsDemo(true);
-        fetchData(); // Retry in demo mode
-      } else {
-        notify?.('Error al cargar datos locales', 'error');
-      }
+      notify?.(error.message || 'Error de conexión con el servidor', 'error');
+    } finally {
+      setLoading(false);
     }
   }, [notify]);
 
   useEffect(() => {
-    fetchData();
+    if (api.isAuthenticated()) {
+      fetchData();
+    }
   }, [fetchData]);
-
-  const toggleDemoMode = useCallback((enabled) => {
-    api.setDemoMode(enabled);
-    setIsDemo(enabled);
-    fetchData();
-    notify?.(enabled ? 'Modo Demo Activado' : 'Modo Demo Desactivado', 'info');
-  }, [fetchData, notify]);
 
   // --- INVENTORY LOGIC ---
   const addProduct = useCallback(async (product) => {
@@ -243,8 +233,7 @@ export const useInventory = (notify) => {
 
   return {
     ...data,
-    isDemo,
-    toggleDemoMode,
+    loading,
     addProduct,
     updateProduct,
     deleteProduct,

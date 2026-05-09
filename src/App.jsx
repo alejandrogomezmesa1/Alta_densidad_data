@@ -124,15 +124,9 @@ function App() {
     });
   };
 
-  const { 
-    inventory, sales, purchases, expenses, customers,
-    addProduct, updateProduct, deleteProduct, 
-    addSale, updateSale, deleteSale, addPaymentToSale,
-    addPurchase, updatePurchase, deletePurchase, 
-    addExpense, updateExpense, deleteExpense,
     suppliers, addSupplier, updateSupplier, deleteSupplier, getMostFrequentSupplierId,
     updateCustomer, deleteCustomer,
-    exportData, isDemo, toggleDemoMode
+    exportData
   } = useInventory(notify); // Injecting notification system
 
   const renderContent = () => {
@@ -233,18 +227,6 @@ function App() {
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-main)', position: 'relative' }}>
       {/* Notifications & Status Layer */}
       <div style={{ position: 'fixed', top: '2rem', right: '2rem', zIndex: 9999, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
-        {isDemo && (
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
-            className="glass"
-            style={{ padding: '0.5rem 1rem', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--warning)', pointerEvents: 'auto', cursor: 'pointer' }}
-            onClick={() => toggleDemoMode(false)}
-            title="Click para reconectar al servidor"
-          >
-            <AlertTriangle size={16} color="var(--warning)" />
-            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--warning)' }}>MODO DEMO (Local)</span>
-          </motion.div>
-        )}
         <AnimatePresence>
           {notifications.map(n => (
             <Notification key={n.id} {...n} onClose={removeNotification} />

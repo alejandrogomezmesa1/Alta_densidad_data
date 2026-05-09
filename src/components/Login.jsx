@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Lock, User, LogIn, TrendingUp, AlertCircle, Key } from 'lucide-react';
+import { Lock, User, LogIn, TrendingUp, AlertCircle } from 'lucide-react';
 import { api } from '../services/api';
 
 const Login = ({ onLoginSuccess, notify }) => {
-  const [isRegistering, setIsRegistering] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,21 +15,9 @@ const Login = ({ onLoginSuccess, notify }) => {
     setError('');
 
     try {
-      if (isRegistering) {
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/auth/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Registration failed');
-        notify('Usuario registrado con éxito. Ahora puedes iniciar sesión.', 'success');
-        setIsRegistering(false);
-      } else {
-        await api.login(username, password);
-        notify('Bienvenido de nuevo', 'success');
-        onLoginSuccess();
-      }
+      await api.login(username, password);
+      notify('Bienvenido de nuevo', 'success');
+      onLoginSuccess();
     } catch (err) {
       setError(err.message);
       notify(err.message, 'error');
@@ -72,7 +59,7 @@ const Login = ({ onLoginSuccess, notify }) => {
           </div>
           <h1 className="title-gradient" style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>ALTA DENSIDAD</h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-            {isRegistering ? 'Crea una cuenta para gestionar tu data' : 'Ingresa tus credenciales para continuar'}
+            Ingresa tus credenciales para continuar
           </p>
         </div>
 
@@ -128,20 +115,17 @@ const Login = ({ onLoginSuccess, notify }) => {
               <div className="spinner-small" />
             ) : (
               <>
-                {isRegistering ? <Key size={20} /> : <LogIn size={20} />}
-                {isRegistering ? 'REGISTRAR' : 'ENTRAR'}
+                <LogIn size={20} />
+                ENTRAR
               </>
             )}
           </button>
         </form>
 
         <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-          <button 
-            onClick={() => setIsRegistering(!isRegistering)}
-            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline' }}
-          >
-            {isRegistering ? '¿Ya tienes cuenta? Inicia sesión' : '¿No tienes cuenta? Regístrate'}
-          </button>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+            Sistema de Gestión Privado
+          </p>
         </div>
       </motion.div>
     </div>

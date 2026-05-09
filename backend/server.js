@@ -32,25 +32,6 @@ const authenticateToken = (req, res, next) => {
 };
 
 // --- AUTH ENDPOINTS ---
-app.post('/api/auth/register', async (req, res, next) => {
-    const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
-
-    try {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const [result] = await db.query(
-            'INSERT INTO usuarios (username, password) VALUES (?, ?)',
-            [username, hashedPassword]
-        );
-        res.status(201).json({ message: 'User registered successfully', id: result.insertId });
-    } catch (error) {
-        if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(400).json({ error: 'Username already exists' });
-        }
-        next(error);
-    }
-});
-
 app.post('/api/auth/login', async (req, res, next) => {
     const { username, password } = req.body;
     try {
