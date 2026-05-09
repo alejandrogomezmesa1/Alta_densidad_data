@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import db from './db.js';
+import initializeDatabase from './init-db.js';
 
 dotenv.config();
 
@@ -520,6 +521,9 @@ app.use((err, req, res, next) => {
     console.error('API Error:', err.message);
     res.status(500).json({ error: 'Internal Server Error', details: err.message });
 });
+
+// Initialize schema, then start listening
+await initializeDatabase(db);
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
