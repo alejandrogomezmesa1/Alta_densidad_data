@@ -1,6 +1,3 @@
-CREATE DATABASE IF NOT EXISTS alta_densidad_data;
-USE alta_densidad_data;
-
 -- 1. Tabla Proveedores (suppliers)
 CREATE TABLE IF NOT EXISTS proveedores (
     id INT AUTO_INCREMENT PRIMARY KEY,
