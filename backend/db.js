@@ -3,12 +3,15 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// Connect directly to the existing "alta_densidad_data" database via DB_NAME.
+// No CREATE DATABASE or USE statements are issued — the pool targets the
+// named database from the very first connection.
 const pool = mysql.createPool({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASS,
-    database: process.env.DB_NAME,
-    port: process.env.DB_PORT || 3306,
+    database: process.env.DB_NAME,   // "alta_densidad_data"
+    port: parseInt(process.env.DB_PORT, 10) || 3306,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
