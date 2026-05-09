@@ -88,7 +88,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
 
     const netProfit = totalProfitToday - totalExpenses;
     
-    const lowStockCount = inventoryList.filter(p => p.stock < 5).length;
+    const lowStockCount = inventoryList.filter(p => p.stock === 1).length;
     const outOfStockCount = inventoryList.filter(p => p.stock <= 0).length;
     const inventoryValue = inventoryList.reduce((acc, p) => acc + (p.stock * p.costPrice), 0);
     const potentialRevenue = inventoryList.reduce((acc, p) => acc + (p.stock * p.price), 0);
@@ -314,11 +314,13 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
             <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Alertas de Inventario</h4>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
-            {inventoryList.filter(p => p.stock === 0).slice(0, 3).map(p => (
+            {inventoryList.filter(p => p.stock <= 1).slice(0, 6).map(p => (
               <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={p.id} className="glass" style={{ padding: '1rem 1.5rem', borderRadius: '14px', borderLeft: '4px solid var(--error)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{p.name}</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--error)', fontWeight: 600 }}>PRODUCTO AGOTADO</div>
+                  <div style={{ fontSize: '0.7rem', color: p.stock === 0 ? 'var(--error)' : 'var(--warning)', fontWeight: 600 }}>
+                    {p.stock === 0 ? 'PRODUCTO AGOTADO' : 'ÚLTIMA UNIDAD'}
+                  </div>
                 </div>
                 <button onClick={() => setActiveTab('inventory')} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}>REURTIR</button>
               </motion.div>

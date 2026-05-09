@@ -42,7 +42,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
   };
 
   const handleExportStockZero = () => {
-    const lowStockItems = items.filter(p => Number(p.stock) <= 1);
+    const lowStockItems = items.filter(p => Number(p.stock) === 0 || Number(p.stock) === 1);
     
     if (lowStockItems.length === 0) {
       notify?.('No hay productos con stock bajo (0 o 1)', 'info');
@@ -242,8 +242,8 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <span className="mobile-label">Stock</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: product.stock < 5 ? 'var(--error)' : 'var(--success)', boxShadow: `0 0 10px ${product.stock < 5 ? 'var(--error)' : 'var(--success)'}` }} />
-                        <span style={{ fontWeight: 700, color: product.stock < 5 ? 'var(--error)' : 'var(--success)', fontSize: '0.9rem' }}>{product.stock}</span>
+                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: product.stock < 2 ? 'var(--error)' : 'var(--success)', boxShadow: `0 0 10px ${product.stock < 2 ? 'var(--error)' : 'var(--success)'}` }} />
+                        <span style={{ fontWeight: 700, color: product.stock < 2 ? 'var(--error)' : 'var(--success)', fontSize: '0.9rem' }}>{product.stock}</span>
                       </div>
                     </td>
                     <td style={{ padding: '1.25rem 2rem' }}>
