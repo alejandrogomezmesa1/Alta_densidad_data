@@ -124,6 +124,12 @@ function App() {
     });
   };
 
+  const { 
+    inventory, sales, purchases, expenses, customers,
+    addProduct, updateProduct, deleteProduct, 
+    addSale, updateSale, deleteSale, addPaymentToSale,
+    addPurchase, updatePurchase, deletePurchase, 
+    addExpense, updateExpense, deleteExpense,
     suppliers, addSupplier, updateSupplier, deleteSupplier, getMostFrequentSupplierId,
     updateCustomer, deleteCustomer,
     exportData
