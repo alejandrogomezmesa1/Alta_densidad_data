@@ -40,21 +40,12 @@ const Suppliers = ({ suppliers, addSupplier, updateSupplier, deleteSupplier, not
 
   return (
     <div className="main-content">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem' }}>
+      <header className="page-header">
         <div>
-          <h2 className="title-gradient" style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Proveedores</h2>
-          <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Gestiona tus aliados estratégicos y fuentes de abastecimiento.</p>
+          <h2 className="title-gradient" style={{ fontSize: '2.5rem', marginBottom: '0.25rem' }}>Proveedores</h2>
+          <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Directorio y gestión de aliados estratégicos.</p>
         </div>
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <button 
-            onClick={() => setIsAdding(!isAdding)}
-            className="btn-primary" 
-            style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}
-          >
-            <Plus size={20} />
-            {editingId ? 'Editando Proveedor' : 'Nuevo Proveedor'}
-          </button>
-        </div>
+        <button onClick={() => { if(!isAdding) setIsAdding(true); else handleCancel(); }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}><Plus size={20} /> {editingId ? 'EDITANDO' : 'NUEVO PROVEEDOR'}</button>
       </header>
 
       <AnimatePresence>
@@ -111,7 +102,7 @@ const Suppliers = ({ suppliers, addSupplier, updateSupplier, deleteSupplier, not
       </AnimatePresence>
 
       <div className="premium-card" style={{ padding: 0 }}>
-        <div style={{ padding: '1.5rem 2rem', display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+        <div className="search-filter-bar">
           <div style={{ position: 'relative', flex: 1 }}>
             <Search style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={18} />
             <input 

@@ -111,10 +111,10 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
 
   return (
     <div className="main-content">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem' }}>
+      <header className="page-header">
         <div>
-          <h2 className="title-gradient" style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Inventario</h2>
-          <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Control inteligente de productos y márgenes de ganancia.</p>
+          <h2 className="title-gradient" style={{ fontSize: '2.5rem', marginBottom: '0.25rem' }}>Inventario</h2>
+          <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Gestión de productos, stock y valorización.</p>
         </div>
         <div style={{ display: 'flex', gap: '1rem' }}>
           <button 
@@ -184,7 +184,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
       </AnimatePresence>
 
       <div className="premium-card" style={{ padding: 0 }}>
-        <div style={{ padding: '1.5rem 2rem', display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+        <div className="search-filter-bar">
           <div style={{ position: 'relative', flex: 1 }}>
             <Search style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={18} />
             <input 

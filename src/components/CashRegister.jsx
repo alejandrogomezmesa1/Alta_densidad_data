@@ -228,12 +228,14 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
 
   return (
     <div className="main-content">
-      <header style={{ marginBottom: '3rem' }}>
-        <h2 className="title-gradient" style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Cierre de Caja</h2>
-        <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Control de flujo de efectivo diario y auditoría.</p>
+      <header className="page-header">
+        <div>
+          <h2 className="title-gradient" style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Cierre de Caja</h2>
+          <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Control de flujo de efectivo diario y auditoría.</p>
+        </div>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '2rem' }}>
+      <div className="stat-card-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '2rem' }}>
         {/* Daily Summary */}
         <div>
           <div className="premium-card" style={{ marginBottom: '2rem' }}>

@@ -386,15 +386,12 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
 
   return (
     <div className="main-content">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-          <div style={{ padding: '1rem', borderRadius: '20px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', color: config[type].color }}><Icon size={32} /></div>
-          <div>
-            <h2 className="title-gradient" style={{ fontSize: '2.5rem', marginBottom: '0.25rem' }}>{config[type].title}</h2>
-            <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{config[type].subtitle}</p>
-          </div>
+      <header className="page-header">
+        <div>
+          <h2 className="title-gradient" style={{ fontSize: '2.5rem', marginBottom: '0.25rem' }}>{config[type].title}</h2>
+          <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{config[type].subtitle}</p>
         </div>
-        <button onClick={() => { if(!isAdding) setIsAdding(true); else resetForm(); }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}><Plus size={20} />{config[type].label}</button>
+        <button onClick={() => { if(!isAdding) setIsAdding(true); else resetForm(); }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}><Plus size={20} />{config[type].label}</button>
       </header>
 
       <AnimatePresence>
@@ -609,10 +606,10 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
       </AnimatePresence>
 
       <div className="premium-card" style={{ padding: 0 }}>
-        <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid var(--glass-border)', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <div className="search-filter-bar">
           <Search size={18} color="var(--text-muted)" />
-          <input type="text" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff' }} />
-          <select value={dateFilter} onChange={e => setDateFilter(e.target.value)} style={{ background: 'transparent', border: 'none', color: 'var(--accent-primary)', fontWeight: 600 }}>
+          <input type="text" placeholder="Buscar..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          <select value={dateFilter} onChange={e => setDateFilter(e.target.value)}>
             <option value="all">Todo</option>
             <option value="month">Mes</option>
             <option value="year">Año</option>

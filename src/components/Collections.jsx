@@ -58,12 +58,14 @@ const Collections = ({ sales, onAddPayment, notify, confirm }) => {
 
   return (
     <div className="main-content">
-      <header style={{ marginBottom: '3rem' }}>
-        <h2 className="title-gradient" style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Gestión de Cartera</h2>
-        <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Seguimiento de saldos pendientes y cobros activos.</p>
+      <header className="page-header">
+        <div>
+          <h2 className="title-gradient" style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Gestión de Cartera</h2>
+          <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Seguimiento de saldos pendientes y cobros activos.</p>
+        </div>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
+      <div className="stat-card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
         <div className="premium-card" style={{ borderLeft: '4px solid var(--error)' }}>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Total por Cobrar</p>
           <h3 style={{ fontSize: '1.8rem', fontWeight: 900, color: 'var(--error)' }}>${Math.round(stats.totalDue).toLocaleString('es-CO')}</h3>
@@ -77,7 +79,7 @@ const Collections = ({ sales, onAddPayment, notify, confirm }) => {
       </div>
 
       <div className="premium-card" style={{ padding: 0 }}>
-        <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid var(--glass-border)', display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+        <div className="search-filter-bar">
           <div style={{ position: 'relative', flex: 1 }}>
             <Search size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input 

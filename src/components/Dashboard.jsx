@@ -285,20 +285,19 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
 
   return (
     <div className="main-content">
-      <header style={{ marginBottom: '3rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2rem' }}>
-          <div>
-            <h2 className="title-gradient" style={{ fontSize: '2.8rem', marginBottom: '0.5rem' }}>Evolución del Negocio</h2>
-            <p style={{ color: 'var(--text-secondary)', fontWeight: 500, fontSize: '1.1rem' }}>Análisis histórico y proyección financiera (COP).</p>
-          </div>
-          <div className="glass" style={{ display: 'flex', padding: '0.4rem', borderRadius: '12px' }}>
-            {['week', 'month', 'all'].map(p => (
-              <button key={p} onClick={() => setPeriod(p)} style={{ padding: '0.6rem 1.2rem', borderRadius: '10px', background: period === p ? 'var(--accent-primary)' : 'transparent', color: period === p ? '#000' : 'var(--text-secondary)', fontWeight: 700, border: 'none', cursor: 'pointer' }}>
-                {p === 'week' ? 'Semana' : p === 'month' ? 'Mes' : 'Todo'}
-              </button>
-            ))}
-          </div>
+      <header className="page-header">
+        <div>
+          <h2 className="title-gradient" style={{ fontSize: '2.8rem', marginBottom: '0.5rem' }}>Evolución del Negocio</h2>
+          <p style={{ color: 'var(--text-secondary)', fontWeight: 500, fontSize: '1.1rem' }}>Análisis histórico y proyección financiera (COP).</p>
         </div>
+        <div className="glass" style={{ display: 'flex', padding: '0.4rem', borderRadius: '12px', flexWrap: 'wrap' }}>
+          {['week', 'month', 'all'].map(p => (
+            <button key={p} onClick={() => setPeriod(p)} style={{ flex: 1, minWidth: '80px', padding: '0.6rem 0.5rem', borderRadius: '10px', background: period === p ? 'var(--accent-primary)' : 'transparent', color: period === p ? '#000' : 'var(--text-secondary)', fontWeight: 700, border: 'none', cursor: 'pointer' }}>
+              {p === 'week' ? 'Semana' : p === 'month' ? 'Mes' : 'Todo'}
+            </button>
+          ))}
+        </div>
+      </header>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
           <StatCard delay={0.1} title="Ventas Hoy" value={`$${Math.round(stats.totalSales).toLocaleString('es-CO')}`} icon={TrendingUp} color="50, 215, 75" trend="up" percentage={14} />
@@ -306,7 +305,6 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
           <StatCard delay={0.3} title="Margen Neto" value={`$${Math.round(stats.netProfit).toLocaleString('es-CO')}`} icon={DollarSign} color="226, 176, 76" subValue={`Rentabilidad: ${stats.totalSales > 0 ? ((stats.netProfit/stats.totalSales)*100).toFixed(1) : 0}%`} />
           <StatCard delay={0.4} title="Cartera Cliente" value={`$${Math.round(stats.accountsReceivable).toLocaleString('es-CO')}`} icon={Clock} color="255, 69, 58" subValue="Por cobrar" />
         </div>
-      </header>
       
       {/* Critical Alerts Section */}
       {(stats.lowStockCount > 0 || stats.outOfStockCount > 0) && (

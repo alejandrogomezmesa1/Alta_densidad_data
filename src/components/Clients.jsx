@@ -68,27 +68,21 @@ const Clients = ({ customers, sales, updateCustomer, deleteCustomer, notify, con
 
   return (
     <div className="main-content">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-          <div style={{ padding: '1rem', borderRadius: '20px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', color: 'var(--accent-primary)' }}>
-            <Users size={32} />
-          </div>
-          <div>
-            <h2 className="title-gradient" style={{ fontSize: '2.5rem', marginBottom: '0.25rem' }}>Directorio de Clientes</h2>
-            <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Gestión de relaciones y fidelización (CRM)</p>
-          </div>
+      <header className="page-header">
+        <div>
+          <h2 className="title-gradient" style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Directorio de Clientes</h2>
+          <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Gestión de relaciones y fidelización (CRM)</p>
         </div>
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <div className="glass" style={{ display: 'flex', alignItems: 'center', padding: '0.5rem 1.25rem', borderRadius: '15px', width: '300px' }}>
-            <Search size={18} color="var(--text-muted)" />
-            <input 
-              type="text" 
-              placeholder="Buscar por nombre o cédula..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ background: 'none', border: 'none', color: '#fff', padding: '0.5rem', width: '100%', outline: 'none' }}
-            />
-          </div>
+        
+        <div style={{ position: 'relative', width: '300px', maxWidth: '100%' }}>
+          <Search size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <input 
+            type="text" 
+            placeholder="Buscar por nombre o cédula..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ width: '100%', paddingLeft: '2.5rem' }}
+          />
         </div>
       </header>
 
