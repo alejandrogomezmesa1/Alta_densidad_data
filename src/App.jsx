@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import Inventory from './components/Inventory';
@@ -7,6 +7,8 @@ import CashRegister from './components/CashRegister';
 import Collections from './components/Collections';
 import Suppliers from './components/Suppliers';
 import Clients from './components/Clients';
+import Login from './components/Login';
+import { api } from './services/api';
 import { useInventory } from './hooks/useInventory';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCircle, XCircle, AlertTriangle, Info, X, Menu, TrendingUp } from 'lucide-react';
@@ -77,6 +79,30 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, message: '', onConfirm: () => {} });
+  const [auth, setAuth] = useState({ 
+    isAuthenticated: api.isAuthenticated(), 
+    username: localStorage.getItem('alta_user') 
+  });
+
+  useEffect(() => {
+    // Check auth on mount
+    setAuth({ 
+      isAuthenticated: api.isAuthenticated(), 
+      username: localStorage.getItem('alta_user') 
+    });
+  }, []);
+
+  const handleLoginSuccess = () => {
+    setAuth({ 
+      isAuthenticated: true, 
+      username: localStorage.getItem('alta_user') 
+    });
+  };
+
+  const handleLogout = () => {
+    api.logout();
+    setAuth({ isAuthenticated: false, username: null });
+  };
 
   const notify = useCallback((message, type = 'success') => {
     const id = Date.now() + Math.random();
@@ -188,6 +214,21 @@ function App() {
     }
   };
 
+  if (!auth.isAuthenticated) {
+    return (
+      <div style={{ background: 'var(--bg-main)' }}>
+        <div style={{ position: 'fixed', top: '2rem', right: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+          <AnimatePresence>
+            {notifications.map(n => (
+              <Notification key={n.id} {...n} onClose={removeNotification} />
+            ))}
+          </AnimatePresence>
+        </div>
+        <Login onLoginSuccess={handleLoginSuccess} notify={notify} />
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-main)', position: 'relative' }}>
       {/* Notifications & Status Layer */}
@@ -222,7 +263,13 @@ function App() {
       <div style={{ position: 'fixed', top: '-10%', right: '-5%', width: '40vw', height: '40vw', background: 'radial-gradient(circle, rgba(226, 176, 76, 0.03), transparent)', pointerEvents: 'none' }} />
       <div style={{ position: 'fixed', bottom: '-5%', left: '20%', width: '30vw', height: '30vw', background: 'radial-gradient(circle, rgba(10, 132, 255, 0.02), transparent)', pointerEvents: 'none' }} />
 
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        isOpen={isSidebarOpen} 
+        setIsOpen={setIsSidebarOpen} 
+        onLogout={handleLogout}
+      />
       
       {/* Mobile Top Header */}
       <div className="mobile-only glass" style={{

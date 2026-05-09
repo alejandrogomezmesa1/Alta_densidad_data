@@ -17,6 +17,36 @@ class ApiService {
     return this.isDemoMode;
   }
 
+  // --- AUTH METHODS ---
+  async login(username, password) {
+    const response = await fetch(`${API_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Login failed');
+    
+    localStorage.setItem('alta_token', data.token);
+    localStorage.setItem('alta_user', data.username);
+    return data;
+  }
+
+  logout() {
+    localStorage.removeItem('alta_token');
+    localStorage.removeItem('alta_user');
+    window.location.reload();
+  }
+
+  getToken() {
+    return localStorage.getItem('alta_token');
+  }
+
+  isAuthenticated() {
+    return !!this.getToken();
+  }
+
   // Local Storage Helpers
   _getLocalData(endpoint) {
     const data = localStorage.getItem(`demo_${endpoint}`);
@@ -34,13 +64,23 @@ class ApiService {
     }
 
     try {
+      const token = this.getToken();
       const response = await fetch(`${API_URL}${endpoint}`, {
         ...options,
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
           ...options.headers,
         },
       });
+
+      if (response.status === 401 || response.status === 403) {
+        // Token expired or invalid
+        if (!this.isDemoMode && endpoint !== '/auth/login') {
+            localStorage.removeItem('alta_token');
+            // We don't reload here to avoid loops, let the UI handle it
+        }
+      }
 
       if (!response.ok) {
         throw new Error(`API Error: ${response.statusText}`);

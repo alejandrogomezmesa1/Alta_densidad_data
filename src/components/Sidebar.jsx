@@ -15,7 +15,7 @@ import {
   X
 } from 'lucide-react';
 
-const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen }) => {
+const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout }) => {
   const menuItems = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { id: 'inventory', icon: Package, label: 'Inventario' },
@@ -138,16 +138,22 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen }) => {
           <Settings size={18} />
           <span>Configuración</span>
         </button>
-        <button style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '1rem',
-          color: 'var(--error)',
-          fontSize: '0.9rem',
-          padding: '0.75rem 1.25rem',
-          width: '100%',
-          marginTop: '0.5rem'
-        }}>
+        <button 
+          onClick={onLogout}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1rem',
+            color: 'var(--error)',
+            fontSize: '0.9rem',
+            padding: '0.75rem 1.25rem',
+            width: '100%',
+            marginTop: '0.5rem',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer'
+          }}
+        >
           <LogOut size={18} />
           <span>Cerrar Sesión</span>
         </button>

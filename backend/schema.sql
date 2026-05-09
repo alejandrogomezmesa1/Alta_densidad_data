@@ -1,6 +1,14 @@
 CREATE DATABASE IF NOT EXISTS alta_densidad_data;
 USE alta_densidad_data;
 
+-- 0. Tabla Usuarios (users)
+CREATE TABLE IF NOT EXISTS usuarios (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(100) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 1. Tabla Proveedores (suppliers)
 CREATE TABLE IF NOT EXISTS proveedores (
     id INT AUTO_INCREMENT PRIMARY KEY,

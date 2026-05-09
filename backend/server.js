@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import db from './db.js';
 
 dotenv.config();
@@ -10,9 +12,68 @@ process.env.TZ = 'America/Bogota';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET || 'your_ultra_secret_key_123';
 
 app.use(cors());
 app.use(express.json());
+
+// --- MIDDLEWARE: Authenticate Token ---
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) return res.status(401).json({ error: 'Access denied. No token provided.' });
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.status(403).json({ error: 'Invalid or expired token.' });
+        req.user = user;
+        next();
+    });
+};
+
+// --- AUTH ENDPOINTS ---
+app.post('/api/auth/register', async (req, res, next) => {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const [result] = await db.query(
+            'INSERT INTO usuarios (username, password) VALUES (?, ?)',
+            [username, hashedPassword]
+        );
+        res.status(201).json({ message: 'User registered successfully', id: result.insertId });
+    } catch (error) {
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(400).json({ error: 'Username already exists' });
+        }
+        next(error);
+    }
+});
+
+app.post('/api/auth/login', async (req, res, next) => {
+    const { username, password } = req.body;
+    try {
+        const [users] = await db.query('SELECT * FROM usuarios WHERE username = ?', [username]);
+        const user = users[0];
+
+        if (!user || !(await bcrypt.compare(password, user.password))) {
+            return res.status(401).json({ error: 'Invalid username or password' });
+        }
+
+        const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '24h' });
+        res.json({ token, username: user.username });
+    } catch (error) { next(error); }
+});
+
+// --- PROTECT ALL FOLLOWING ROUTES ---
+app.use('/api/suppliers', authenticateToken);
+app.use('/api/products', authenticateToken);
+app.use('/api/customers', authenticateToken);
+app.use('/api/sales', authenticateToken);
+app.use('/api/purchases', authenticateToken);
+app.use('/api/expenses', authenticateToken);
+app.use('/api/cash-closings', authenticateToken);
 
 // Test DB Connection
 try {
