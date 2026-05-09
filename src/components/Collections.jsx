@@ -110,16 +110,19 @@ const Collections = ({ sales, onAddPayment, notify, confirm }) => {
               {debtors.length > 0 ? debtors.map((d, i) => (
                 <tr key={d.id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
                   <td style={{ padding: '1.25rem 2rem' }}>
+                    <span className="mobile-label">Cliente / Fecha</span>
                     <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>{d.customerName}</div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                       <Calendar size={10} /> {d.date}
                     </div>
                   </td>
                   <td style={{ padding: '1.25rem 2rem' }}>
+                    <span className="mobile-label">Concepto</span>
                     <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{d.productName}</div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Total Venta: ${Math.round(d.total).toLocaleString('es-CO')}</div>
                   </td>
                   <td style={{ padding: '1.25rem 2rem' }}>
+                    <span className="mobile-label">Progreso de Pago</span>
                     <div style={{ width: '150px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', marginBottom: '0.3rem' }}>
                         <span>{Math.round(d.paidPercent)}% pagado</span>
@@ -130,6 +133,7 @@ const Collections = ({ sales, onAddPayment, notify, confirm }) => {
                     </div>
                   </td>
                   <td style={{ padding: '1.25rem 2rem' }}>
+                    <span className="mobile-label">Saldo Pendiente</span>
                     <div style={{ fontWeight: 900, color: 'var(--error)', fontSize: '1.1rem' }}>
                       ${Math.round(d.balance).toLocaleString('es-CO')}
                     </div>

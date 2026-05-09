@@ -662,21 +662,27 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                 return (
                   <motion.tr key={item.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ borderBottom: '1px solid var(--glass-border)' }}>
                     <td style={{ padding: '1.25rem 2rem' }}>
+                      <span className="mobile-label">Fecha / Cliente</span>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.date}</div>
                       <div style={{ fontWeight: 700 }}>{item.customerName || (type === 'purchases' ? 'Compra' : 'General')}</div>
                     </td>
                     <td style={{ padding: '1.25rem 2rem' }}>
+                      <span className="mobile-label">Concepto</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         {type === 'sales' ? <ArrowUpCircle size={14} color="var(--success)" /> : <ArrowDownCircle size={14} color="var(--error)" />}
                         {conceptHtml}
                       </div>
                     </td>
                     <td style={{ padding: '1.25rem 2rem' }}>
+                      <span className="mobile-label">Estado</span>
                       {type === 'sales' ? (
                         <span style={{ fontSize: '0.7rem', fontWeight: 800, color: item.status === 'paid' ? 'var(--success)' : 'var(--warning)' }}>{item.status === 'paid' ? 'PAGADA' : 'PENDIENTE'}</span>
                       ) : <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>CONTADO</span>}
                     </td>
-                    <td style={{ padding: '1.25rem 2rem', fontWeight: 800 }}>${Math.round(total).toLocaleString('es-CO')}</td>
+                    <td style={{ padding: '1.25rem 2rem', fontWeight: 800 }}>
+                      <span className="mobile-label">Total</span>
+                      ${Math.round(total).toLocaleString('es-CO')}
+                    </td>
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button onClick={() => setSelectedDetail(item)} style={{ background: 'var(--info)', color: 'white', border: 'none', padding: '0.4rem', borderRadius: '6px', cursor: 'pointer' }} title="Ver Detalles"><Eye size={14} /></button>

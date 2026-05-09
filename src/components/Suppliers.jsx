@@ -145,6 +145,7 @@ const Suppliers = ({ suppliers, addSupplier, updateSupplier, deleteSupplier, not
                   style={{ borderBottom: '1px solid var(--glass-border)' }}
                 >
                   <td style={{ padding: '1.25rem 2rem' }}>
+                    <span className="mobile-label">Proveedor</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                       <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(226, 176, 76, 0.08)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'var(--accent-primary)', fontWeight: 800, fontSize: '0.9rem' }}>
                         {String(supplier.name || 'S').charAt(0).toUpperCase()}
@@ -153,13 +154,16 @@ const Suppliers = ({ suppliers, addSupplier, updateSupplier, deleteSupplier, not
                     </div>
                   </td>
                   <td style={{ padding: '1.25rem 2rem' }}>
+                    <span className="mobile-label">Categoría</span>
                     <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{supplier.category || 'General'}</span>
                   </td>
                   <td style={{ padding: '1.25rem 2rem' }}>
+                    <span className="mobile-label">Contacto</span>
                     <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{supplier.phone || 'Sin teléfono'}</div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{supplier.email || 'Sin email'}</div>
                   </td>
                   <td style={{ padding: '1.25rem 2rem' }}>
+                    <span className="mobile-label">Ubicación</span>
                     <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{supplier.address || 'N/A'}</span>
                   </td>
                   <td style={{ padding: '1.25rem 2rem' }}>

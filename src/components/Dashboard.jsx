@@ -390,9 +390,18 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
             <tbody>
               {stats.topProducts.map((p, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                  <td style={{ padding: '1.2rem 0', fontWeight: 700, fontSize: '0.9rem' }}>{p.name}</td>
-                  <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{p.qty} u.</td>
-                  <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--success)' }}>${Math.round(p.revenue).toLocaleString('es-CO')}</td>
+                  <td style={{ padding: '1.2rem 0', fontWeight: 700, fontSize: '0.9rem' }}>
+                    <span className="mobile-label">Producto</span>
+                    {p.name}
+                  </td>
+                  <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                    <span className="mobile-label">Ventas</span>
+                    {p.qty} u.
+                  </td>
+                  <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--success)' }}>
+                    <span className="mobile-label" style={{ textAlign: 'left' }}>Ingresos</span>
+                    ${Math.round(p.revenue).toLocaleString('es-CO')}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -414,8 +423,14 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
             <tbody>
               {stats.topDebtors.map((d, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                  <td style={{ padding: '1.2rem 0', fontWeight: 700, fontSize: '0.9rem' }}>{d.name}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--error)' }}>${Math.round(d.balance).toLocaleString('es-CO')}</td>
+                  <td style={{ padding: '1.2rem 0', fontWeight: 700, fontSize: '0.9rem' }}>
+                    <span className="mobile-label">Cliente</span>
+                    {d.name}
+                  </td>
+                  <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--error)' }}>
+                    <span className="mobile-label" style={{ textAlign: 'left' }}>Deuda Pendiente</span>
+                    ${Math.round(d.balance).toLocaleString('es-CO')}
+                  </td>
                 </tr>
               ))}
               {stats.topDebtors.length === 0 && (

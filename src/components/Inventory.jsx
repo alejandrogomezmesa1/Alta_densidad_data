@@ -227,6 +227,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
                     style={{ borderBottom: '1px solid var(--glass-border)' }}
                   >
                     <td style={{ padding: '1.25rem 2rem' }}>
+                      <span className="mobile-label">Producto</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                         <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(226, 176, 76, 0.08)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'var(--accent-primary)', fontWeight: 800, fontSize: '0.9rem' }}>
                           {String(product.name || 'P').charAt(0).toUpperCase()}
@@ -235,19 +236,25 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
                       </div>
                     </td>
                     <td style={{ padding: '1.25rem 2rem' }}>
+                      <span className="mobile-label">Categoría</span>
                       <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{product.category}</span>
                     </td>
                     <td style={{ padding: '1.25rem 2rem' }}>
+                      <span className="mobile-label">Stock</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: product.stock < 5 ? 'var(--error)' : 'var(--success)', boxShadow: `0 0 10px ${product.stock < 5 ? 'var(--error)' : 'var(--success)'}` }} />
                         <span style={{ fontWeight: 700, color: product.stock < 5 ? 'var(--error)' : 'var(--success)', fontSize: '0.9rem' }}>{product.stock}</span>
                       </div>
                     </td>
                     <td style={{ padding: '1.25rem 2rem' }}>
+                      <span className="mobile-label">Ganancia Est.</span>
                       <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--success)' }}>+${Math.round(profit).toLocaleString('es-CO')}</div>
                       <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>M: {margin.toFixed(1)}%</div>
                     </td>
-                    <td style={{ padding: '1.25rem 2rem', fontWeight: 800 }}>${Math.round(product.price).toLocaleString('es-CO')}</td>
+                    <td style={{ padding: '1.25rem 2rem', fontWeight: 800 }}>
+                      <span className="mobile-label">P. Venta</span>
+                      ${Math.round(product.price).toLocaleString('es-CO')}
+                    </td>
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button onClick={() => setSelectedDetail(product)} style={{ padding: '0.5rem', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', color: 'var(--info)', border: 'none', cursor: 'pointer' }}>

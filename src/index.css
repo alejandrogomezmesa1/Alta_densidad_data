@@ -244,6 +244,22 @@ input:focus, select:focus {
   }
 }
 
+.mobile-label {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-label {
+    display: block;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+    font-weight: 800;
+  }
+}
+
 /* Touch action optimizations globally */
 button, a, input, select {
   touch-action: manipulation;
