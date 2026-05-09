@@ -378,7 +378,8 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
         {/* Top Products */}
         <div className="premium-card">
           <h4 style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}><Star size={20} color="var(--warning)" /> PRODUCTOS ESTRELLA</h4>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="table-responsive-wrapper">
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase' }}>
                 <th style={{ padding: '1rem 0' }}>Producto</th>
@@ -396,12 +397,14 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
 
         {/* Top Debtors */}
         <div className="premium-card">
           <h4 style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}><AlertCircle size={20} color="var(--error)" /> TOP DEUDORES</h4>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="table-responsive-wrapper">
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase' }}>
                 <th style={{ padding: '1rem 0' }}>Cliente</th>

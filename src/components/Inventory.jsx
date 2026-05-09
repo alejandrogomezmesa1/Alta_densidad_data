@@ -201,7 +201,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
           </button>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
+        <div className="table-responsive-wrapper">
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ background: 'rgba(255,255,255,0.01)' }}>

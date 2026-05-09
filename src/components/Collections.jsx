@@ -95,7 +95,7 @@ const Collections = ({ sales, onAddPayment, notify, confirm }) => {
           </select>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
+        <div className="table-responsive-wrapper">
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ textAlign: 'left', background: 'rgba(255,255,255,0.01)' }}>

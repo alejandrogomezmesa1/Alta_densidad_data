@@ -154,33 +154,54 @@ input:focus, select:focus {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Responsive Utilities */
+/* Responsive Utilities & Touch Friendly */
 @media (max-width: 1024px) {
   .main-content {
     margin-left: 0;
-    padding: 2rem 1.5rem;
+    padding: 1.5rem 1rem;
     padding-top: 5rem; /* Space for mobile header */
   }
 }
 
 @media (max-width: 768px) {
   .premium-card {
-    padding: 1.25rem;
+    padding: 1rem;
   }
   
-  h2 { font-size: 2rem !important; }
+  h2 { font-size: 1.75rem !important; }
+  h3 { font-size: 1.25rem !important; }
   
   .btn-primary {
     width: 100%;
     text-align: center;
+    padding: 1rem;
   }
 
   /* Responsive Tables */
-  table {
-    display: block;
+  .table-responsive-wrapper {
     overflow-x: auto;
-    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 1rem;
   }
+  
+  table {
+    min-width: 600px;
+  }
+
+  /* Touch optimizations */
+  input, select, textarea, button {
+    font-size: 16px !important; /* Prevents iOS auto-zoom */
+    min-height: 48px; /* Touch target minimum */
+  }
+
+  .stat-card-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Touch action optimizations globally */
+button, a, input, select {
+  touch-action: manipulation;
 }
 
 .mobile-only {

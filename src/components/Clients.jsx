@@ -92,7 +92,7 @@ const Clients = ({ customers, sales, updateCustomer, deleteCustomer, notify, con
         </div>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+      <div className="stat-card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
         {filteredClients.map((client) => (
           <motion.div 
             layout

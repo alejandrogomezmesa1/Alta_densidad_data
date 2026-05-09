@@ -525,7 +525,7 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
 
                   {/* Cart Items Table */}
                   {cart.length > 0 && (
-                    <div style={{ marginTop: '1.5rem', background: 'var(--bg-main)', borderRadius: '12px', overflow: 'hidden' }}>
+                    <div className="table-responsive-wrapper" style={{ marginTop: '1.5rem', background: 'var(--bg-main)', borderRadius: '12px' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                           <tr style={{ background: 'rgba(255,255,255,0.02)', textAlign: 'left' }}>
@@ -619,7 +619,7 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
           </select>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
+        <div className="table-responsive-wrapper">
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ textAlign: 'left', background: 'rgba(255,255,255,0.01)' }}>
