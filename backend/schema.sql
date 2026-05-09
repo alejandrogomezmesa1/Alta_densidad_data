@@ -1,5 +1,5 @@
-CREATE DATABASE IF NOT EXISTS alta_densidad_db;
-USE alta_densidad_db;
+CREATE DATABASE IF NOT EXISTS alta_densidad_data;
+USE alta_densidad_data;
 
 -- 1. Tabla Proveedores (suppliers)
 CREATE TABLE IF NOT EXISTS proveedores (
@@ -11,8 +11,19 @@ CREATE TABLE IF NOT EXISTS proveedores (
     fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. Tabla Productos (products)
-CREATE TABLE IF NOT EXISTS productos (
+-- 2. Tabla Clientes (customers)
+CREATE TABLE IF NOT EXISTS clientes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(255) NOT NULL,
+    cedula VARCHAR(50) NULL,
+    telefono VARCHAR(50) NULL,
+    ciudad VARCHAR(100) NULL,
+    direccion VARCHAR(255) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 3. Tabla Productos (products/inventory)
+CREATE TABLE IF NOT EXISTS inventario (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(255) NOT NULL,
     categoria VARCHAR(100),
@@ -22,21 +33,30 @@ CREATE TABLE IF NOT EXISTS productos (
     fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3. Tabla Ventas (sales)
+-- 4. Tabla Ventas (sales)
 CREATE TABLE IF NOT EXISTS ventas (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    producto_id INT,
-    cantidad INT NOT NULL,
+    cliente_id INT NULL,
     total DECIMAL(15, 2) NOT NULL,
-    costo_al_vender DECIMAL(15, 2) NOT NULL,
     fecha DATETIME NOT NULL,
-    nombre_cliente VARCHAR(255) DEFAULT 'Cliente General',
     estado ENUM('paid', 'pending') DEFAULT 'paid',
     metodo VARCHAR(50) DEFAULT 'Efectivo',
-    FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE SET NULL
+    CONSTRAINT fk_ventas_cliente FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE SET NULL
 );
 
--- 4. Tabla Pagos (payments)
+-- 5. Detalles de Venta (sale_details)
+CREATE TABLE IF NOT EXISTS venta_detalles (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    venta_id INT NOT NULL,
+    inventario_id INT NULL,
+    cantidad INT NOT NULL,
+    precio_unitario DECIMAL(15, 2) NOT NULL,
+    costo_al_vender DECIMAL(15, 2) NOT NULL,
+    FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE,
+    FOREIGN KEY (inventario_id) REFERENCES inventario(id) ON DELETE SET NULL
+);
+
+-- 6. Tabla Pagos (payments)
 CREATE TABLE IF NOT EXISTS pagos (
     id INT AUTO_INCREMENT PRIMARY KEY,
     venta_id INT,
@@ -46,20 +66,20 @@ CREATE TABLE IF NOT EXISTS pagos (
     FOREIGN KEY (venta_id) REFERENCES ventas(id) ON DELETE CASCADE
 );
 
--- 5. Tabla Compras (purchases)
+-- 7. Tabla Compras (purchases)
 CREATE TABLE IF NOT EXISTS compras (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    producto_id INT,
+    inventario_id INT,
     proveedor_id INT,
     cantidad INT NOT NULL,
     monto DECIMAL(15, 2) NOT NULL,
     precio_unitario DECIMAL(15, 2) NOT NULL,
     fecha DATETIME NOT NULL,
-    FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE SET NULL,
+    FOREIGN KEY (inventario_id) REFERENCES inventario(id) ON DELETE SET NULL,
     FOREIGN KEY (proveedor_id) REFERENCES proveedores(id) ON DELETE SET NULL
 );
 
--- 6. Tabla Gastos (expenses)
+-- 8. Tabla Gastos (expenses)
 CREATE TABLE IF NOT EXISTS gastos (
     id INT AUTO_INCREMENT PRIMARY KEY,
     descripcion VARCHAR(255) NOT NULL,
@@ -68,7 +88,7 @@ CREATE TABLE IF NOT EXISTS gastos (
     fecha DATETIME NOT NULL
 );
 
--- 7. Tabla Cierres de Caja (cash_closings)
+-- 9. Tabla Cierres de Caja (cash_closings)
 CREATE TABLE IF NOT EXISTS cierres_caja (
     id INT AUTO_INCREMENT PRIMARY KEY,
     fecha DATE NOT NULL,

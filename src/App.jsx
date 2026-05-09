@@ -6,9 +6,10 @@ import Transactions from './components/Transactions';
 import CashRegister from './components/CashRegister';
 import Collections from './components/Collections';
 import Suppliers from './components/Suppliers';
+import Clients from './components/Clients';
 import { useInventory } from './hooks/useInventory';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, Info, X, Menu, TrendingUp } from 'lucide-react';
 
 const Notification = ({ id, message, type, onClose }) => {
   const icons = {
@@ -73,6 +74,7 @@ const ConfirmModal = ({ isOpen, message, onConfirm, onCancel }) => (
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, message: '', onConfirm: () => {} });
 
@@ -97,13 +99,14 @@ function App() {
   };
 
   const { 
-    inventory, sales, purchases, expenses,
+    inventory, sales, purchases, expenses, customers,
     addProduct, updateProduct, deleteProduct, 
-    addSale, deleteSale, addPaymentToSale,
-    addPurchase, deletePurchase, 
-    addExpense, deleteExpense,
+    addSale, updateSale, deleteSale, addPaymentToSale,
+    addPurchase, updatePurchase, deletePurchase, 
+    addExpense, updateExpense, deleteExpense,
     suppliers, addSupplier, updateSupplier, deleteSupplier, getMostFrequentSupplierId,
-    exportData
+    updateCustomer, deleteCustomer,
+    exportData, isDemo, toggleDemoMode
   } = useInventory(notify); // Injecting notification system
 
   const renderContent = () => {
@@ -127,8 +130,10 @@ function App() {
           type="sales" 
           data={sales} 
           products={inventory} 
+          customers={customers}
           onAdd={addSale} 
           onDelete={deleteSale}
+          onUpdate={updateSale}
           onAddPayment={addPaymentToSale}
         />;
       case 'purchases':
@@ -139,6 +144,7 @@ function App() {
           products={inventory} 
           onAdd={addPurchase} 
           onDelete={deletePurchase}
+          onUpdate={updatePurchase}
           suppliers={suppliers}
           mostFrequentSupplierId={getMostFrequentSupplierId()}
         />;
@@ -150,6 +156,7 @@ function App() {
           products={inventory}
           onAdd={addExpense} 
           onDelete={deleteExpense}
+          onUpdate={updateExpense}
         />;
       case 'suppliers':
         return <Suppliers 
@@ -158,6 +165,14 @@ function App() {
           addSupplier={addSupplier}
           updateSupplier={updateSupplier}
           deleteSupplier={deleteSupplier}
+        />;
+      case 'clients':
+        return <Clients 
+          {...commonProps}
+          customers={customers}
+          sales={sales}
+          updateCustomer={updateCustomer}
+          deleteCustomer={deleteCustomer}
         />;
       case 'cash':
         return <CashRegister 
@@ -175,8 +190,20 @@ function App() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-main)', position: 'relative' }}>
-      {/* Notifications Layer */}
-      <div style={{ position: 'fixed', top: '2rem', right: '2rem', zIndex: 9999, pointerEvents: 'none' }}>
+      {/* Notifications & Status Layer */}
+      <div style={{ position: 'fixed', top: '2rem', right: '2rem', zIndex: 9999, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+        {isDemo && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
+            className="glass"
+            style={{ padding: '0.5rem 1rem', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--warning)', pointerEvents: 'auto', cursor: 'pointer' }}
+            onClick={() => toggleDemoMode(false)}
+            title="Click para reconectar al servidor"
+          >
+            <AlertTriangle size={16} color="var(--warning)" />
+            <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--warning)' }}>MODO DEMO (Local)</span>
+          </motion.div>
+        )}
         <AnimatePresence>
           {notifications.map(n => (
             <Notification key={n.id} {...n} onClose={removeNotification} />
@@ -195,8 +222,30 @@ function App() {
       <div style={{ position: 'fixed', top: '-10%', right: '-5%', width: '40vw', height: '40vw', background: 'radial-gradient(circle, rgba(226, 176, 76, 0.03), transparent)', pointerEvents: 'none' }} />
       <div style={{ position: 'fixed', bottom: '-5%', left: '20%', width: '30vw', height: '30vw', background: 'radial-gradient(circle, rgba(10, 132, 255, 0.02), transparent)', pointerEvents: 'none' }} />
 
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
       
+      {/* Mobile Top Header */}
+      <div className="mobile-only glass" style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '60px',
+        padding: '0 1.5rem',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        zIndex: 900,
+        borderBottom: '1px solid var(--glass-border)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <TrendingUp size={20} color="var(--accent-primary)" />
+          <h1 className="title-gradient" style={{ fontSize: '1rem' }}>ALTA DENSIDAD</h1>
+        </div>
+        <button onClick={() => setIsSidebarOpen(true)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
+          <Menu size={24} />
+        </button>
+      </div>
+
       <div style={{ flex: 1, width: '100%' }}>
         <AnimatePresence mode="wait">
           <motion.div

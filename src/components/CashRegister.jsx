@@ -5,13 +5,19 @@ import { Wallet, ArrowDownCircle, ArrowUpCircle, Calculator, CheckCircle, Save, 
 const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
   const [closingHistory, setClosingHistory] = useState([]);
   const [selectedHistory, setSelectedHistory] = useState(null);
-  const [lastClosingId, setLastClosingId] = useState(() => {
-    return Number(localStorage.getItem('alta_densidad_last_closing_id')) || 0;
+  const [closedIds, setClosedIds] = useState(() => {
+    try {
+      const stored = localStorage.getItem('alta_densidad_closed_ids');
+      return stored ? JSON.parse(stored) : { payment: 0, expense: 0, purchase: 0 };
+    } catch {
+      return { payment: 0, expense: 0, purchase: 0 };
+    }
   });
 
   const fetchData = React.useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/cash-closings');
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL}/cash-closings`);
       const data = await response.json();
       setClosingHistory(data.map(h => {
         let movements = [];
@@ -34,34 +40,58 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
     fetchData();
   }, [fetchData]);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
 
   const dailyStats = useMemo(() => {
     // Safely handle inputs
     const salesArr = Array.isArray(sales) ? sales : [];
     const expensesArr = Array.isArray(expenses) ? expenses : [];
+    const purchasesArr = Array.isArray(purchases) ? purchases : [];
 
     // Only count transactions AFTER the last closing
-    const activeExpenses = expensesArr.filter(e => e.date === today && e.id > lastClosingId);
+    const activeExpenses = expensesArr.filter(e => {
+      const eDate = e.date ? e.date.split(/T| /)[0] : '';
+      return eDate === today && e.id > closedIds.expense;
+    });
+    const totalExpenses = activeExpenses.reduce((acc, e) => acc + (parseFloat(e.amount) || 0), 0);
+
+    const activePurchases = purchasesArr.filter(p => {
+      const pDate = p.date ? p.date.split(/T| /)[0] : (p.fecha ? p.fecha.split(/T| /)[0] : '');
+      return pDate === today && p.id > closedIds.purchase;
+    });
+    const totalPurchases = activePurchases.reduce((acc, p) => acc + (parseFloat(p.total) || parseFloat(p.amount) || 0), 0);
     
     // CASH IN: All payments made today, even from old sales
     let cashSales = 0;
     const movements = [];
+    let currentMaxPaymentId = closedIds.payment;
 
     salesArr.forEach(s => {
-      const paymentsThisSession = (s.payments || []).filter(p => p.id > lastClosingId);
+      const paymentsThisSession = (s.payments || []).filter(p => p.id > closedIds.payment);
       if (paymentsThisSession.length > 0) {
         const paidThisSession = paymentsThisSession.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
         cashSales += paidThisSession;
         
+        paymentsThisSession.forEach(p => {
+            if (p.id > currentMaxPaymentId) currentMaxPaymentId = p.id;
+        });
+
         const totalPaidAllTime = (s.payments || []).reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
         const totalAmount = parseFloat(s.total) || 0;
         const balance = totalAmount - totalPaidAllTime;
 
+        let pNames = '';
+        if (s.items && s.items.length > 0) {
+           pNames = s.items.map(i => i.productName).join(', ');
+        } else {
+           pNames = s.productName;
+        }
+
         movements.push({
+          type: 'sale',
           id: s.id,
           customer: s.customerName || 'Cliente General',
-          product: s.productName,
+          product: pNames,
           paid: paidThisSession,
           total: totalAmount,
           balance: balance,
@@ -70,7 +100,31 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
       }
     });
 
-    const totalExpenses = activeExpenses.reduce((acc, e) => acc + (parseFloat(e.amount) || 0), 0);
+    activeExpenses.forEach(e => {
+      movements.push({
+        type: 'expense',
+        id: e.id,
+        description: e.description || 'Gasto Operativo',
+        category: e.categoria || 'Gasto',
+        amount: parseFloat(e.amount) || 0
+      });
+    });
+
+    activePurchases.forEach(p => {
+      let pNames = '';
+      if (p.items && p.items.length > 0) {
+         pNames = p.items.map(i => i.productName).join(', ');
+      } else {
+         pNames = p.productName;
+      }
+      movements.push({
+        type: 'purchase',
+        id: p.id,
+        supplier: p.supplierName || 'Proveedor',
+        product: pNames,
+        amount: parseFloat(p.total) || parseFloat(p.amount) || 0
+      });
+    });
 
     // NEW PROFIT LOGIC: Only recognize profit when sale is FULLY PAID since last closing
     let totalProfit = 0;
@@ -84,22 +138,37 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
           return !latest || Number(p.id) > Number(latest.id) ? p : latest;
         }, null);
 
-        if (lastPayment && Number(lastPayment.id) > lastClosingId) {
-          const cost = (parseFloat(s.costAtSale) || 0) * (parseInt(s.quantity) || 1);
+        if (lastPayment && Number(lastPayment.id) > closedIds.payment) {
+          let cost = 0;
+          if (s.items && s.items.length > 0) {
+             cost = s.items.reduce((sum, i) => sum + ((parseFloat(i.costAtSale) || 0) * parseInt(i.quantity || 1)), 0);
+          } else {
+             cost = (parseFloat(s.costAtSale) || 0) * (parseInt(s.quantity) || 1);
+          }
           totalProfit += (totalAmount - cost);
         }
       }
     });
+
+    const maxExpenseId = activeExpenses.reduce((max, e) => Math.max(max, e.id), closedIds.expense);
+    const maxPurchaseId = activePurchases.reduce((max, p) => Math.max(max, p.id), closedIds.purchase);
     
     return {
       salesCount: movements.length,
       cashIn: cashSales,
-      cashOut: totalExpenses,
+      cashOut: totalExpenses + totalPurchases,
+      expensesTotal: totalExpenses,
+      purchasesTotal: totalPurchases,
       profit: totalProfit,
-      net: cashSales - totalExpenses,
-      movements: movements
+      net: cashSales - (totalExpenses + totalPurchases),
+      movements: movements,
+      newClosedIds: {
+        payment: currentMaxPaymentId,
+        expense: maxExpenseId,
+        purchase: maxPurchaseId
+      }
     };
-  }, [sales, expenses, today, lastClosingId]);
+  }, [sales, expenses, purchases, today, closedIds]);
 
   const handleCloseDay = () => {
     if (dailyStats.salesCount === 0 && dailyStats.cashIn === 0 && dailyStats.cashOut === 0) {
@@ -108,29 +177,31 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
     }
 
     confirm('¿Estás seguro de cerrar la caja actual? El resumen se reiniciará para nuevos movimientos.', async () => {
-      const closeId = Date.now();
       const newClosing = {
         date: today,
         initialCash: 0,
         finalCash: dailyStats.net,
         difference: 0,
         salesTotal: dailyStats.cashIn,
-        purchasesTotal: 0,
-        expensesTotal: dailyStats.cashOut,
+        purchasesTotal: dailyStats.purchasesTotal,
+        expensesTotal: dailyStats.expensesTotal,
         profit: dailyStats.profit,
         notes: JSON.stringify(dailyStats.movements)
       };
       
       try {
-        const response = await fetch('http://localhost:5000/api/cash-closings', {
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+        const response = await fetch(`${API_URL}/cash-closings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newClosing)
         });
 
         if (response.ok) {
-          setLastClosingId(closeId);
-          localStorage.setItem('alta_densidad_last_closing_id', closeId.toString());
+          setClosedIds(dailyStats.newClosedIds);
+          localStorage.setItem('alta_densidad_closed_ids', JSON.stringify(dailyStats.newClosedIds));
+          // Clean up old corrupt id
+          localStorage.removeItem('alta_densidad_last_closing_id');
           fetchData();
           notify('Cierre de caja guardado con éxito.', 'success');
         }
@@ -143,7 +214,8 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
   const deleteHistoryItem = (id) => {
     confirm('¿Eliminar este registro del historial?', async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/cash-closings/${id}`, { method: 'DELETE' });
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+        const response = await fetch(`${API_URL}/cash-closings/${id}`, { method: 'DELETE' });
         if (response.ok) {
           fetchData();
           notify('Registro eliminado.', 'info');
@@ -184,7 +256,7 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
                   <ArrowDownCircle size={16} color="var(--error)" />
-                  Egresos (Gastos Operativos)
+                  Egresos (Gastos y Compras)
                 </div>
                 <div style={{ fontWeight: 800, color: 'var(--error)' }}>-${dailyStats.cashOut.toLocaleString('es-CO')}</div>
               </div>
@@ -252,8 +324,8 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
                   <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{new Date(h.createdAt).toLocaleTimeString()}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Gastos</div>
-                  <div style={{ fontWeight: 700, color: 'var(--error)', fontSize: '0.85rem' }}>-${(h.expensesTotal || 0).toLocaleString('es-CO')}</div>
+                  <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Egresos Totales</div>
+                  <div style={{ fontWeight: 700, color: 'var(--error)', fontSize: '0.85rem' }}>-${((h.expensesTotal || 0) + (h.purchasesTotal || 0)).toLocaleString('es-CO')}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Ganancia</div>
@@ -328,16 +400,26 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
                     {selectedHistory.movements.map((m, idx) => (
                       <div key={idx} style={{ padding: '0.75rem', borderRadius: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                          <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{m.customer}</div>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{m.product}</div>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>
+                            {m.type === 'expense' ? `Gasto: ${m.description}` : 
+                             m.type === 'purchase' ? `Compra: ${m.supplier}` : 
+                             m.customer}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            {m.type === 'expense' ? m.category : m.product}
+                          </div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--success)' }}>+${m.paid.toLocaleString('es-CO')}</div>
-                          {m.balance > 0 ? (
-                            <div style={{ fontSize: '0.65rem', color: 'var(--error)', fontWeight: 700 }}>Debe: ${m.balance.toLocaleString('es-CO')}</div>
-                          ) : (
-                            <div style={{ fontSize: '0.65rem', color: 'var(--success)', fontWeight: 800, textTransform: 'uppercase' }}>PAGADA</div>
-                          )}
+                          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: m.type === 'expense' || m.type === 'purchase' ? 'var(--error)' : 'var(--success)' }}>
+                            {m.type === 'expense' || m.type === 'purchase' ? `-$${m.amount.toLocaleString('es-CO')}` : `+$${(m.paid || 0).toLocaleString('es-CO')}`}
+                          </div>
+                          {(m.type === 'sale' || !m.type) ? (
+                            m.balance > 0 ? (
+                              <div style={{ fontSize: '0.65rem', color: 'var(--warning)', fontWeight: 700 }}>Debe: ${m.balance.toLocaleString('es-CO')}</div>
+                            ) : (
+                              <div style={{ fontSize: '0.65rem', color: 'var(--success)', fontWeight: 800, textTransform: 'uppercase' }}>PAGADA</div>
+                            )
+                          ) : null}
                         </div>
                       </div>
                     ))}

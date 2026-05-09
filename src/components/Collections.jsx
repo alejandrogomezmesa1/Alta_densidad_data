@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, User, Phone, DollarSign, ChevronRight, Search, Filter, Calendar, MessageSquare, AlertCircle } from 'lucide-react';
+import { NumericFormat } from 'react-number-format';
 
 const Collections = ({ sales, onAddPayment, notify, confirm }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -45,7 +46,7 @@ const Collections = ({ sales, onAddPayment, notify, confirm }) => {
     
     onAddPayment(selectedDebtor.id, {
       amount: parseFloat(paymentAmount),
-      date: new Date().toISOString().split('T')[0],
+      date: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }),
       method: 'Efectivo',
       note: 'Abono desde Cartera'
     });
@@ -179,13 +180,14 @@ const Collections = ({ sales, onAddPayment, notify, confirm }) => {
               <form onSubmit={handleQuickPayment}>
                 <div style={{ marginBottom: '1.5rem' }}>
                   <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>MONTO DEL ABONO (COP)</label>
-                  <input 
+                  <NumericFormat 
                     autoFocus
                     required
-                    type="number" 
-                    max={selectedDebtor.balance}
+                    thousandSeparator="." 
+                    decimalSeparator="," 
+                    allowNegative={false}
                     value={paymentAmount}
-                    onChange={e => setPaymentAmount(e.target.value)}
+                    onValueChange={(values) => setPaymentAmount(values.value)}
                     placeholder="0"
                     style={{ width: '100%', fontSize: '1.2rem', fontWeight: 800 }}
                   />

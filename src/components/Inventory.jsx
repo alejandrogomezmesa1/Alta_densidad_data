@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Search, Edit2, Trash2, Filter, Download, Package, X, Check, ArrowUpDown, ClipboardList } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Filter, Download, Package, X, Check, ArrowUpDown, ClipboardList, Eye } from 'lucide-react';
+import DetailModal from './DetailModal';
+import { NumericFormat } from 'react-number-format';
 
 const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, exportData, notify, confirm }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [selectedDetail, setSelectedDetail] = useState(null);
   const [formData, setFormData] = useState({ name: '', category: '', price: '', costPrice: '', stock: '0' });
 
   const items = Array.isArray(inventory) ? inventory : [];
@@ -160,15 +163,15 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>P. VENTA (COP)</label>
-                <input required type="number" step="1" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} placeholder="0" style={{ width: '100%' }} />
+                <NumericFormat required value={formData.price} onValueChange={(values) => setFormData({...formData, price: values.value})} thousandSeparator="." decimalSeparator="," placeholder="0" style={{ width: '100%' }} />
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>P. COSTO (COP)</label>
-                <input required type="number" step="1" value={formData.costPrice} onChange={e => setFormData({...formData, costPrice: e.target.value})} placeholder="0" style={{ width: '100%' }} />
+                <NumericFormat required value={formData.costPrice} onValueChange={(values) => setFormData({...formData, costPrice: values.value})} thousandSeparator="." decimalSeparator="," placeholder="0" style={{ width: '100%' }} />
               </div>
               <div>
                 <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>STOCK INICIAL</label>
-                <input required type="number" value={formData.stock} onChange={e => setFormData({...formData, stock: e.target.value})} style={{ width: '100%' }} />
+                <NumericFormat required value={formData.stock} onValueChange={(values) => setFormData({...formData, stock: values.value})} thousandSeparator="." decimalSeparator="," style={{ width: '100%' }} />
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button type="submit" className="btn-primary" style={{ flex: 1, height: '45px', fontSize: '0.8rem' }}>
@@ -247,6 +250,9 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
                     <td style={{ padding: '1.25rem 2rem', fontWeight: 800 }}>${Math.round(product.price).toLocaleString('es-CO')}</td>
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button onClick={() => setSelectedDetail(product)} style={{ padding: '0.5rem', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', color: 'var(--info)', border: 'none', cursor: 'pointer' }}>
+                          <Eye size={16} />
+                        </button>
                         <button onClick={() => handleEdit(product)} style={{ padding: '0.5rem', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', color: 'var(--text-muted)', border: 'none', cursor: 'pointer' }}>
                           <Edit2 size={16} />
                         </button>
@@ -274,6 +280,12 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
           )}
         </div>
       </div>
+      
+      <AnimatePresence>
+        {selectedDetail && (
+          <DetailModal item={selectedDetail} type="inventory" onClose={() => setSelectedDetail(null)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 };

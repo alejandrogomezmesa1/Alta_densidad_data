@@ -10,8 +10,11 @@ import {
   PieChart, Pie, Cell, Legend, BarChart, Bar
 } from 'recharts';
 
-const StatCard = ({ title, value, icon: Icon, color, percentage, subValue, trend }) => (
+const StatCard = ({ title, value, icon: Icon, color, percentage, subValue, trend, delay = 0 }) => (
   <motion.div 
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.5, delay }}
     whileHover={{ y: -5, scale: 1.02 }}
     className="premium-card" 
     style={{ flex: 1, minWidth: '220px', position: 'relative', overflow: 'hidden' }}
@@ -71,7 +74,12 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
         if (lastPayment) {
           const lpDate = new Date(lastPayment.date);
           if (lpDate.toDateString() === now.toDateString()) {
-            const cost = (parseFloat(s.costAtSale) || 0) * (parseInt(s.quantity) || 1);
+            let cost = 0;
+            if (s.items && s.items.length > 0) {
+              cost = s.items.reduce((sum, i) => sum + ((parseFloat(i.costAtSale) || 0) * parseInt(i.quantity || 1)), 0);
+            } else {
+              cost = (parseFloat(s.costAtSale) || 0) * (parseInt(s.quantity) || 1);
+            }
             totalProfitToday += (totalAmount - cost);
           }
         }
@@ -101,14 +109,76 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
     });
 
     const totalCOGS = currentSales.reduce((acc, curr) => {
-      const cost = (parseFloat(curr.costAtSale) || 0) * (parseInt(curr.quantity) || 0);
+      let cost = 0;
+      if (curr.items && curr.items.length > 0) {
+        cost = curr.items.reduce((sum, i) => sum + ((parseFloat(i.costAtSale) || 0) * parseInt(i.quantity || 1)), 0);
+      } else {
+        cost = (parseFloat(curr.costAtSale) || 0) * (parseInt(curr.quantity) || 0);
+      }
       return acc + cost;
     }, 0);
+
+    // Calculate Top Products based on revenue
+    const productSalesMap = {};
+    currentSales.forEach(sale => {
+      const processItem = (pId, qty, rev) => {
+        if (!productSalesMap[pId]) {
+          const productInfo = inventoryList.find(p => String(p.id) === String(pId)) || { name: 'Producto Eliminado' };
+          productSalesMap[pId] = { name: productInfo.name, qty: 0, revenue: 0 };
+        }
+        productSalesMap[pId].qty += parseInt(qty) || 0;
+        productSalesMap[pId].revenue += parseFloat(rev) || 0;
+      };
+
+      if (sale.items && sale.items.length > 0) {
+        sale.items.forEach(i => processItem(i.productId, i.quantity, i.unitPrice * i.quantity));
+      } else if (sale.productId) {
+        processItem(sale.productId, sale.quantity, sale.total);
+      }
+    });
+
+    const topProducts = Object.values(productSalesMap)
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5); // Top 5 products
+
+    // Calculate Top Debtors
+    const debtorsMap = {};
+    salesList.forEach(sale => {
+      const total = parseFloat(sale.total) || 0;
+      const paid = (sale.payments || []).reduce((pAcc, p) => pAcc + (parseFloat(p.amount) || 0), 0);
+      const balance = total - paid;
+      if (balance > 0) {
+        const cName = sale.customerName || 'Cliente General';
+        if (!debtorsMap[cName]) debtorsMap[cName] = { name: cName, balance: 0 };
+        debtorsMap[cName].balance += balance;
+      }
+    });
+    const topDebtors = Object.values(debtorsMap).sort((a, b) => b.balance - a.balance).slice(0, 5);
+
+    // Calculate Slow Moving Inventory (Capital Inmovilizado)
+    const activeProductIds = new Set();
+    currentSales.forEach(sale => {
+      if (sale.items) {
+        sale.items.forEach(i => activeProductIds.add(String(i.productId)));
+      } else if (sale.productId) {
+        activeProductIds.add(String(sale.productId));
+      }
+    });
+    
+    let slowMovingCapital = 0;
+    let slowMovingProductsCount = 0;
+    inventoryList.forEach(p => {
+      if (p.stock > 0 && !activeProductIds.has(String(p.id))) {
+        slowMovingCapital += (p.stock * p.costPrice);
+        slowMovingProductsCount++;
+      }
+    });
 
     return { 
       totalSales, totalExpenses, netProfit: totalProfitToday - totalExpenses, 
       lowStockCount, outOfStockCount, inventoryValue, potentialRevenue,
-      accountsReceivable, topProducts: [], // Simplified for now
+      accountsReceivable, topProducts, topDebtors, slowMovingCapital, slowMovingProductsCount,
+      accountsReceivable, topProducts,
       currentSales, cashInToday, totalCOGS,
       avgTicket: currentSales.length > 0 ? totalSales / currentSales.length : 0,
       salesCount: currentSales.length
@@ -116,27 +186,79 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
   }, [salesList, expensesList, inventoryList, period]);
 
   const chartData = useMemo(() => {
-    const days = period === 'week' ? 7 : (period === 'month' ? 30 : 60);
     const data = [];
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
-      const daySales = stats.currentSales
-        .filter(s => s.date === dateStr)
-        .reduce((acc, curr) => acc + (parseFloat(curr.total) || 0), 0);
-      const dayProfit = stats.currentSales
-        .filter(s => s.date === dateStr)
-        .reduce((acc, curr) => {
-          const cost = (parseFloat(curr.costAtSale) || 0) * (parseInt(curr.quantity) || 0);
-          return acc + (parseFloat(curr.total) - cost);
-        }, 0);
-      
-      data.push({
-        name: d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
-        ventas: daySales,
-        ganancia: dayProfit
-      });
+    
+    if (period === 'all') {
+      // Group by month for the last 12 months
+      for(let i=11; i>=0; i--) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - i);
+        const monthYear = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        
+        const monthSales = stats.currentSales
+          .filter(s => {
+            const dateStr = s.date || '';
+            return dateStr.startsWith(monthYear);
+          })
+          .reduce((acc, curr) => acc + (parseFloat(curr.total) || 0), 0);
+          
+        const monthProfit = stats.currentSales
+          .filter(s => {
+            const dateStr = s.date || '';
+            return dateStr.startsWith(monthYear);
+          })
+          .reduce((acc, curr) => {
+            let cost = 0;
+            if (curr.items && curr.items.length > 0) {
+              cost = curr.items.reduce((cAcc, item) => cAcc + ((parseFloat(item.costAtSale) || 0) * (parseInt(item.quantity) || 1)), 0);
+            } else {
+              cost = (parseFloat(curr.costAtSale) || 0) * (parseInt(curr.quantity) || 0);
+            }
+            return acc + (parseFloat(curr.total) - cost);
+          }, 0);
+          
+        data.push({
+          name: d.toLocaleDateString('es-ES', { month: 'short', year: '2-digit' }),
+          ventas: monthSales,
+          utilidad: monthProfit
+        });
+      }
+    } else {
+      const days = period === 'week' ? 7 : 30;
+      for(let i=days-1; i>=0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        // Correctly format local date to YYYY-MM-DD
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        
+        const daySales = stats.currentSales
+          .filter(s => {
+             const sDate = s.date ? s.date.split(/T| /)[0] : '';
+             return sDate === dateStr;
+          })
+          .reduce((acc, curr) => acc + (parseFloat(curr.total) || 0), 0);
+        
+        const dayProfit = stats.currentSales
+          .filter(s => {
+             const sDate = s.date ? s.date.split(/T| /)[0] : '';
+             return sDate === dateStr;
+          })
+          .reduce((acc, curr) => {
+            let cost = 0;
+            if (curr.items && curr.items.length > 0) {
+              cost = curr.items.reduce((cAcc, item) => cAcc + ((parseFloat(item.costAtSale) || 0) * (parseInt(item.quantity) || 1)), 0);
+            } else {
+              cost = (parseFloat(curr.costAtSale) || 0) * (parseInt(curr.quantity) || 0);
+            }
+            return acc + (parseFloat(curr.total) - cost);
+          }, 0);
+        
+        data.push({
+          name: d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+          ventas: daySales,
+          utilidad: dayProfit
+        });
+      }
     }
     return data;
   }, [stats.currentSales, period]);
@@ -144,9 +266,17 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
   const categoryData = useMemo(() => {
     const categories = {};
     stats.currentSales.forEach(sale => {
-      const product = inventoryList.find(p => p.id === sale.productId);
-      const cat = product?.category || 'Otros';
-      categories[cat] = (categories[cat] || 0) + (parseFloat(sale.total) || 0);
+      if (sale.items && sale.items.length > 0) {
+        sale.items.forEach(i => {
+          const product = inventoryList.find(p => String(p.id) === String(i.productId));
+          const cat = product?.category || 'Otros';
+          categories[cat] = (categories[cat] || 0) + ((parseFloat(i.unitPrice) || 0) * (parseInt(i.quantity) || 1));
+        });
+      } else if (sale.productId) {
+        const product = inventoryList.find(p => String(p.id) === String(sale.productId));
+        const cat = product?.category || 'Otros';
+        categories[cat] = (categories[cat] || 0) + (parseFloat(sale.total) || 0);
+      }
     });
     return Object.entries(categories).map(([name, value]) => ({ name, value }));
   }, [stats.currentSales, inventoryList]);
@@ -171,24 +301,57 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
-          <StatCard title="Ventas Hoy" value={`$${Math.round(stats.totalSales).toLocaleString('es-CO')}`} icon={TrendingUp} color="50, 215, 75" trend="up" percentage={14} />
-          <StatCard title="Recaudo Hoy" value={`$${Math.round(stats.cashInToday).toLocaleString('es-CO')}`} icon={Wallet} color="32, 215, 75" subValue="Efectivo real en caja" />
-          <StatCard title="Margen Neto" value={`$${Math.round(stats.netProfit).toLocaleString('es-CO')}`} icon={DollarSign} color="226, 176, 76" subValue={`Rentabilidad: ${stats.totalSales > 0 ? ((stats.netProfit/stats.totalSales)*100).toFixed(1) : 0}%`} />
-          <StatCard title="Cartera Cliente" value={`$${Math.round(stats.accountsReceivable).toLocaleString('es-CO')}`} icon={Clock} color="255, 69, 58" subValue="Por cobrar" />
+          <StatCard delay={0.1} title="Ventas Hoy" value={`$${Math.round(stats.totalSales).toLocaleString('es-CO')}`} icon={TrendingUp} color="50, 215, 75" trend="up" percentage={14} />
+          <StatCard delay={0.2} title="Recaudo Hoy" value={`$${Math.round(stats.cashInToday).toLocaleString('es-CO')}`} icon={Wallet} color="32, 215, 75" subValue="Efectivo real en caja" />
+          <StatCard delay={0.3} title="Margen Neto" value={`$${Math.round(stats.netProfit).toLocaleString('es-CO')}`} icon={DollarSign} color="226, 176, 76" subValue={`Rentabilidad: ${stats.totalSales > 0 ? ((stats.netProfit/stats.totalSales)*100).toFixed(1) : 0}%`} />
+          <StatCard delay={0.4} title="Cartera Cliente" value={`$${Math.round(stats.accountsReceivable).toLocaleString('es-CO')}`} icon={Clock} color="255, 69, 58" subValue="Por cobrar" />
         </div>
       </header>
+      
+      {/* Critical Alerts Section */}
+      {(stats.lowStockCount > 0 || stats.outOfStockCount > 0) && (
+        <div style={{ marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', color: 'var(--error)' }}>
+            <AlertCircle size={20} />
+            <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Alertas de Inventario</h4>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
+            {inventoryList.filter(p => p.stock === 0).slice(0, 3).map(p => (
+              <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={p.id} className="glass" style={{ padding: '1rem 1.5rem', borderRadius: '14px', borderLeft: '4px solid var(--error)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{p.name}</div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--error)', fontWeight: 600 }}>PRODUCTO AGOTADO</div>
+                </div>
+                <button onClick={() => setActiveTab('inventory')} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}>REURTIR</button>
+              </motion.div>
+            ))}
+            {inventoryList.filter(p => p.stock > 0 && p.stock < 5).slice(0, 3).map(p => (
+              <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={p.id} className="glass" style={{ padding: '1rem 1.5rem', borderRadius: '14px', borderLeft: '4px solid var(--warning)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{p.name}</div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--warning)', fontWeight: 600 }}>STOCK BAJO: {p.stock} UNIDADES</div>
+                </div>
+                <button onClick={() => setActiveTab('inventory')} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}>REURTIR</button>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Main Graph Restored */}
       <div className="premium-card" style={{ marginBottom: '2rem', height: '450px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2.5rem' }}>
-          <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}><Activity size={20} color="var(--accent-primary)" /> RENDIMIENTO DIARIO: VENTAS VS GANANCIAS</h4>
+          <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textTransform: 'uppercase' }}>
+            <Activity size={20} color="var(--accent-primary)" /> 
+            RENDIMIENTO {period === 'week' ? 'SEMANAL' : period === 'month' ? 'MENSUAL' : 'HISTÓRICO'}: VENTAS VS UTILIDAD
+          </h4>
           <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8rem', fontWeight: 600 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--accent-primary)' }} /> VENTAS</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--success)' }} /> GANANCIA</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--success)' }} /> UTILIDAD</div>
           </div>
         </div>
-        <div style={{ height: '320px' }}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+        <div style={{ height: '320px', minWidth: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="colorV" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--accent-primary)" stopOpacity={0.2}/><stop offset="95%" stopColor="var(--accent-primary)" stopOpacity={0}/></linearGradient>
@@ -205,32 +368,58 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
               />
               <Tooltip contentStyle={{ background: 'rgba(10,10,12,0.95)', border: '1px solid var(--glass-border)', borderRadius: '12px' }} />
               <Area type="monotone" dataKey="ventas" stroke="var(--accent-primary)" strokeWidth={3} fill="url(#colorV)" />
-              <Area type="monotone" dataKey="ganancia" stroke="var(--success)" strokeWidth={2} fill="url(#colorG)" />
+              <Area type="monotone" dataKey="utilidad" stroke="var(--success)" strokeWidth={2} fill="url(#colorG)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem', marginBottom: '2rem' }}>
         {/* Top Products */}
-        <div className="premium-card" style={{ gridColumn: 'span 2' }}>
+        <div className="premium-card">
           <h4 style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}><Star size={20} color="var(--warning)" /> PRODUCTOS ESTRELLA</h4>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase' }}>
                 <th style={{ padding: '1rem 0' }}>Producto</th>
                 <th>Ventas</th>
-                <th style={{ textAlign: 'right' }}>Ingresos (COP)</th>
+                <th style={{ textAlign: 'right' }}>Ingresos</th>
               </tr>
             </thead>
             <tbody>
               {stats.topProducts.map((p, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                   <td style={{ padding: '1.2rem 0', fontWeight: 700, fontSize: '0.9rem' }}>{p.name}</td>
-                  <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{p.qty} unid.</td>
+                  <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{p.qty} u.</td>
                   <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--success)' }}>${Math.round(p.revenue).toLocaleString('es-CO')}</td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Top Debtors */}
+        <div className="premium-card">
+          <h4 style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}><AlertCircle size={20} color="var(--error)" /> TOP DEUDORES</h4>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase' }}>
+                <th style={{ padding: '1rem 0' }}>Cliente</th>
+                <th style={{ textAlign: 'right' }}>Deuda Pendiente</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.topDebtors.map((d, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                  <td style={{ padding: '1.2rem 0', fontWeight: 700, fontSize: '0.9rem' }}>{d.name}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--error)' }}>${Math.round(d.balance).toLocaleString('es-CO')}</td>
+                </tr>
+              ))}
+              {stats.topDebtors.length === 0 && (
+                <tr>
+                  <td colSpan="2" style={{ padding: '2rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>No hay deudas pendientes registradas.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -267,8 +456,8 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
         {/* Sales by Category Restored */}
         <div className="premium-card">
           <h4 style={{ marginBottom: '2rem' }}><PieIcon size={20} color="var(--accent-primary)" /> VENTAS POR CATEGORÍA</h4>
-          <div style={{ height: '300px' }}>
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+          <div style={{ height: '300px', minWidth: 0 }}>
+            <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={categoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
                   {categoryData.map((e, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
@@ -283,8 +472,8 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
         {/* Expenses Breakdown */}
         <div className="premium-card">
           <h4 style={{ marginBottom: '2rem' }}><BarChart3 size={20} color="var(--error)" /> ESTRUCTURA DE COSTOS</h4>
-          <div style={{ height: '300px' }}>
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+          <div style={{ height: '300px', minWidth: 0 }}>
+            <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={[
@@ -326,7 +515,16 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
             </div>
             <div>
               <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Cartera en Riesgo</div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Tienes <strong>${Math.round(stats.accountsReceivable).toLocaleString('es-CO')}</strong> por cobrar. ¡Ojo con el recaudo!</p>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Tienes <strong>${Math.round(stats.accountsReceivable).toLocaleString('es-CO')}</strong> por cobrar. Usa el panel de deudores para hacer seguimiento.</p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <div style={{ minWidth: '40px', height: '40px', borderRadius: '10px', background: 'rgba(255,159,10,0.1)', color: 'var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Package size={20} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Capital Inmovilizado</div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Tienes <strong>${Math.round(stats.slowMovingCapital).toLocaleString('es-CO')}</strong> atrapados en {stats.slowMovingProductsCount} productos sin rotación.</p>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '1rem' }}>
@@ -334,8 +532,8 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
               <CheckCircle size={20} />
             </div>
             <div>
-              <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Actividad del Periodo</div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Has realizado <strong>{stats.salesCount}</strong> transacciones exitosas recientemente.</p>
+              <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Efectividad de Flujo</div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>El ingreso real de hoy cubre tus gastos operativos con un saldo de <strong>${Math.round(stats.cashInToday - stats.totalExpenses).toLocaleString('es-CO')}</strong>.</p>
             </div>
           </div>
         </div>

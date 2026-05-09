@@ -153,3 +153,45 @@ input:focus, select:focus {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Responsive Utilities */
+@media (max-width: 1024px) {
+  .main-content {
+    margin-left: 0;
+    padding: 2rem 1.5rem;
+    padding-top: 5rem; /* Space for mobile header */
+  }
+}
+
+@media (max-width: 768px) {
+  .premium-card {
+    padding: 1.25rem;
+  }
+  
+  h2 { font-size: 2rem !important; }
+  
+  .btn-primary {
+    width: 100%;
+    text-align: center;
+  }
+
+  /* Responsive Tables */
+  table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+}
+
+.mobile-only {
+  display: none;
+}
+
+@media (max-width: 1024px) {
+  .mobile-only {
+    display: flex;
+  }
+  .desktop-only {
+    display: none;
+  }
+}
