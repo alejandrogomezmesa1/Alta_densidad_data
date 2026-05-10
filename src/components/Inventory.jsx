@@ -42,10 +42,10 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
   };
 
   const handleExportStockZero = () => {
-    const lowStockItems = items.filter(p => Number(p.stock) === 0 || Number(p.stock) === 1);
+    const lowStockItems = items.filter(p => Number(p.stock) < 5);
     
     if (lowStockItems.length === 0) {
-      notify?.('No hay productos con stock bajo (0 o 1)', 'info');
+      notify?.('No hay productos con bajo stock (< 5)', 'info');
       return;
     }
 
@@ -73,7 +73,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
         <body>
           <div class="header">
             <h1>ALTA DENSIDAD</h1>
-            <p class="meta">REPORTE DE FALTANTES (STOCK 0 o 1) - ${new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+            <p class="meta">REPORTE DE FALTANTES (STOCK < 5) - ${new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
           </div>
           <table>
             <thead>

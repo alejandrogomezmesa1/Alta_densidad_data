@@ -77,7 +77,7 @@ const DetailModal = ({ isOpen, onClose, title, data, type }) => {
   );
 };
 
-const Dashboard = ({ sales, inventory, purchases, expenses }) => {
+const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
   const [period, setPeriod] = useState('month');
 
   const salesList = Array.isArray(sales) ? sales : [];

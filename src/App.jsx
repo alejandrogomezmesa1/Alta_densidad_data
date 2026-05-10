@@ -140,7 +140,7 @@ function App() {
     
     switch(activeTab) {
       case 'dashboard':
-        return <Dashboard {...commonProps} sales={sales} inventory={inventory} purchases={purchases} expenses={expenses} />;
+        return <Dashboard {...commonProps} sales={sales} inventory={inventory} purchases={purchases} expenses={expenses} setActiveTab={setActiveTab} />;
       case 'inventory':
         return <Inventory 
           {...commonProps}
