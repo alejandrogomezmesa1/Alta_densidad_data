@@ -86,39 +86,39 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
 
   const stats = useMemo(() => {
     const now = new Date();
-    const currentSales = salesList.filter(s => {
-      const d = new Date(s.date);
+    const currentExpenses = expensesList.filter(e => {
+      const d = new Date(e.date);
       if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
       if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-      return true;
+      return d.toDateString() === now.toDateString(); // Default to today if period is undefined or for daily view
     });
 
     const totalSales = currentSales.reduce((acc, curr) => acc + (parseFloat(curr.total) || 0), 0);
-    const todaySalesItems = currentSales
-      .filter(s => new Date(s.date).toDateString() === now.toDateString())
-      .map(s => ({
-        label: s.customerName || 'Venta General',
-        sublabel: s.productName || 'Varios productos',
-        amount: parseFloat(s.total) || 0,
-        extra: s.date
-      }));
+    const todaySalesItems = currentSales.map(s => ({
+      label: s.customerName || 'Venta General',
+      sublabel: s.productName || 'Varios productos',
+      amount: parseFloat(s.total) || 0,
+      extra: s.date
+    }));
 
-    const totalExpenses = expensesList.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+    const totalExpenses = currentExpenses.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
     
-    // PROFIT LOGIC: Proportional profit recognition based on payments received today
-    let totalProfitToday = 0;
+    // PROFIT LOGIC: Proportional profit recognition based on payments received in period
+    let totalProfitPeriod = 0;
     const profitItems = [];
     salesList.forEach(s => {
       const totalAmount = parseFloat(s.total) || 0;
       if (totalAmount <= 0) return;
 
-      const paymentsToday = (s.payments || []).filter(p => {
+      const paymentsInPeriod = (s.payments || []).filter(p => {
         const d = new Date(p.date);
+        if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
+        if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
         return d.toDateString() === now.toDateString();
       });
 
-      if (paymentsToday.length > 0) {
-        const paidToday = paymentsToday.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+      if (paymentsInPeriod.length > 0) {
+        const paidInPeriod = paymentsInPeriod.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
         
         let cost = 0;
         if (s.items && s.items.length > 0) {
@@ -128,18 +128,18 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
         }
 
         const saleProfit = totalAmount - cost;
-        const recognizedProfit = (paidToday / totalAmount) * saleProfit;
-        totalProfitToday += recognizedProfit;
+        const recognizedProfit = (paidInPeriod / totalAmount) * saleProfit;
+        totalProfitPeriod += recognizedProfit;
         profitItems.push({
           label: s.customerName || 'Venta',
-          sublabel: `Abono hoy: $${paidToday.toLocaleString('es-CO')}`,
+          sublabel: `Cobrado en periodo: $${paidInPeriod.toLocaleString('es-CO')}`,
           amount: recognizedProfit,
-          extra: `Utilidad sobre pago`
+          extra: `Utilidad proporcional`
         });
       }
     });
 
-    expensesList.filter(e => new Date(e.date).toDateString() === now.toDateString()).forEach(e => {
+    currentExpenses.forEach(e => {
       profitItems.push({
         label: `Gasto: ${e.description}`,
         sublabel: e.categoria,
@@ -148,7 +148,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
       });
     });
 
-    const netProfit = totalProfitToday - totalExpenses;
+    const netProfit = totalProfitPeriod - totalExpenses;
     
     const lowStockCount = inventoryList.filter(p => p.stock === 1).length;
     const outOfStockCount = inventoryList.filter(p => p.stock <= 0).length;
@@ -387,10 +387,37 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
       </header>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
-          <StatCard delay={0.1} title="Ventas Hoy" value={`$${Math.round(stats.totalSales).toLocaleString('es-CO')}`} icon={TrendingUp} color="50, 215, 75" trend="up" percentage={14} onClick={() => setActiveModal({ title: 'Detalle de Ventas Hoy', data: stats.todaySalesItems })} />
-          <StatCard delay={0.2} title="Recaudo Hoy" value={`$${Math.round(stats.cashInToday).toLocaleString('es-CO')}`} icon={Wallet} color="32, 215, 75" subValue="Efectivo real en caja" onClick={() => setActiveModal({ title: 'Detalle de Recaudo Hoy', data: stats.cashInItems })} />
-          <StatCard delay={0.3} title="Margen Neto" value={`$${Math.round(stats.netProfit).toLocaleString('es-CO')}`} icon={DollarSign} color="226, 176, 76" subValue={`Rentabilidad: ${stats.totalSales > 0 ? ((stats.netProfit/stats.totalSales)*100).toFixed(1) : 0}%`} onClick={() => setActiveModal({ title: 'Detalle de Margen Neto', data: stats.profitItems })} />
-          <StatCard delay={0.4} title="Cartera Cliente" value={`$${Math.round(stats.accountsReceivable).toLocaleString('es-CO')}`} icon={Clock} color="255, 69, 58" subValue="Por cobrar" onClick={() => setActiveModal({ title: 'Detalle de Cartera', data: stats.accountsReceivableItems })} />
+          <StatCard 
+            title={period === 'month' ? "Ventas Mes" : (period === 'week' ? "Ventas Semana" : "Ventas Hoy")} 
+            value={`$${Math.round(stats.totalSales).toLocaleString('es-CO')}`} 
+            icon={TrendingUp} 
+            color="50, 215, 75" 
+            onClick={() => setActiveModal({ title: period === 'month' ? "Ventas del Mes" : (period === 'week' ? "Ventas de la Semana" : "Ventas Hoy"), data: stats.todaySalesItems })} 
+          />
+          <StatCard 
+            title={period === 'month' ? "Recaudo Mes" : (period === 'week' ? "Recaudo Semana" : "Recaudo Hoy")} 
+            value={`$${Math.round(stats.cashInToday).toLocaleString('es-CO')}`} 
+            icon={Wallet} 
+            color="32, 215, 75" 
+            onClick={() => setActiveModal({ title: 'Detalle de Recaudo', data: stats.cashInItems })} 
+          />
+          <StatCard 
+            title={period === 'month' ? "Margen Mes" : (period === 'week' ? "Margen Semana" : "Margen Hoy")} 
+            value={`$${Math.round(stats.netProfit).toLocaleString('es-CO')}`} 
+            icon={DollarSign} 
+            color="226, 176, 76" 
+            subValue={`Rentabilidad: ${stats.totalSales > 0 ? ((stats.netProfit/stats.totalSales)*100).toFixed(1) : 0}%`} 
+            onClick={() => setActiveModal({ title: 'Detalle de Margen Neto', data: stats.profitItems })} 
+          />
+          <StatCard 
+            delay={0.4} 
+            title="Cartera Cliente" 
+            value={`$${Math.round(stats.accountsReceivable).toLocaleString('es-CO')}`} 
+            icon={Clock} 
+            color="255, 69, 58" 
+            subValue="Por cobrar" 
+            onClick={() => setActiveModal({ title: 'Detalle de Cartera', data: stats.accountsReceivableItems })} 
+          />
         </div>
 
         <DetailModal 
