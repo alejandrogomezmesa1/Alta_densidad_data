@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Calendar, ShoppingBag, Receipt, DollarSign, X, Trash2, Search, ArrowDownCircle, ArrowUpCircle, Calculator, User, CreditCard, CheckCircle2, Clock, Printer, Edit2, ListPlus, Eye } from 'lucide-react';
 import DetailModal from './DetailModal';
 import { NumericFormat } from 'react-number-format';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, onUpdate, onAddPayment, notify, confirm, suppliers = [], mostFrequentSupplierId }) => {
   const [isAdding, setIsAdding] = useState(false);
@@ -282,106 +284,103 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
     const paid = (item.payments || []).reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
     const total = parseFloat(item.total || item.amount || 0);
     const balance = total - paid;
+
+    // Create PDF with ticket-like dimensions (80mm width is common for thermal printers)
+    // For standard PDF viewers, we'll use a larger width but keep the ticket layout
+    const doc = new jsPDF({
+      unit: 'mm',
+      format: [80, 200] // 80mm width, 200mm height (will auto-expand if needed, or we just use enough)
+    });
+
+    const pageWidth = doc.internal.pageSize.width;
+    let currentY = 15;
+
+    // Header
+    doc.setFontSize(14);
+    doc.setTextColor(20, 20, 22);
+    doc.setFont('helvetica', 'bold');
+    doc.text('ALTA DENSIDAD', pageWidth / 2, currentY, { align: 'center' });
     
-    let itemsHtml = '';
-    if (item.items && item.items.length > 0) {
-      itemsHtml = item.items.map(i => `
-        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-          <span>${i.productName} (x${i.quantity})</span>
-          <span>$${Math.round(i.quantity * i.unitPrice).toLocaleString('es-CO')}</span>
-        </div>
-      `).join('');
-    } else {
-      itemsHtml = `
-        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-          <span>${item.productName || item.description || 'Producto'} (x${item.quantity || 1})</span>
-          <span>$${Math.round(total).toLocaleString('es-CO')}</span>
-        </div>
-      `;
+    currentY += 5;
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text('Premium Management System', pageWidth / 2, currentY, { align: 'center' });
+
+    currentY += 8;
+    doc.setDrawColor(200, 200, 200);
+    doc.line(10, currentY, pageWidth - 10, currentY);
+
+    // Info
+    currentY += 8;
+    doc.setFontSize(8);
+    doc.setTextColor(50, 50, 50);
+    doc.text(`TICKET #: ${String(item.id).padStart(6, '0')}`, 10, currentY);
+    currentY += 4;
+    doc.text(`FECHA: ${item.date}`, 10, currentY);
+    currentY += 4;
+    doc.text(`CLIENTE: ${item.customerName || 'Cliente General'}`, 10, currentY);
+    
+    if (item.idDocument) {
+      currentY += 4;
+      doc.text(`ID/NIT: ${item.idDocument}`, 10, currentY);
+    }
+    if (item.phone) {
+      currentY += 4;
+      doc.text(`TEL: ${item.phone}`, 10, currentY);
     }
 
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Recibo - Alta Densidad</title>
-          <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-            body { 
-              font-family: 'Inter', sans-serif; 
-              color: #000; 
-              width: 380px; 
-              margin: 0 auto; 
-              padding: 20px;
-              font-size: 12px;
-              line-height: 1.5;
-            }
-            .header { text-align: center; margin-bottom: 20px; }
-            .logo { font-weight: 900; font-size: 20px; letter-spacing: 2px; margin-bottom: 5px; }
-            .subtitle { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #666; }
-            .divider { border-top: 1px dashed #000; margin: 15px 0; }
-            .info-row { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
-            .label { font-weight: 700; text-transform: uppercase; font-size: 10px; white-space: nowrap; }
-            .value { text-align: right; word-break: break-all; }
-            .total-section { font-size: 15px; font-weight: 900; margin-top: 15px; border-top: 2px solid #000; padding-top: 10px; }
-            .footer { text-align: center; margin-top: 40px; font-size: 10px; color: #555; }
-            @media print {
-              body { width: 100%; max-width: 400px; margin: 0 auto; padding: 10px; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="logo">ALTA DENSIDAD</div>
-            <div class="subtitle">Premium Management System</div>
-          </div>
-          
-          <div class="divider"></div>
-          
-          <div class="info-row"><span class="label">Ticket #</span><span class="value">${String(item.id).padStart(6, '0')}</span></div>
-          <div class="info-row"><span class="label">Fecha</span><span class="value">${item.date}</span></div>
-          <div class="info-row"><span class="label">Cliente</span><span class="value">${item.customerName || 'Cliente General'}</span></div>
-          ${item.idDocument ? `<div class="info-row"><span class="label">ID/Cédula</span><span class="value">${item.idDocument}</span></div>` : ''}
-          ${item.phone ? `<div class="info-row"><span class="label">Teléfono</span><span class="value">${item.phone}</span></div>` : ''}
-          
-          <div class="divider"></div>
-          
-          <div class="label" style="margin-bottom: 10px; font-size: 11px;">DETALLE DE COMPRA</div>
-          <div style="margin-bottom: 5px;">
-            ${item.items && item.items.length > 0 ? 
-              item.items.map(i => `
-                <div style="display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px;">
-                  <span style="flex: 1;">${i.productName} (x${i.quantity})</span>
-                  <span style="font-weight: 700;">$${Math.round(i.quantity * i.unitPrice).toLocaleString('es-CO')}</span>
-                </div>
-              `).join('') :
-              `<div style="display: flex; justify-content: space-between; gap: 10px; margin-bottom: 8px;">
-                <span style="flex: 1;">${item.productName || item.description || 'Producto'} (x${item.quantity || 1})</span>
-                <span style="font-weight: 700;">$${Math.round(total).toLocaleString('es-CO')}</span>
-              </div>`
-            }
-          </div>
-          
-          <div class="divider"></div>
-          
-          <div class="info-row"><span class="label">Subtotal</span><span style="font-weight: 700;">$${Math.round(total).toLocaleString('es-CO')}</span></div>
-          <div class="info-row"><span class="label">Pagado</span><span style="font-weight: 700;">$${Math.round(paid).toLocaleString('es-CO')}</span></div>
-          
-          <div class="info-row total-section">
-            <span class="label" style="font-size: 12px;">TOTAL PENDIENTE</span>
-            <span>$${Math.round(balance).toLocaleString('es-CO')}</span>
-          </div>
-          
-          <div class="footer">
-            <p>¡Gracias por su compra!</p>
-            <p style="font-weight: 700;">Alta Densidad - Fragancias & Estilo</p>
-            <p>${new Date().toLocaleString('es-CO')}</p>
-          </div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.print();
+    currentY += 6;
+    doc.line(10, currentY, pageWidth - 10, currentY);
+    
+    // Details Table
+    currentY += 5;
+    doc.setFont('helvetica', 'bold');
+    doc.text('DETALLE DE VENTA', 10, currentY);
+    
+    const tableItems = item.items && item.items.length > 0 ? 
+      item.items.map(i => [i.productName, i.quantity, `$${Math.round(i.unitPrice).toLocaleString('es-CO')}`, `$${Math.round(i.quantity * i.unitPrice).toLocaleString('es-CO')}`]) :
+      [[item.productName || item.description || 'Producto', item.quantity || 1, `$${Math.round(total).toLocaleString('es-CO')}`, `$${Math.round(total).toLocaleString('es-CO')}`]];
+
+    autoTable(doc, {
+      startY: currentY + 3,
+      head: [['Prod', 'Cant', 'Precio', 'Sub']],
+      body: tableItems,
+      theme: 'plain',
+      styles: { fontSize: 7, cellPadding: 1 },
+      headStyles: { fontStyle: 'bold', borderBottomColor: [0, 0, 0], borderBottomWidth: 0.1 },
+      margin: { left: 10, right: 10 }
+    });
+
+    currentY = (doc).lastAutoTable.finalY + 8;
+    
+    // Totals
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.text('SUBTOTAL:', 45, currentY);
+    doc.text(`$${Math.round(total).toLocaleString('es-CO')}`, pageWidth - 10, currentY, { align: 'right' });
+    
+    currentY += 4;
+    doc.text('PAGADO:', 45, currentY);
+    doc.text(`$${Math.round(paid).toLocaleString('es-CO')}`, pageWidth - 10, currentY, { align: 'right' });
+
+    currentY += 6;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('TOTAL PENDIENTE:', 10, currentY);
+    doc.text(`$${Math.round(balance).toLocaleString('es-CO')}`, pageWidth - 10, currentY, { align: 'right' });
+
+    // Footer
+    currentY += 15;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.text('¡Gracias por su compra!', pageWidth / 2, currentY, { align: 'center' });
+    currentY += 4;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Alta Densidad - Fragancias & Estilo', pageWidth / 2, currentY, { align: 'center' });
+    
+    doc.save(`Factura_${String(item.id).padStart(6, '0')}.pdf`);
+    notify?.('Factura PDF generada con éxito.', 'success');
   };
 
   const Icon = config[type].icon;
