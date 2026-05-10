@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Search, Edit2, Trash2, Filter, Download, Package, X, Check, ArrowUpDown, ClipboardList, Eye } from 'lucide-react';
 import DetailModal from './DetailModal';
-import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { NumericFormat } from 'react-number-format';
 
 const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, exportData, notify, confirm }) => {
@@ -73,7 +73,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
       '' // Space for manually writing "Qty to order"
     ]);
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: 45,
       head: [['Producto', 'Categoría', 'Stock Act.', 'Cant. Pedir']],
       body: tableData,
@@ -103,7 +103,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
     });
 
     // Footer
-    const finalY = doc.lastAutoTable.finalY || 45;
+    const finalY = (doc).lastAutoTable?.finalY || 45;
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
     doc.text('Este documento es un auxiliar para la gestión de compras y pedidos.', pageWidth / 2, finalY + 20, { align: 'center' });
