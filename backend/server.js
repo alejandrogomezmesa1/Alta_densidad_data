@@ -220,6 +220,13 @@ app.put('/api/customers/:id', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
+app.delete('/api/customers/:id', async (req, res, next) => {
+    try {
+        await db.query('DELETE FROM clientes WHERE id = ?', [req.params.id]);
+        res.json({ message: 'Customer deleted' });
+    } catch (error) { next(error); }
+});
+
 // --- VENTAS & PAGOS (Sales & Payments) ---
 app.get('/api/sales', async (req, res, next) => {
     try {
