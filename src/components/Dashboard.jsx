@@ -90,6 +90,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
       const d = new Date(s.date);
       if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
       if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+      if (period === 'all') return true;
       return d.toDateString() === now.toDateString();
     });
 
@@ -97,11 +98,12 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
       const d = new Date(e.date);
       if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
       if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+      if (period === 'all') return true;
       return d.toDateString() === now.toDateString();
     });
 
     const totalSales = currentSales.reduce((acc, curr) => acc + (parseFloat(curr.total) || 0), 0);
-    const todaySalesItems = currentSales.map(s => ({
+    const periodSalesItems = currentSales.map(s => ({
       label: s.customerName || 'Venta General',
       sublabel: s.productName || 'Varios productos',
       amount: parseFloat(s.total) || 0,
@@ -121,6 +123,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
         const d = new Date(p.date);
         if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
         if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+        if (period === 'all') return true;
         return d.toDateString() === now.toDateString();
       });
 
@@ -180,22 +183,26 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
       };
     });
 
-    // CASH FLOW: All payments made today
-    let cashInToday = 0;
+    // CASH FLOW: All payments made in the period
+    let totalCashIn = 0;
     const cashInItems = [];
     salesList.forEach(s => {
-      const todayP = (s.payments || []).filter(p => {
+      const paymentsInPeriod = (s.payments || []).filter(p => {
         const d = new Date(p.date);
+        if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
+        if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+        if (period === 'all') return true;
         return d.toDateString() === now.toDateString();
       });
-      if (todayP.length > 0) {
-        const amt = todayP.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
-        cashInToday += amt;
+
+      if (paymentsInPeriod.length > 0) {
+        const amt = paymentsInPeriod.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+        totalCashIn += amt;
         cashInItems.push({
-          label: s.customerName || 'Abono',
+          label: s.customerName || 'Abono / Pago',
           sublabel: s.productName || 'Venta',
           amount: amt,
-          extra: 'Recaudo efectivo'
+          extra: `Recaudo: ${new Date(paymentsInPeriod[0].date).toLocaleDateString()}`
         });
       }
     });
@@ -270,10 +277,10 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
       totalSales, totalExpenses, netProfit, 
       lowStockCount, outOfStockCount, inventoryValue, potentialRevenue,
       accountsReceivable, topProducts, topDebtors, slowMovingCapital, slowMovingProductsCount,
-      currentSales, cashInToday, totalCOGS,
+      currentSales, totalCashIn, totalCOGS,
       avgTicket: currentSales.length > 0 ? totalSales / currentSales.length : 0,
       salesCount: currentSales.length,
-      todaySalesItems, cashInItems, profitItems, accountsReceivableItems
+      periodSalesItems, cashInItems, profitItems, accountsReceivableItems
     };
   }, [salesList, expensesList, inventoryList, period]);
 
@@ -385,9 +392,9 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
           <p style={{ color: 'var(--text-secondary)', fontWeight: 500, fontSize: '1.1rem' }}>Análisis histórico y proyección financiera (COP).</p>
         </div>
         <div className="glass" style={{ display: 'flex', padding: '0.4rem', borderRadius: '12px', flexWrap: 'wrap' }}>
-          {['week', 'month', 'all'].map(p => (
+          {['today', 'week', 'month', 'all'].map(p => (
             <button key={p} onClick={() => setPeriod(p)} style={{ flex: 1, minWidth: '80px', padding: '0.6rem 0.5rem', borderRadius: '10px', background: period === p ? 'var(--accent-primary)' : 'transparent', color: period === p ? '#000' : 'var(--text-secondary)', fontWeight: 700, border: 'none', cursor: 'pointer' }}>
-              {p === 'week' ? 'Semana' : p === 'month' ? 'Mes' : 'Todo'}
+              {p === 'today' ? 'Hoy' : p === 'week' ? 'Semana' : p === 'month' ? 'Mes' : 'Todo'}
             </button>
           ))}
         </div>
@@ -395,21 +402,21 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
           <StatCard 
-            title={period === 'month' ? "Ventas Mes" : (period === 'week' ? "Ventas Semana" : "Ventas Hoy")} 
+            title={period === 'month' ? "Ventas Mes" : (period === 'week' ? "Ventas Semana" : (period === 'all' ? "Ventas Totales" : "Ventas Hoy"))} 
             value={`$${Math.round(stats.totalSales).toLocaleString('es-CO')}`} 
             icon={TrendingUp} 
             color="50, 215, 75" 
-            onClick={() => setActiveModal({ title: period === 'month' ? "Ventas del Mes" : (period === 'week' ? "Ventas de la Semana" : "Ventas Hoy"), data: stats.todaySalesItems })} 
+            onClick={() => setActiveModal({ title: period === 'month' ? "Ventas del Mes" : (period === 'week' ? "Ventas de la Semana" : (period === 'all' ? "Ventas Totales" : "Ventas Hoy")), data: stats.periodSalesItems })} 
           />
           <StatCard 
-            title={period === 'month' ? "Recaudo Mes" : (period === 'week' ? "Recaudo Semana" : "Recaudo Hoy")} 
-            value={`$${Math.round(stats.cashInToday).toLocaleString('es-CO')}`} 
+            title={period === 'month' ? "Recaudo Mes" : (period === 'week' ? "Recaudo Semana" : (period === 'all' ? "Recaudo Total" : "Recaudo Hoy"))} 
+            value={`$${Math.round(stats.totalCashIn).toLocaleString('es-CO')}`} 
             icon={Wallet} 
             color="32, 215, 75" 
             onClick={() => setActiveModal({ title: 'Detalle de Recaudo', data: stats.cashInItems })} 
           />
           <StatCard 
-            title={period === 'month' ? "Margen Mes" : (period === 'week' ? "Margen Semana" : "Margen Hoy")} 
+            title={period === 'month' ? "Margen Mes" : (period === 'week' ? "Margen Semana" : (period === 'all' ? "Margen Total" : "Margen Hoy"))} 
             value={`$${Math.round(stats.netProfit).toLocaleString('es-CO')}`} 
             icon={DollarSign} 
             color="226, 176, 76" 
@@ -680,7 +687,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
             </div>
             <div>
               <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Efectividad de Flujo</div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>El ingreso real de hoy cubre tus gastos operativos con un saldo de <strong>${Math.round(stats.cashInToday - stats.totalExpenses).toLocaleString('es-CO')}</strong>.</p>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>El ingreso real del periodo cubre tus gastos operativos con un saldo de <strong>${Math.round(stats.totalCashIn - stats.totalExpenses).toLocaleString('es-CO')}</strong>.</p>
             </div>
           </div>
         </div>
