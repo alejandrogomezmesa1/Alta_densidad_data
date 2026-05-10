@@ -42,14 +42,19 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
   };
 
   const handleExportStockZero = () => {
-    const lowStockItems = items.filter(p => Number(p.stock) < 5);
+    const lowStockItems = items.filter(p => Number(p.stock) === 0 || Number(p.stock) === 1);
     
     if (lowStockItems.length === 0) {
-      notify?.('No hay productos con bajo stock (< 5)', 'info');
+      notify?.('No hay productos con faltantes (Stock 0 o 1) para generar el reporte.', 'info');
       return;
     }
 
     const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      notify?.('El navegador bloqueó la ventana emergente. Por favor, permite ventanas emergentes para ver el reporte.', 'error');
+      return;
+    }
+
     printWindow.document.write(`
       <html>
         <head>
@@ -73,7 +78,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
         <body>
           <div class="header">
             <h1>ALTA DENSIDAD</h1>
-            <p class="meta">REPORTE DE FALTANTES (STOCK < 5) - ${new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+            <p class="meta">REPORTE DE FALTANTES (STOCK 0 y 1) - ${new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
           </div>
           <table>
             <thead>
@@ -89,7 +94,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
                 <tr>
                   <td style="font-weight: 700;">${p.name}</td>
                   <td style="color: #666;">${p.category}</td>
-                  <td style="font-weight: 800; color: ${p.stock === 0 ? '#FF453A' : (p.stock === 1 ? '#E2B04C' : '#32D74B')}">${p.stock}</td>
+                  <td style="font-weight: 800; color: ${p.stock === 0 ? '#FF453A' : '#32D74B'}">${p.stock}</td>
                   <td><div class="qty-box"></div></td>
                 </tr>
               `).join('')}
