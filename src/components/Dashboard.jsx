@@ -86,20 +86,38 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
 
   const stats = useMemo(() => {
     const now = new Date();
+    const todayStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+
+    const safeParseDate = (dateStr) => {
+      if (!dateStr) return new Date(0);
+      const cleanDate = dateStr.split(/T| /)[0];
+      // Append time to force local timezone parsing for YYYY-MM-DD
+      return new Date(cleanDate + "T00:00:00");
+    };
+
+    const isToday = (dateStr) => {
+      if (!dateStr) return false;
+      return dateStr.split(/T| /)[0] === todayStr;
+    };
+
     const currentSales = salesList.filter(s => {
-      const d = new Date(s.date);
-      if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
-      if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
       if (period === 'all') return true;
-      return d.toDateString() === now.toDateString();
+      if (period === 'today') return isToday(s.date);
+      
+      const d = safeParseDate(s.date);
+      if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
+      if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+      return isToday(s.date);
     });
 
     const currentExpenses = expensesList.filter(e => {
-      const d = new Date(e.date);
-      if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
-      if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
       if (period === 'all') return true;
-      return d.toDateString() === now.toDateString();
+      if (period === 'today') return isToday(e.date);
+
+      const d = safeParseDate(e.date);
+      if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
+      if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+      return isToday(e.date);
     });
 
     const totalSales = currentSales.reduce((acc, curr) => acc + (parseFloat(curr.total) || 0), 0);
@@ -120,11 +138,13 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
       if (totalAmount <= 0) return;
 
       const paymentsInPeriod = (s.payments || []).filter(p => {
-        const d = new Date(p.date);
-        if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
-        if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
         if (period === 'all') return true;
-        return d.toDateString() === now.toDateString();
+        if (period === 'today') return isToday(p.date);
+
+        const d = safeParseDate(p.date);
+        if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
+        if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+        return isToday(p.date);
       });
 
       if (paymentsInPeriod.length > 0) {
@@ -188,11 +208,13 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
     const cashInItems = [];
     salesList.forEach(s => {
       const paymentsInPeriod = (s.payments || []).filter(p => {
-        const d = new Date(p.date);
-        if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
-        if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
         if (period === 'all') return true;
-        return d.toDateString() === now.toDateString();
+        if (period === 'today') return isToday(p.date);
+
+        const d = safeParseDate(p.date);
+        if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
+        if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+        return isToday(p.date);
       });
 
       if (paymentsInPeriod.length > 0) {
