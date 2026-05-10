@@ -179,7 +179,9 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
         idDocument: formData.idDocument,
         city: formData.city,
         address: formData.address,
-        status: (parseFloat(formData.initialPayment) >= calculatedTotal) ? 'paid' : 'pending'
+        status: (parseFloat(formData.initialPayment) >= calculatedTotal) ? 'paid' : 'pending',
+        initialPayment: parseFloat(formData.initialPayment) || 0,
+        method: formData.method
       };
     } else if (type === 'purchases') {
       if (!currentItem.productId) {
@@ -699,16 +701,59 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
 
       <AnimatePresence>
         {selectedSale && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="premium-card" style={{ maxWidth: '400px', width: '90%' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-                <h3 style={{ color: 'var(--accent-primary)' }}>ABONAR</h3>
-                <button onClick={() => setSelectedSale(null)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}><X size={24} /></button>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, padding: '1.5rem' }}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="premium-card" style={{ maxWidth: '450px', width: '100%', border: '1px solid var(--accent-primary)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem', alignItems: 'center' }}>
+                <div>
+                  <h3 style={{ color: 'var(--accent-primary)', fontSize: '1.5rem', marginBottom: '0.25rem' }}>REGISTRAR ABONO</h3>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Venta #{String(selectedSale.id).padStart(6, '0')}</p>
+                </div>
+                <button onClick={() => setSelectedSale(null)} style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
               </div>
+
+              <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: '12px', marginBottom: '2rem', border: '1px solid var(--glass-border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cliente:</span>
+                  <span style={{ fontWeight: 700 }}>{selectedSale.customerName || 'General'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Total Venta:</span>
+                  <span style={{ fontWeight: 700 }}>${Math.round(selectedSale.total).toLocaleString('es-CO')}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Pagado:</span>
+                  <span style={{ fontWeight: 700, color: 'var(--success)' }}>${Math.round((selectedSale.payments || []).reduce((acc, p) => acc + parseFloat(p.amount), 0)).toLocaleString('es-CO')}</span>
+                </div>
+                <div style={{ height: '1px', background: 'var(--glass-border)', margin: '0.75rem 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--accent-primary)', fontWeight: 800 }}>SALDO PENDIENTE:</span>
+                  <span style={{ fontWeight: 900, color: 'var(--accent-primary)', fontSize: '1.25rem' }}>
+                    ${Math.round(selectedSale.total - (selectedSale.payments || []).reduce((acc, p) => acc + parseFloat(p.amount), 0)).toLocaleString('es-CO')}
+                  </span>
+                </div>
+              </div>
+
               <form onSubmit={handleAddPayment}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.8rem' }}>MONTO DEL ABONO (COP)</label>
-                <NumericFormat required thousandSeparator="." decimalSeparator="," allowNegative={false} value={paymentAmount} onValueChange={(values) => setPaymentAmount(values.value)} style={{ width: '100%', marginBottom: '1.5rem', fontSize: '1.2rem' }} />
-                <button type="submit" className="btn-primary" style={{ width: '100%' }}>CONFIRMAR</button>
+                <div style={{ marginBottom: '2rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.75rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Monto del Abono (COP)</label>
+                  <div style={{ position: 'relative' }}>
+                    <div style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--accent-primary)', fontWeight: 800 }}>$</div>
+                    <NumericFormat 
+                      required 
+                      autoFocus
+                      thousandSeparator="." 
+                      decimalSeparator="," 
+                      allowNegative={false} 
+                      value={paymentAmount} 
+                      onValueChange={(values) => setPaymentAmount(values.value)} 
+                      style={{ width: '100%', height: '60px', paddingLeft: '2.5rem', fontSize: '1.5rem', fontWeight: 900, borderRadius: '12px' }} 
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+                <button type="submit" className="btn-primary" style={{ width: '100%', height: '55px', fontSize: '1rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
+                  <CheckCircle2 size={20} /> CONFIRMAR ABONO
+                </button>
               </form>
             </motion.div>
           </div>

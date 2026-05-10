@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Wallet, ArrowDownCircle, ArrowUpCircle, Calculator, CheckCircle, Save, History, DollarSign, Trash2, X } from 'lucide-react';
+import { api } from '../services/api';
 
 const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
   const [closingHistory, setClosingHistory] = useState([]);
@@ -16,9 +17,7 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
 
   const fetchData = React.useCallback(async () => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-      const response = await fetch(`${API_URL}/cash-closings`);
-      const data = await response.json();
+      const data = await api.get('/cash-closings');
       setClosingHistory(data.map(h => {
         let movements = [];
         try {
@@ -190,23 +189,17 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
       };
       
       try {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-        const response = await fetch(`${API_URL}/cash-closings`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newClosing)
-        });
+        await api.post('/cash-closings', newClosing);
 
-        if (response.ok) {
-          setClosedIds(dailyStats.newClosedIds);
-          localStorage.setItem('alta_densidad_closed_ids', JSON.stringify(dailyStats.newClosedIds));
-          // Clean up old corrupt id
-          localStorage.removeItem('alta_densidad_last_closing_id');
-          fetchData();
-          notify('Cierre de caja guardado con éxito.', 'success');
-        }
+        setClosedIds(dailyStats.newClosedIds);
+        localStorage.setItem('alta_densidad_closed_ids', JSON.stringify(dailyStats.newClosedIds));
+        // Clean up old corrupt id
+        localStorage.removeItem('alta_densidad_last_closing_id');
+        fetchData();
+        notify('Cierre de caja guardado con éxito.', 'success');
       } catch (error) {
-        notify('Error al guardar cierre de caja.', 'error');
+        console.error("Error al cerrar caja:", error);
+        notify(`Error al guardar: ${error.message}`, 'error');
       }
     });
   };
@@ -214,12 +207,9 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
   const deleteHistoryItem = (id) => {
     confirm('¿Eliminar este registro del historial?', async () => {
       try {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-        const response = await fetch(`${API_URL}/cash-closings/${id}`, { method: 'DELETE' });
-        if (response.ok) {
-          fetchData();
-          notify('Registro eliminado.', 'info');
-        }
+        await api.delete(`/cash-closings/${id}`);
+        fetchData();
+        notify('Registro eliminado.', 'info');
       } catch (error) {
         notify('Error al eliminar registro.', 'error');
       }

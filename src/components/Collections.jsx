@@ -173,35 +173,57 @@ const Collections = ({ sales, onAddPayment, notify, confirm }) => {
       {/* Modal Abono Rápido */}
       <AnimatePresence>
         {selectedDebtor && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="premium-card" style={{ maxWidth: '400px', width: '90%' }}>
-              <div style={{ marginBottom: '2rem' }}>
-                <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Registrar Abono</h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cliente: <strong>{selectedDebtor.customerName}</strong></p>
-                <div style={{ marginTop: '1rem', padding: '1rem', borderRadius: '12px', background: 'rgba(255,69,58,0.05)', color: 'var(--error)', fontSize: '0.85rem', textAlign: 'center' }}>
-                  Saldo Pendiente: <strong>${Math.round(selectedDebtor.balance).toLocaleString('es-CO')}</strong>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, padding: '1.5rem' }}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="premium-card" style={{ maxWidth: '450px', width: '100%', border: '1px solid var(--accent-primary)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem', alignItems: 'center' }}>
+                <div>
+                  <h3 style={{ color: 'var(--accent-primary)', fontSize: '1.5rem', marginBottom: '0.25rem' }}>REGISTRAR COBRO</h3>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Gestión de Cartera - {selectedDebtor.date}</p>
+                </div>
+                <button onClick={() => setSelectedDebtor(null)} style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
+              </div>
+
+              <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: '12px', marginBottom: '2rem', border: '1px solid var(--glass-border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cliente:</span>
+                  <span style={{ fontWeight: 700 }}>{selectedDebtor.customerName}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Total Venta:</span>
+                  <span style={{ fontWeight: 700 }}>${Math.round(selectedDebtor.total).toLocaleString('es-CO')}</span>
+                </div>
+                <div style={{ height: '1px', background: 'var(--glass-border)', margin: '0.75rem 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--error)', fontWeight: 800 }}>SALDO PENDIENTE:</span>
+                  <span style={{ fontWeight: 900, color: 'var(--error)', fontSize: '1.25rem' }}>
+                    ${Math.round(selectedDebtor.balance).toLocaleString('es-CO')}
+                  </span>
                 </div>
               </div>
-              
+
               <form onSubmit={handleQuickPayment}>
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>MONTO DEL ABONO (COP)</label>
-                  <NumericFormat 
-                    autoFocus
-                    required
-                    thousandSeparator="." 
-                    decimalSeparator="," 
-                    allowNegative={false}
-                    value={paymentAmount}
-                    onValueChange={(values) => setPaymentAmount(values.value)}
-                    placeholder="0"
-                    style={{ width: '100%', fontSize: '1.2rem', fontWeight: 800 }}
-                  />
+                <div style={{ marginBottom: '2rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.75rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Monto a Recibir (COP)</label>
+                  <div style={{ position: 'relative' }}>
+                    <div style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--accent-primary)', fontWeight: 800 }}>$</div>
+                    <NumericFormat 
+                      required 
+                      autoFocus
+                      thousandSeparator="." 
+                      decimalSeparator="," 
+                      allowNegative={false} 
+                      value={paymentAmount} 
+                      onValueChange={(values) => setPaymentAmount(values.value)} 
+                      style={{ width: '100%', height: '60px', paddingLeft: '2.5rem', fontSize: '1.5rem', fontWeight: 900, borderRadius: '12px' }} 
+                      placeholder="0"
+                    />
+                  </div>
                 </div>
-                
                 <div style={{ display: 'flex', gap: '1rem' }}>
-                  <button type="button" onClick={() => setSelectedDebtor(null)} style={{ flex: 1, background: 'transparent', border: '1px solid var(--glass-border)', color: 'var(--text-muted)' }}>CANCELAR</button>
-                  <button type="submit" className="btn-primary" style={{ flex: 1 }}>GUARDAR PAGO</button>
+                  <button type="button" onClick={() => setSelectedDebtor(null)} className="btn-secondary" style={{ flex: 1 }}>CANCELAR</button>
+                  <button type="submit" className="btn-primary" style={{ flex: 2, height: '55px', fontSize: '1rem', fontWeight: 800 }}>
+                    GUARDAR PAGO
+                  </button>
                 </div>
               </form>
             </motion.div>

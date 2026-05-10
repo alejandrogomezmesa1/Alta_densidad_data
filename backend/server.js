@@ -60,10 +60,16 @@ app.use('/api/cash-closings', authenticateToken);
 try {
     await db.query('SELECT 1');
     console.log('Successfully connected to MySQL database');
+    
+    // Ensure 'notas' column is large enough to hold all daily movements
+    try {
+        await db.query('ALTER TABLE cierres_caja MODIFY COLUMN notas MEDIUMTEXT;');
+    } catch (e) {
+        console.log('Note: Could not alter cierres_caja table (might not exist yet).');
+    }
 } catch (error) {
     console.error('CRITICAL: Could not connect to MySQL. Application will start but API calls will fail.');
     console.error(error.message);
-    // Removed process.exit(1) so it doesn't crash immediately, allowing frontend Demo Mode to work
 }
 
 // Utility: Update Stock
