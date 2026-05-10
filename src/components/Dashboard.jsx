@@ -86,7 +86,8 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
 
   const stats = useMemo(() => {
     const now = new Date();
-    const todayStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+    // Manual format to avoid environment-specific behavior of toLocaleDateString
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
     const safeParseDate = (dateStr) => {
       if (!dateStr) return new Date(0);
@@ -207,6 +208,8 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
     let totalCashIn = 0;
     const cashInItems = [];
     salesList.forEach(s => {
+      const totalAmount = parseFloat(s.total) || 0;
+      
       const paymentsInPeriod = (s.payments || []).filter(p => {
         if (period === 'all') return true;
         if (period === 'today') return isToday(p.date);
@@ -217,14 +220,29 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
         return isToday(p.date);
       });
 
-      if (paymentsInPeriod.length > 0) {
-        const amt = paymentsInPeriod.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+      let amt = paymentsInPeriod.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+      
+      // FALLBACK: If a sale is marked as 'paid' but has NO payment records in the database,
+      // we count its total as collected on the date the sale was created.
+      if (s.status === 'paid' && (!s.payments || s.payments.length === 0)) {
+        const saleDateStr = s.date ? s.date.split(/T| /)[0] : '';
+        const saleInPeriod = (period === 'all') || 
+                             (period === 'today' && isToday(s.date)) ||
+                             (period === 'week' && safeParseDate(s.date) >= new Date(now.getTime() - 7*24*60*60*1000)) ||
+                             (period === 'month' && safeParseDate(s.date) >= new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30));
+        
+        if (saleInPeriod) {
+          amt += totalAmount;
+        }
+      }
+
+      if (amt > 0) {
         totalCashIn += amt;
         cashInItems.push({
           label: s.customerName || 'Abono / Pago',
           sublabel: s.productName || 'Venta',
           amount: amt,
-          extra: `Recaudo: ${new Date(paymentsInPeriod[0].date).toLocaleDateString()}`
+          extra: `Recaudo: ${s.date ? s.date.split(/T| /)[0] : 'Fecha no registrada'}`
         });
       }
     });
