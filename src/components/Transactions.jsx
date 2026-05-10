@@ -635,6 +635,16 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                 const total = parseFloat(item.total || item.amount || 0);
                 const paid = (item.payments || []).reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
                 const balance = total - paid;
+
+                let saleCost = 0;
+                if (type === 'sales') {
+                  if (item.items && item.items.length > 0) {
+                     saleCost = item.items.reduce((sum, i) => sum + ((parseFloat(i.costAtSale) || 0) * parseInt(i.quantity || 1)), 0);
+                  } else {
+                     saleCost = (parseFloat(item.costAtSale) || 0) * (parseInt(item.quantity) || 1);
+                  }
+                }
+                const saleProfit = type === 'sales' ? (total - saleCost) : 0;
                 
                 let conceptHtml = null;
                 if (type === 'expenses') {
@@ -681,6 +691,11 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                     <td style={{ padding: '1.25rem 2rem', fontWeight: 800 }}>
                       <span className="mobile-label">Total</span>
                       ${Math.round(total).toLocaleString('es-CO')}
+                      {type === 'sales' && (
+                        <div style={{ fontSize: '0.65rem', color: 'var(--success)', marginTop: '0.2rem' }}>
+                          Ganancia: +${Math.round(saleProfit).toLocaleString('es-CO')}
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>

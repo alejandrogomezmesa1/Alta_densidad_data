@@ -94,7 +94,8 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
           paid: paidThisSession,
           total: totalAmount,
           balance: balance,
-          isFull: balance <= 0
+          isFull: balance <= 0,
+          profit: recognizedProfit
         });
       }
     });
@@ -410,11 +411,14 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
                             {m.type === 'expense' || m.type === 'purchase' ? `-$${m.amount.toLocaleString('es-CO')}` : `+$${(m.paid || 0).toLocaleString('es-CO')}`}
                           </div>
                           {(m.type === 'sale' || !m.type) ? (
-                            m.balance > 0 ? (
-                              <div style={{ fontSize: '0.65rem', color: 'var(--warning)', fontWeight: 700 }}>Debe: ${m.balance.toLocaleString('es-CO')}</div>
-                            ) : (
-                              <div style={{ fontSize: '0.65rem', color: 'var(--success)', fontWeight: 800, textTransform: 'uppercase' }}>PAGADA</div>
-                            )
+                            <>
+                              {m.balance > 0 ? (
+                                <div style={{ fontSize: '0.65rem', color: 'var(--warning)', fontWeight: 700 }}>Debe: ${Math.round(m.balance).toLocaleString('es-CO')}</div>
+                              ) : (
+                                <div style={{ fontSize: '0.65rem', color: 'var(--success)', fontWeight: 800, textTransform: 'uppercase' }}>PAGADA</div>
+                              )}
+                              <div style={{ fontSize: '0.65rem', color: 'var(--success)', marginTop: '0.1rem', fontWeight: 600 }}>Ganancia: +${Math.round(m.profit || 0).toLocaleString('es-CO')}</div>
+                            </>
                           ) : null}
                         </div>
                       </div>
