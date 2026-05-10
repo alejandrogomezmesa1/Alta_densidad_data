@@ -86,11 +86,18 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
 
   const stats = useMemo(() => {
     const now = new Date();
+    const currentSales = salesList.filter(s => {
+      const d = new Date(s.date);
+      if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
+      if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+      return d.toDateString() === now.toDateString();
+    });
+
     const currentExpenses = expensesList.filter(e => {
       const d = new Date(e.date);
       if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
       if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-      return d.toDateString() === now.toDateString(); // Default to today if period is undefined or for daily view
+      return d.toDateString() === now.toDateString();
     });
 
     const totalSales = currentSales.reduce((acc, curr) => acc + (parseFloat(curr.total) || 0), 0);
