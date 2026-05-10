@@ -302,6 +302,10 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
     doc.text('ALTA DENSIDAD', pageWidth / 2, currentY, { align: 'center' });
     
     currentY += 5;
+    doc.setFontSize(8);
+    doc.text('NIT: 1025762052-4', pageWidth / 2, currentY, { align: 'center' });
+
+    currentY += 4;
     doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 100, 100);
