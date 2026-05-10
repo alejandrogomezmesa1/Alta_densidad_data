@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Clock, User, Phone, DollarSign, ChevronRight, Search, Filter, Calendar, MessageSquare, AlertCircle } from 'lucide-react';
+import { Clock, User, Phone, DollarSign, ChevronRight, Search, Filter, Calendar, MessageSquare, AlertCircle, X } from 'lucide-react';
 import { NumericFormat } from 'react-number-format';
 
 const Collections = ({ sales, onAddPayment, notify, confirm }) => {
