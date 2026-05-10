@@ -62,6 +62,7 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
     
     // CASH IN: All payments made today, even from old sales
     let cashSales = 0;
+    let totalProfitFromSales = 0;
     const movements = [];
     let currentMaxPaymentId = closedIds.payment;
 
@@ -85,6 +86,17 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
         } else {
            pNames = s.productName;
         }
+
+        // Calculate profit for this specific movement
+        let cost = 0;
+        if (s.items && s.items.length > 0) {
+           cost = s.items.reduce((sum, i) => sum + ((parseFloat(i.costAtSale) || 0) * parseInt(i.quantity || 1)), 0);
+        } else {
+           cost = (parseFloat(s.costAtSale) || 0) * (parseInt(s.quantity) || 1);
+        }
+        const saleProfit = totalAmount - cost;
+        const recognizedProfit = totalAmount > 0 ? (paidThisSession / totalAmount) * saleProfit : 0;
+        totalProfitFromSales += recognizedProfit;
 
         movements.push({
           type: 'sale',
@@ -126,30 +138,6 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
       });
     });
 
-    // PROFIT LOGIC: Proportional profit recognition based on payments received today
-    let totalProfit = 0;
-    salesArr.forEach(s => {
-      const totalAmount = parseFloat(s.total) || 0;
-      if (totalAmount <= 0) return;
-
-      const paymentsThisSession = (s.payments || []).filter(p => p.id > closedIds.payment);
-      if (paymentsThisSession.length > 0) {
-        const paidThisSession = paymentsThisSession.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
-        
-        let cost = 0;
-        if (s.items && s.items.length > 0) {
-           cost = s.items.reduce((sum, i) => sum + ((parseFloat(i.costAtSale) || 0) * parseInt(i.quantity || 1)), 0);
-        } else {
-           cost = (parseFloat(s.costAtSale) || 0) * (parseInt(s.quantity) || 1);
-        }
-
-        const saleProfit = totalAmount - cost;
-        // Recognize profit proportional to what was actually paid today
-        const recognizedProfit = (paidThisSession / totalAmount) * saleProfit;
-        totalProfit += recognizedProfit;
-      }
-    });
-
     const maxExpenseId = activeExpenses.reduce((max, e) => Math.max(max, e.id), closedIds.expense);
     const maxPurchaseId = activePurchases.reduce((max, p) => Math.max(max, p.id), closedIds.purchase);
     
@@ -159,7 +147,7 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
       cashOut: totalExpenses + totalPurchases,
       expensesTotal: totalExpenses,
       purchasesTotal: totalPurchases,
-      profit: totalProfit - totalExpenses, // Real profit = Profit from sales - operating expenses
+      profit: totalProfitFromSales - totalExpenses, 
       net: cashSales - (totalExpenses + totalPurchases),
       movements: movements,
       newClosedIds: {
