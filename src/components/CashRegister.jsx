@@ -125,27 +125,27 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
       });
     });
 
-    // NEW PROFIT LOGIC: Only recognize profit when sale is FULLY PAID since last closing
+    // PROFIT LOGIC: Proportional profit recognition based on payments received today
     let totalProfit = 0;
     salesArr.forEach(s => {
       const totalAmount = parseFloat(s.total) || 0;
-      const payments = s.payments || [];
-      const totalPaid = payments.reduce((pAcc, pCurr) => pAcc + (parseFloat(pCurr.amount) || 0), 0);
-      
-      if (totalPaid >= totalAmount && totalAmount > 0) {
-        const lastPayment = payments.reduce((latest, p) => {
-          return !latest || Number(p.id) > Number(latest.id) ? p : latest;
-        }, null);
+      if (totalAmount <= 0) return;
 
-        if (lastPayment && Number(lastPayment.id) > closedIds.payment) {
-          let cost = 0;
-          if (s.items && s.items.length > 0) {
-             cost = s.items.reduce((sum, i) => sum + ((parseFloat(i.costAtSale) || 0) * parseInt(i.quantity || 1)), 0);
-          } else {
-             cost = (parseFloat(s.costAtSale) || 0) * (parseInt(s.quantity) || 1);
-          }
-          totalProfit += (totalAmount - cost);
+      const paymentsThisSession = (s.payments || []).filter(p => p.id > closedIds.payment);
+      if (paymentsThisSession.length > 0) {
+        const paidThisSession = paymentsThisSession.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+        
+        let cost = 0;
+        if (s.items && s.items.length > 0) {
+           cost = s.items.reduce((sum, i) => sum + ((parseFloat(i.costAtSale) || 0) * parseInt(i.quantity || 1)), 0);
+        } else {
+           cost = (parseFloat(s.costAtSale) || 0) * (parseInt(s.quantity) || 1);
         }
+
+        const saleProfit = totalAmount - cost;
+        // Recognize profit proportional to what was actually paid today
+        const recognizedProfit = (paidThisSession / totalAmount) * saleProfit;
+        totalProfit += recognizedProfit;
       }
     });
 
@@ -158,7 +158,7 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
       cashOut: totalExpenses + totalPurchases,
       expensesTotal: totalExpenses,
       purchasesTotal: totalPurchases,
-      profit: totalProfit,
+      profit: totalProfit - totalExpenses, // Real profit = Profit from sales - operating expenses
       net: cashSales - (totalExpenses + totalPurchases),
       movements: movements,
       newClosedIds: {
@@ -317,16 +317,16 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Egresos Totales</div>
-                  <div style={{ fontWeight: 700, color: 'var(--error)', fontSize: '0.85rem' }}>-${((h.expensesTotal || 0) + (h.purchasesTotal || 0)).toLocaleString('es-CO')}</div>
+                  <div style={{ fontWeight: 700, color: 'var(--error)', fontSize: '0.85rem' }}>-${Math.round(Number(h.expensesTotal || 0) + Number(h.purchasesTotal || 0)).toLocaleString('es-CO')}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Ganancia</div>
-                  <div style={{ fontWeight: 700, color: 'var(--success)', fontSize: '0.85rem' }}>+${(h.profit || 0).toLocaleString('es-CO')}</div>
+                  <div style={{ fontWeight: 700, color: 'var(--success)', fontSize: '0.85rem' }}>+${Math.round(Number(h.profit || 0)).toLocaleString('es-CO')}</div>
                 </div>
                 <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1rem' }}>
                   <div>
                     <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Saldo Final</div>
-                    <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--accent-primary)' }}>${(h.initialCash + h.salesTotal - h.expensesTotal).toLocaleString('es-CO')}</div>
+                    <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--accent-primary)' }}>${Math.round(Number(h.initialCash || 0) + Number(h.salesTotal || 0) - Number(h.expensesTotal || 0) - Number(h.purchasesTotal || 0)).toLocaleString('es-CO')}</div>
                   </div>
                   <button 
                     onClick={(e) => { e.stopPropagation(); deleteHistoryItem(h.id); }}
@@ -365,23 +365,27 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
                 </div>
                 <div className="glass" style={{ padding: '1.5rem', borderRadius: '16px', textAlign: 'center' }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Efectivo Total</div>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--accent-primary)' }}>${(selectedHistory.initialCash + selectedHistory.salesTotal - selectedHistory.expensesTotal).toLocaleString('es-CO')}</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--accent-primary)' }}>${Math.round(Number(selectedHistory.initialCash || 0) + Number(selectedHistory.salesTotal || 0) - Number(selectedHistory.expensesTotal || 0) - Number(selectedHistory.purchasesTotal || 0)).toLocaleString('es-CO')}</div>
                 </div>
               </div>
 
               <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '20px', padding: '1.5rem', border: '1px solid var(--glass-border)', marginBottom: '2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.2rem' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Ingresos (Ventas/Abonos)</span>
-                  <span style={{ fontWeight: 700, color: 'var(--success)' }}>+${(selectedHistory.salesTotal || 0).toLocaleString('es-CO')}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--success)' }}>+${Math.round(Number(selectedHistory.salesTotal || 0)).toLocaleString('es-CO')}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.2rem' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Egresos (Gastos)</span>
-                  <span style={{ fontWeight: 700, color: 'var(--error)' }}>-${(selectedHistory.expensesTotal || 0).toLocaleString('es-CO')}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--error)' }}>-${Math.round(Number(selectedHistory.expensesTotal || 0)).toLocaleString('es-CO')}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.2rem' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Egresos (Compras)</span>
+                  <span style={{ fontWeight: 700, color: 'var(--error)' }}>-${Math.round(Number(selectedHistory.purchasesTotal || 0)).toLocaleString('es-CO')}</span>
                 </div>
                 <div style={{ height: '1px', background: 'var(--glass-border)', margin: '1.2rem 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ fontWeight: 800 }}>GANANCIA REAL</span>
-                  <span style={{ fontWeight: 900, color: 'var(--success)', fontSize: '1.2rem' }}>+${(selectedHistory.profit || 0).toLocaleString('es-CO')}</span>
+                  <span style={{ fontWeight: 900, color: 'var(--success)', fontSize: '1.2rem' }}>+${Math.round(Number(selectedHistory.profit || 0)).toLocaleString('es-CO')}</span>
                 </div>
               </div>
 
