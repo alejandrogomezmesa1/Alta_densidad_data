@@ -267,7 +267,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
     });
 
     return { 
-      totalSales, totalExpenses, netProfit: totalProfitToday - totalExpenses, 
+      totalSales, totalExpenses, netProfit, 
       lowStockCount, outOfStockCount, inventoryValue, potentialRevenue,
       accountsReceivable, topProducts, topDebtors, slowMovingCapital, slowMovingProductsCount,
       currentSales, cashInToday, totalCOGS,
