@@ -3,21 +3,22 @@ import { motion } from 'framer-motion';
 import { 
   TrendingUp, DollarSign, Package, Receipt, ArrowUpRight, ArrowDownRight, 
   Target, BarChart3, PieChart as PieIcon, Trophy, Clock, Zap, AlertCircle, 
-  ChevronRight, Star, ShoppingCart, Activity, CheckCircle, Wallet
+  ChevronRight, Star, ShoppingCart, Activity, CheckCircle, Wallet, X
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, Legend, BarChart, Bar
 } from 'recharts';
 
-const StatCard = ({ title, value, icon: Icon, color, percentage, subValue, trend, delay = 0 }) => (
+const StatCard = ({ title, value, icon: Icon, color, percentage, subValue, trend, delay = 0, onClick }) => (
   <motion.div 
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.5, delay }}
     whileHover={{ y: -5, scale: 1.02 }}
-    className="premium-card" 
-    style={{ flex: 1, minWidth: '220px', position: 'relative', overflow: 'hidden' }}
+    onClick={onClick}
+    className="premium-card hover-glow" 
+    style={{ flex: 1, minWidth: '220px', position: 'relative', overflow: 'hidden', cursor: onClick ? 'pointer' : 'default' }}
   >
     <div style={{ position: 'absolute', top: '-10%', right: '-10%', width: '100px', height: '100px', background: `rgba(${color}, 0.05)`, borderRadius: '50%', filter: 'blur(20px)' }} />
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
@@ -34,10 +35,47 @@ const StatCard = ({ title, value, icon: Icon, color, percentage, subValue, trend
     <div>
       <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', textTransform: 'uppercase' }}>{title}</p>
       <h3 style={{ fontSize: '1.6rem', fontWeight: 800 }}>{value}</h3>
-      {subValue && <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.4rem' }}>{subValue}</p>}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        {subValue && <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.4rem' }}>{subValue}</p>}
+        {onClick && <ChevronRight size={14} color="var(--text-muted)" />}
+      </div>
     </div>
   </motion.div>
 );
+
+const DetailModal = ({ isOpen, onClose, title, data, type }) => {
+  if (!isOpen) return null;
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, padding: '1.5rem' }}>
+      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="premium-card" style={{ maxWidth: '600px', width: '100%', maxHeight: '80vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <h3 style={{ color: 'var(--accent-primary)', fontSize: '1.25rem' }}>{title}</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={24} /></button>
+        </div>
+        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {data.length === 0 ? (
+            <p style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No hay movimientos registrados.</p>
+          ) : data.map((item, i) => (
+            <div key={i} className="glass" style={{ padding: '1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{item.label}</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.sublabel}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontWeight: 800, color: item.amount < 0 ? 'var(--error)' : 'var(--success)' }}>
+                  {item.amount < 0 ? '-' : '+'}${Math.abs(Math.round(item.amount)).toLocaleString('es-CO')}
+                </div>
+                {item.extra && <div style={{ fontSize: '0.65rem', color: 'var(--accent-primary)' }}>{item.extra}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+        <button onClick={onClose} className="btn-primary" style={{ width: '100%', marginTop: '1.5rem' }}>CERRAR</button>
+      </motion.div>
+    </div>
+  );
+};
 
 const Dashboard = ({ sales, inventory, purchases, expenses }) => {
   const [period, setPeriod] = useState('month');
@@ -56,10 +94,20 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
     });
 
     const totalSales = currentSales.reduce((acc, curr) => acc + (parseFloat(curr.total) || 0), 0);
+    const todaySalesItems = currentSales
+      .filter(s => new Date(s.date).toDateString() === now.toDateString())
+      .map(s => ({
+        label: s.customerName || 'Venta General',
+        sublabel: s.productName || 'Varios productos',
+        amount: parseFloat(s.total) || 0,
+        extra: s.date
+      }));
+
     const totalExpenses = expensesList.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
     
     // PROFIT LOGIC: Proportional profit recognition based on payments received today
     let totalProfitToday = 0;
+    const profitItems = [];
     salesList.forEach(s => {
       const totalAmount = parseFloat(s.total) || 0;
       if (totalAmount <= 0) return;
@@ -82,7 +130,22 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
         const saleProfit = totalAmount - cost;
         const recognizedProfit = (paidToday / totalAmount) * saleProfit;
         totalProfitToday += recognizedProfit;
+        profitItems.push({
+          label: s.customerName || 'Venta',
+          sublabel: `Abono hoy: $${paidToday.toLocaleString('es-CO')}`,
+          amount: recognizedProfit,
+          extra: `Utilidad sobre pago`
+        });
       }
+    });
+
+    expensesList.filter(e => new Date(e.date).toDateString() === now.toDateString()).forEach(e => {
+      profitItems.push({
+        label: `Gasto: ${e.description}`,
+        sublabel: e.categoria,
+        amount: -parseFloat(e.amount),
+        extra: 'Deducción operativa'
+      });
     });
 
     const netProfit = totalProfitToday - totalExpenses;
@@ -97,14 +160,37 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
       return acc + (parseFloat(sale.total) - paid);
     }, 0);
 
+    const accountsReceivableItems = salesList.filter(s => {
+      const paid = (s.payments || []).reduce((acc, p) => acc + (parseFloat(p.amount) || 0), 0);
+      return (parseFloat(s.total) - paid) > 0.01;
+    }).map(s => {
+      const paid = (s.payments || []).reduce((acc, p) => acc + (parseFloat(p.amount) || 0), 0);
+      return {
+        label: s.customerName || 'Cliente',
+        sublabel: s.productName || 'Venta',
+        amount: parseFloat(s.total) - paid,
+        extra: `Total: $${Math.round(s.total).toLocaleString('es-CO')}`
+      };
+    });
+
     // CASH FLOW: All payments made today
     let cashInToday = 0;
+    const cashInItems = [];
     salesList.forEach(s => {
       const todayP = (s.payments || []).filter(p => {
         const d = new Date(p.date);
         return d.toDateString() === now.toDateString();
       });
-      cashInToday += todayP.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+      if (todayP.length > 0) {
+        const amt = todayP.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+        cashInToday += amt;
+        cashInItems.push({
+          label: s.customerName || 'Abono',
+          sublabel: s.productName || 'Venta',
+          amount: amt,
+          extra: 'Recaudo efectivo'
+        });
+      }
     });
 
     const totalCOGS = currentSales.reduce((acc, curr) => {
@@ -177,10 +263,10 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
       totalSales, totalExpenses, netProfit: totalProfitToday - totalExpenses, 
       lowStockCount, outOfStockCount, inventoryValue, potentialRevenue,
       accountsReceivable, topProducts, topDebtors, slowMovingCapital, slowMovingProductsCount,
-      accountsReceivable, topProducts,
       currentSales, cashInToday, totalCOGS,
       avgTicket: currentSales.length > 0 ? totalSales / currentSales.length : 0,
-      salesCount: currentSales.length
+      salesCount: currentSales.length,
+      todaySalesItems, cashInItems, profitItems, accountsReceivableItems
     };
   }, [salesList, expensesList, inventoryList, period]);
 
@@ -282,6 +368,8 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
 
   const COLORS = ['#E2B04C', '#0A84FF', '#32D74B', '#FF453A', '#BF5AF2', '#FF9F0A'];
 
+  const [activeModal, setActiveModal] = useState(null);
+
   return (
     <div className="main-content">
       <header className="page-header">
@@ -299,11 +387,18 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
       </header>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
-          <StatCard delay={0.1} title="Ventas Hoy" value={`$${Math.round(stats.totalSales).toLocaleString('es-CO')}`} icon={TrendingUp} color="50, 215, 75" trend="up" percentage={14} />
-          <StatCard delay={0.2} title="Recaudo Hoy" value={`$${Math.round(stats.cashInToday).toLocaleString('es-CO')}`} icon={Wallet} color="32, 215, 75" subValue="Efectivo real en caja" />
-          <StatCard delay={0.3} title="Margen Neto" value={`$${Math.round(stats.netProfit).toLocaleString('es-CO')}`} icon={DollarSign} color="226, 176, 76" subValue={`Rentabilidad: ${stats.totalSales > 0 ? ((stats.netProfit/stats.totalSales)*100).toFixed(1) : 0}%`} />
-          <StatCard delay={0.4} title="Cartera Cliente" value={`$${Math.round(stats.accountsReceivable).toLocaleString('es-CO')}`} icon={Clock} color="255, 69, 58" subValue="Por cobrar" />
+          <StatCard delay={0.1} title="Ventas Hoy" value={`$${Math.round(stats.totalSales).toLocaleString('es-CO')}`} icon={TrendingUp} color="50, 215, 75" trend="up" percentage={14} onClick={() => setActiveModal({ title: 'Detalle de Ventas Hoy', data: stats.todaySalesItems })} />
+          <StatCard delay={0.2} title="Recaudo Hoy" value={`$${Math.round(stats.cashInToday).toLocaleString('es-CO')}`} icon={Wallet} color="32, 215, 75" subValue="Efectivo real en caja" onClick={() => setActiveModal({ title: 'Detalle de Recaudo Hoy', data: stats.cashInItems })} />
+          <StatCard delay={0.3} title="Margen Neto" value={`$${Math.round(stats.netProfit).toLocaleString('es-CO')}`} icon={DollarSign} color="226, 176, 76" subValue={`Rentabilidad: ${stats.totalSales > 0 ? ((stats.netProfit/stats.totalSales)*100).toFixed(1) : 0}%`} onClick={() => setActiveModal({ title: 'Detalle de Margen Neto', data: stats.profitItems })} />
+          <StatCard delay={0.4} title="Cartera Cliente" value={`$${Math.round(stats.accountsReceivable).toLocaleString('es-CO')}`} icon={Clock} color="255, 69, 58" subValue="Por cobrar" onClick={() => setActiveModal({ title: 'Detalle de Cartera', data: stats.accountsReceivableItems })} />
         </div>
+
+        <DetailModal 
+          isOpen={!!activeModal} 
+          onClose={() => setActiveModal(null)} 
+          title={activeModal?.title} 
+          data={activeModal?.data || []} 
+        />
       
       {/* Critical Alerts Section */}
       {(stats.lowStockCount > 0 || stats.outOfStockCount > 0) && (
