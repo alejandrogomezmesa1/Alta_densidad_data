@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Search, Edit2, Trash2, Filter, Download, Package, X, Check, ArrowUpDown, ClipboardList, Eye } from 'lucide-react';
 import DetailModal from './DetailModal';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 import { NumericFormat } from 'react-number-format';
 
 const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, exportData, notify, confirm }) => {
@@ -49,69 +51,66 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
       return;
     }
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      notify?.('El navegador bloqueó la ventana emergente. Por favor, permite ventanas emergentes para ver el reporte.', 'error');
-      return;
-    }
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
 
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Reporte de Pedido - Faltantes</title>
-          <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap');
-            body { font-family: 'Inter', sans-serif; padding: 40px; color: #1a1a1a; max-width: 800px; margin: auto; }
-            .header { text-align: center; border-bottom: 2px solid #E2B04C; padding-bottom: 20px; margin-bottom: 30px; }
-            h1 { color: #E2B04C; margin: 0; font-size: 24px; text-transform: uppercase; letter-spacing: 2px; font-weight: 800; }
-            .meta { color: #888; font-size: 12px; margin-top: 5px; font-weight: 600; }
-            table { width: 100%; border-collapse: collapse; margin-top: 30px; }
-            th { text-align: left; background: #f9f9f9; padding: 15px 12px; font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #eee; }
-            td { padding: 15px 12px; border-bottom: 1px solid #eee; font-size: 14px; }
-            .qty-box { border: 1px solid #eee; width: 120px; height: 30px; border-radius: 4px; }
-            .footer { margin-top: 80px; text-align: center; font-size: 11px; color: #999; border-top: 1px solid #eee; padding-top: 20px; }
-            @media print {
-              .btn-print { display: none; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>ALTA DENSIDAD</h1>
-            <p class="meta">REPORTE DE FALTANTES (STOCK 0 y 1) - ${new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 40%;">Producto</th>
-                <th style="width: 25%;">Categoría</th>
-                <th style="width: 20%;">Stock Act.</th>
-                <th style="width: 15%;">Cant. Pedir</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${lowStockItems.map(p => `
-                <tr>
-                  <td style="font-weight: 700;">${p.name}</td>
-                  <td style="color: #666;">${p.category}</td>
-                  <td style="font-weight: 800; color: ${p.stock === 0 ? '#FF453A' : '#32D74B'}">${p.stock}</td>
-                  <td><div class="qty-box"></div></td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-          <div class="footer">
-            <p>Este documento es un auxiliar para la gestión de compras y pedidos.</p>
-            <p>© ${new Date().getFullYear()} Alta Densidad Luxury Management</p>
-          </div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-    }, 500);
+    // Header
+    doc.setFontSize(22);
+    doc.setTextColor(226, 176, 76); // Accent Primary
+    doc.setFont('helvetica', 'bold');
+    doc.text('ALTA DENSIDAD', pageWidth / 2, 20, { align: 'center' });
+
+    doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`REPORTE DE FALTANTES (STOCK 0 y 1)`, pageWidth / 2, 28, { align: 'center' });
+    doc.text(`${new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}`, pageWidth / 2, 33, { align: 'center' });
+
+    // Table
+    const tableData = lowStockItems.map(p => [
+      p.name,
+      p.category,
+      p.stock,
+      '' // Space for manually writing "Qty to order"
+    ]);
+
+    doc.autoTable({
+      startY: 45,
+      head: [['Producto', 'Categoría', 'Stock Act.', 'Cant. Pedir']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [20, 20, 22],
+        textColor: [226, 176, 76],
+        fontSize: 10,
+        fontStyle: 'bold',
+        halign: 'left'
+      },
+      bodyStyles: {
+        fontSize: 9,
+        textColor: [50, 50, 50]
+      },
+      columnStyles: {
+        2: { fontStyle: 'bold', halign: 'center' },
+        3: { cellWidth: 30 }
+      },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.column.index === 2) {
+          const val = Number(data.cell.raw);
+          if (val === 0) data.cell.styles.textColor = [255, 69, 58]; // Red
+          else if (val === 1) data.cell.styles.textColor = [50, 215, 75]; // Green
+        }
+      }
+    });
+
+    // Footer
+    const finalY = doc.lastAutoTable.finalY || 45;
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.text('Este documento es un auxiliar para la gestión de compras y pedidos.', pageWidth / 2, finalY + 20, { align: 'center' });
+    doc.text(`© ${new Date().getFullYear()} Alta Densidad Luxury Management`, pageWidth / 2, finalY + 25, { align: 'center' });
+
+    doc.save(`Faltantes_${new Date().toISOString().split('T')[0]}.pdf`);
+    notify?.('Reporte PDF generado con éxito.', 'success');
   };
 
   return (
