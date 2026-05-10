@@ -89,7 +89,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
                 <tr>
                   <td style="font-weight: 700;">${p.name}</td>
                   <td style="color: #666;">${p.category}</td>
-                  <td style="font-weight: 800; color: ${p.stock === 0 ? '#FF453A' : '#E2B04C'}">${p.stock}</td>
+                  <td style="font-weight: 800; color: ${p.stock === 0 ? '#FF453A' : (p.stock === 1 ? '#E2B04C' : '#32D74B')}">${p.stock}</td>
                   <td><div class="qty-box"></div></td>
                 </tr>
               `).join('')}
