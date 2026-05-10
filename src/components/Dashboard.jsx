@@ -58,31 +58,30 @@ const Dashboard = ({ sales, inventory, purchases, expenses }) => {
     const totalSales = currentSales.reduce((acc, curr) => acc + (parseFloat(curr.total) || 0), 0);
     const totalExpenses = expensesList.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
     
-    // NEW PROFIT LOGIC: Only recognize profit when sale is FULLY PAID today
+    // PROFIT LOGIC: Proportional profit recognition based on payments received today
     let totalProfitToday = 0;
     salesList.forEach(s => {
       const totalAmount = parseFloat(s.total) || 0;
-      const payments = s.payments || [];
-      const totalPaid = payments.reduce((pAcc, pCurr) => pAcc + (parseFloat(pCurr.amount) || 0), 0);
-      
-      if (totalPaid >= totalAmount && totalAmount > 0) {
-        // Find if the FINAL payment was today
-        const lastPayment = payments.reduce((latest, p) => {
-          return !latest || new Date(p.date) > new Date(latest.date) ? p : latest;
-        }, null);
+      if (totalAmount <= 0) return;
 
-        if (lastPayment) {
-          const lpDate = new Date(lastPayment.date);
-          if (lpDate.toDateString() === now.toDateString()) {
-            let cost = 0;
-            if (s.items && s.items.length > 0) {
-              cost = s.items.reduce((sum, i) => sum + ((parseFloat(i.costAtSale) || 0) * parseInt(i.quantity || 1)), 0);
-            } else {
-              cost = (parseFloat(s.costAtSale) || 0) * (parseInt(s.quantity) || 1);
-            }
-            totalProfitToday += (totalAmount - cost);
-          }
+      const paymentsToday = (s.payments || []).filter(p => {
+        const d = new Date(p.date);
+        return d.toDateString() === now.toDateString();
+      });
+
+      if (paymentsToday.length > 0) {
+        const paidToday = paymentsToday.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+        
+        let cost = 0;
+        if (s.items && s.items.length > 0) {
+          cost = s.items.reduce((sum, i) => sum + ((parseFloat(i.costAtSale) || 0) * parseInt(i.quantity || 1)), 0);
+        } else {
+          cost = (parseFloat(s.costAtSale) || 0) * (parseInt(s.quantity) || 1);
         }
+
+        const saleProfit = totalAmount - cost;
+        const recognizedProfit = (paidToday / totalAmount) * saleProfit;
+        totalProfitToday += recognizedProfit;
       }
     });
 
