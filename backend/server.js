@@ -3,7 +3,9 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import db from './db.js';
+import { asegurarEsquemaIntegracion, iniciarServidorIntegracion } from './integration.js';
 
 dotenv.config();
 
@@ -12,10 +14,65 @@ process.env.TZ = 'America/Bogota';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || 'your_ultra_secret_key_123';
+const IS_PROD = process.env.NODE_ENV === 'production';
 
-app.use(cors());
-app.use(express.json());
+// Nunca usar un secreto conocido: si falta, se genera uno aleatorio por arranque
+// (las sesiones se invalidan al reiniciar, pero nadie puede falsificar tokens).
+let JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET === 'your_ultra_secret_key_123') {
+    JWT_SECRET = crypto.randomBytes(48).toString('hex');
+    console.warn('SECURITY: JWT_SECRET no configurado. Se usa uno temporal; define JWT_SECRET en las variables de entorno.');
+}
+
+// CORS: solo los orígenes del panel DATA (ALLOWED_ORIGINS separados por coma)
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
+if (!allowedOrigins.length) {
+    console.warn('SECURITY: ALLOWED_ORIGINS no configurado; CORS queda abierto. Define el dominio del panel DATA.');
+}
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || !allowedOrigins.length) return callback(null, true);
+        const isLocalhost = !IS_PROD && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+        callback(null, isLocalhost || allowedOrigins.includes(origin));
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+app.use((req, res, next) => {
+    res.set({
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Referrer-Policy': 'no-referrer',
+        'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
+    });
+    next();
+});
+app.use(express.json({ limit: '1mb' }));
+
+// Límite de intentos de login por IP (anti fuerza bruta)
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 10;
+const loginAttempts = new Map();
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, a] of loginAttempts) if (a.resetAt < now) loginAttempts.delete(ip);
+}, LOGIN_WINDOW_MS).unref();
+
+const loginLimiter = (req, res, next) => {
+    const now = Date.now();
+    let a = loginAttempts.get(req.ip);
+    if (!a || a.resetAt < now) {
+        a = { count: 0, resetAt: now + LOGIN_WINDOW_MS };
+        loginAttempts.set(req.ip, a);
+    }
+    if (++a.count > LOGIN_MAX_ATTEMPTS) {
+        return res.status(429).json({ error: 'Demasiados intentos. Intenta de nuevo en unos minutos.' });
+    }
+    next();
+};
 
 // --- MIDDLEWARE: Authenticate Token ---
 const authenticateToken = (req, res, next) => {
@@ -24,7 +81,7 @@ const authenticateToken = (req, res, next) => {
 
     if (!token) return res.status(401).json({ error: 'Access denied. No token provided.' });
 
-    jwt.verify(token, JWT_SECRET, (err, user) => {
+    jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }, (err, user) => {
         if (err) return res.status(403).json({ error: 'Invalid or expired token.' });
         req.user = user;
         next();
@@ -32,7 +89,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 // --- AUTH ENDPOINTS ---
-app.post('/api/auth/login', async (req, res, next) => {
+app.post('/api/auth/login', loginLimiter, async (req, res, next) => {
     const { username, password } = req.body;
     try {
         const [users] = await db.query('SELECT * FROM usuarios WHERE username = ?', [username]);
@@ -42,6 +99,7 @@ app.post('/api/auth/login', async (req, res, next) => {
             return res.status(401).json({ error: 'Invalid username or password' });
         }
 
+        loginAttempts.delete(req.ip);
         const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '24h' });
         res.json({ token, username: user.username });
     } catch (error) { next(error); }
@@ -57,6 +115,7 @@ app.use('/api/expenses', authenticateToken);
 app.use('/api/cash-closings', authenticateToken);
 
 // Test DB Connection
+let esquemaIntegracionListo = false;
 try {
     await db.query('SELECT 1');
     console.log('Successfully connected to MySQL database');
@@ -66,6 +125,13 @@ try {
         await db.query('ALTER TABLE cierres_caja MODIFY COLUMN notas MEDIUMTEXT;');
     } catch (e) {
         console.log('Note: Could not alter cierres_caja table (might not exist yet).');
+    }
+
+    try {
+        await asegurarEsquemaIntegracion(db);
+        esquemaIntegracionListo = true;
+    } catch (e) {
+        console.error('[INTEGRACION] No se pudo preparar el esquema:', e.message);
     }
 } catch (error) {
     console.error('CRITICAL: Could not connect to MySQL. Application will start but API calls will fail.');
@@ -242,7 +308,7 @@ app.get('/api/sales', async (req, res, next) => {
         const salesWithDetails = await Promise.all((sales || []).map(async (sale) => {
             try {
                 const [payments] = await db.query('SELECT id, venta_id as saleId, monto as amount, fecha as date, metodo as method FROM pagos WHERE venta_id = ?', [sale.id]);
-                const [items] = await db.query('SELECT vd.id, vd.inventario_id as productId, vd.cantidad as quantity, vd.precio_unitario as unitPrice, vd.costo_al_vender as costAtSale, p.nombre as productName FROM venta_detalles vd LEFT JOIN inventario p ON vd.inventario_id = p.id WHERE vd.venta_id = ?', [sale.id]);
+                const [items] = await db.query(`SELECT vd.id, vd.inventario_id as productId, vd.cantidad as quantity, vd.precio_unitario as unitPrice, vd.costo_al_vender as costAtSale, ${esquemaIntegracionListo ? 'COALESCE(p.nombre, vd.descripcion)' : 'p.nombre'} as productName FROM venta_detalles vd LEFT JOIN inventario p ON vd.inventario_id = p.id WHERE vd.venta_id = ?`, [sale.id]);
                 return { ...sale, payments, items };
             } catch (e) { return { ...sale, payments: [], items: [] }; }
         }));
@@ -573,9 +639,11 @@ app.delete('/api/cash-closings/:id', async (req, res, next) => {
 // --- Global Error Handler ---
 app.use((err, req, res, next) => {
     console.error('API Error:', err.message);
-    res.status(500).json({ error: 'Internal Server Error', details: err.message });
+    res.status(500).json({ error: 'Internal Server Error' });
 });
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
+iniciarServidorIntegracion(db);
