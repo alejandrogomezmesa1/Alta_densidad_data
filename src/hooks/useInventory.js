@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 
-export const useInventory = (notify) => {
+export const useInventory = (notify, isAuthenticated = true) => {
   const [data, setData] = useState({
     inventory: [],
     sales: [],
@@ -40,11 +40,14 @@ export const useInventory = (notify) => {
     }
   }, [notify]);
 
+  // Carga al iniciar sesión (no solo al abrir la app) y limpia al cerrarla
   useEffect(() => {
-    if (api.isAuthenticated()) {
+    if (isAuthenticated && api.isAuthenticated()) {
       fetchData();
+    } else {
+      setData({ inventory: [], sales: [], purchases: [], expenses: [], suppliers: [], customers: [] });
     }
-  }, [fetchData]);
+  }, [fetchData, isAuthenticated]);
 
   // --- INVENTORY LOGIC ---
   const addProduct = useCallback(async (product) => {

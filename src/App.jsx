@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import Inventory from './components/Inventory';
@@ -11,14 +11,14 @@ import Login from './components/Login';
 import { api } from './services/api';
 import { useInventory } from './hooks/useInventory';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CheckCircle, XCircle, AlertTriangle, Info, X, Menu, TrendingUp } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, Info, X, Menu } from 'lucide-react';
 
 const Notification = ({ id, message, type, onClose }) => {
   const icons = {
-    success: <CheckCircle size={20} color="var(--success)" />,
-    error: <XCircle size={20} color="var(--error)" />,
-    warning: <AlertTriangle size={20} color="var(--accent-primary)" />,
-    info: <Info size={20} color="var(--info)" />
+    success: <CheckCircle size={16} color="var(--success)" />,
+    error: <XCircle size={16} color="var(--error)" />,
+    warning: <AlertTriangle size={16} color="var(--warning)" />,
+    info: <Info size={16} color="var(--info)" />
   };
 
   React.useEffect(() => {
@@ -28,27 +28,16 @@ const Notification = ({ id, message, type, onClose }) => {
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: 50, scale: 0.9 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      exit={{ opacity: 0, x: 20, scale: 0.9 }}
-      className="glass"
-      style={{
-        padding: '1rem 1.5rem',
-        borderRadius: '16px',
-        marginBottom: '0.75rem',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '1rem',
-        minWidth: '300px',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
-        border: '1px solid var(--glass-border)',
-        pointerEvents: 'auto'
-      }}
+      initial={{ opacity: 0, x: 24 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 16 }}
+      className={`toast ${type}`}
+      role="status"
     >
       {icons[type]}
-      <p style={{ flex: 1, fontSize: '0.9rem', fontWeight: 600 }}>{message}</p>
-      <button onClick={() => onClose(id)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-        <X size={16} />
+      <p style={{ flex: 1 }}>{message}</p>
+      <button onClick={() => onClose(id)} aria-label="Cerrar" style={{ color: 'var(--text-muted)', display: 'grid', placeItems: 'center' }}>
+        <X size={14} />
       </button>
     </motion.div>
   );
@@ -57,16 +46,15 @@ const Notification = ({ id, message, type, onClose }) => {
 const ConfirmModal = ({ isOpen, message, onConfirm, onCancel }) => (
   <AnimatePresence>
     {isOpen && (
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 20000, padding: '2rem' }}>
-        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="premium-card" style={{ maxWidth: '400px', width: '100%', textAlign: 'center' }}>
-          <div style={{ padding: '1rem', borderRadius: '50%', background: 'rgba(226, 176, 76, 0.1)', color: 'var(--accent-primary)', width: '64px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
-            <AlertTriangle size={32} />
-          </div>
-          <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>¿Confirmar Acción?</h3>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '2.5rem', lineHeight: '1.6' }}>{message}</p>
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <button onClick={onCancel} style={{ flex: 1, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', color: 'var(--text-muted)' }}>CANCELAR</button>
-            <button onClick={onConfirm} className="btn-primary" style={{ flex: 1 }}>CONFIRMAR</button>
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 20000, padding: '1.5rem' }}>
+        <motion.div initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 12, opacity: 0 }} className="premium-card" style={{ maxWidth: '420px', width: '100%', padding: '2rem' }} role="alertdialog" aria-modal="true">
+          <span className="up" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '10px', color: 'var(--accent-primary)', marginBottom: '0.75rem' }}>
+            <AlertTriangle size={14} /> Confirmar acción
+          </span>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', lineHeight: 1.6 }}>{message}</p>
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+            <button onClick={onCancel} className="btn-secondary">Cancelar</button>
+            <button onClick={onConfirm} className="btn-primary">Confirmar</button>
           </div>
         </motion.div>
       </div>
@@ -109,6 +97,21 @@ function App() {
     setNotifications(prev => [...prev, { id, message, type }]);
   }, []);
 
+  // Si el servidor rechaza el token (vencido o inválido), volver al login.
+  // Varias peticiones pueden fallar a la vez: solo se avisa una vez.
+  const authRef = useRef(auth.isAuthenticated);
+  useEffect(() => { authRef.current = auth.isAuthenticated; }, [auth.isAuthenticated]);
+  useEffect(() => {
+    const onExpired = () => {
+      if (!authRef.current) return;
+      authRef.current = false;
+      notify('Tu sesión expiró. Ingresa de nuevo.', 'warning');
+      setAuth({ isAuthenticated: false, username: null });
+    };
+    window.addEventListener('alta:session-expired', onExpired);
+    return () => window.removeEventListener('alta:session-expired', onExpired);
+  }, [notify]);
+
   const removeNotification = useCallback((id) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   }, []);
@@ -133,7 +136,7 @@ function App() {
     suppliers, addSupplier, updateSupplier, deleteSupplier, getMostFrequentSupplierId,
     updateCustomer, deleteCustomer,
     exportData
-  } = useInventory(notify); // Injecting notification system
+  } = useInventory(notify, auth.isAuthenticated); // Injecting notification system
 
   const renderContent = () => {
     const commonProps = { notify, confirm: requestConfirm };
@@ -217,7 +220,7 @@ function App() {
   if (!auth.isAuthenticated) {
     return (
       <div style={{ background: 'var(--bg-main)' }}>
-        <div style={{ position: 'fixed', top: '2rem', right: '2rem', zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+        <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
           <AnimatePresence>
             {notifications.map(n => (
               <Notification key={n.id} {...n} onClose={removeNotification} />
@@ -232,7 +235,7 @@ function App() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-main)', position: 'relative' }}>
       {/* Notifications & Status Layer */}
-      <div style={{ position: 'fixed', top: '2rem', right: '2rem', zIndex: 9999, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+      <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 9999, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
         <AnimatePresence>
           {notifications.map(n => (
             <Notification key={n.id} {...n} onClose={removeNotification} />
@@ -247,37 +250,23 @@ function App() {
         onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))} 
       />
 
-      {/* Background Glows */}
-      <div style={{ position: 'fixed', top: '-10%', right: '-5%', width: '40vw', height: '40vw', background: 'radial-gradient(circle, rgba(226, 176, 76, 0.03), transparent)', pointerEvents: 'none' }} />
-      <div style={{ position: 'fixed', bottom: '-5%', left: '20%', width: '30vw', height: '30vw', background: 'radial-gradient(circle, rgba(10, 132, 255, 0.02), transparent)', pointerEvents: 'none' }} />
-
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
         isOpen={isSidebarOpen} 
         setIsOpen={setIsSidebarOpen} 
         onLogout={handleLogout}
+        username={auth.username}
       />
       
-      {/* Mobile Top Header */}
-      <div className="mobile-only glass" style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: '60px',
-        padding: '0 1.5rem',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        zIndex: 900,
-        borderBottom: '1px solid var(--glass-border)'
-      }}>
+      {/* Barra superior móvil */}
+      <div className="mobile-only mobile-top">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <TrendingUp size={20} color="var(--accent-primary)" />
-          <h1 className="title-gradient" style={{ fontSize: '1rem' }}>ALTA DENSIDAD</h1>
+          <span className="side-brand-mark" style={{ width: 30, height: 30, fontSize: 13 }}>AD</span>
+          <span className="side-brand-name" style={{ fontSize: 11 }}>Alta Densidad</span>
         </div>
-        <button onClick={() => setIsSidebarOpen(true)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
-          <Menu size={24} />
+        <button className="mobile-top-toggle" onClick={() => setIsSidebarOpen(true)} aria-label="Abrir menú">
+          <Menu size={18} />
         </button>
       </div>
 

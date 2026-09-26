@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Search, Edit2, Trash2, Filter, Download, Users, X, Phone, Mail, Tag, MapPin } from 'lucide-react';
 
-const Suppliers = ({ suppliers, addSupplier, updateSupplier, deleteSupplier, notify, confirm }) => {
+const Suppliers = ({ suppliers, addSupplier, updateSupplier, deleteSupplier, confirm }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -63,29 +63,29 @@ const Suppliers = ({ suppliers, addSupplier, updateSupplier, deleteSupplier, not
             <h4 style={{ marginBottom: '1.5rem', color: 'var(--accent-primary)' }}>{editingId ? 'EDITAR PROVEEDOR' : 'REGISTRAR NUEVO PROVEEDOR'}</h4>
             <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', alignItems: 'flex-end' }}>
               <div style={{ gridColumn: 'span 1' }}>
-                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>NOMBRE / RAZÓN SOCIAL</label>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>NOMBRE / RAZÓN SOCIAL</label>
                 <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nombre de la empresa" style={{ width: '100%' }} />
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>CATEGORÍA</label>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>CATEGORÍA</label>
                 <input type="text" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="Ej: Electrónica" style={{ width: '100%' }} />
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>TELÉFONO</label>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>TELÉFONO</label>
                 <div style={{ position: 'relative' }}>
                   <Phone size={14} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                   <input type="text" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="300..." style={{ width: '100%', paddingLeft: '2.5rem' }} />
                 </div>
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>EMAIL</label>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>EMAIL</label>
                 <div style={{ position: 'relative' }}>
                   <Mail size={14} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                   <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="contacto@..." style={{ width: '100%', paddingLeft: '2.5rem' }} />
                 </div>
               </div>
               <div style={{ gridColumn: 'span 1' }}>
-                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>DIRECCIÓN</label>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>DIRECCIÓN</label>
                 <div style={{ position: 'relative' }}>
                   <MapPin size={14} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                   <input type="text" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Calle..." style={{ width: '100%', paddingLeft: '2.5rem' }} />
@@ -110,7 +110,7 @@ const Suppliers = ({ suppliers, addSupplier, updateSupplier, deleteSupplier, not
               placeholder="Buscar proveedor por nombre o categoría..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              style={{ width: '100%', paddingLeft: '3rem', borderRadius: '12px' }}
+              style={{ width: '100%', paddingLeft: '3rem', borderRadius: 0 }}
             />
           </div>
         </div>
@@ -138,10 +138,10 @@ const Suppliers = ({ suppliers, addSupplier, updateSupplier, deleteSupplier, not
                   <td style={{ padding: '1.25rem 2rem' }}>
                     <span className="mobile-label">Proveedor</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                      <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(226, 176, 76, 0.08)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'var(--accent-primary)', fontWeight: 800, fontSize: '0.9rem' }}>
+                      <div style={{ width: '36px', height: '36px', borderRadius: 0, background: 'rgba(201, 169, 97, 0.08)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'var(--accent-primary)', fontWeight: 500, fontSize: '0.9rem' }}>
                         {String(supplier.name || 'S').charAt(0).toUpperCase()}
                       </div>
-                      <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{supplier.name}</span>
+                      <span style={{ fontWeight: 500, fontSize: '0.95rem' }}>{supplier.name}</span>
                     </div>
                   </td>
                   <td style={{ padding: '1.25rem 2rem' }}>
@@ -150,7 +150,7 @@ const Suppliers = ({ suppliers, addSupplier, updateSupplier, deleteSupplier, not
                   </td>
                   <td style={{ padding: '1.25rem 2rem' }}>
                     <span className="mobile-label">Contacto</span>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{supplier.phone || 'Sin teléfono'}</div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>{supplier.phone || 'Sin teléfono'}</div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{supplier.email || 'Sin email'}</div>
                   </td>
                   <td style={{ padding: '1.25rem 2rem' }}>
@@ -159,15 +159,14 @@ const Suppliers = ({ suppliers, addSupplier, updateSupplier, deleteSupplier, not
                   </td>
                   <td style={{ padding: '1.25rem 2rem' }}>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button onClick={() => handleEdit(supplier)} style={{ padding: '0.5rem', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', color: 'var(--text-muted)', border: 'none', cursor: 'pointer' }}>
+                      <button onClick={() => handleEdit(supplier)} className="btn-icon">
                         <Edit2 size={16} />
                       </button>
                       <button 
                         onClick={() => confirm(`¿Estás seguro de eliminar a "${supplier.name}"?`, () => {
                           deleteSupplier(supplier.id);
-                          notify('Proveedor eliminado correctamente.', 'info');
                         })}
-                        style={{ padding: '0.5rem', borderRadius: '8px', background: 'rgba(255,69,58,0.08)', color: 'var(--error)', border: 'none', cursor: 'pointer' }}
+                        className="btn-icon danger" title="Eliminar" aria-label="Eliminar"
                       >
                         <Trash2 size={16} />
                       </button>

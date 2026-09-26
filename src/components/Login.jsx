@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Lock, User, LogIn, TrendingUp, AlertCircle } from 'lucide-react';
+import { Lock, User, LogIn, AlertCircle } from 'lucide-react';
 import { api } from '../services/api';
 
 const Login = ({ onLoginSuccess, notify }) => {
@@ -19,114 +19,95 @@ const Login = ({ onLoginSuccess, notify }) => {
       notify('Bienvenido de nuevo', 'success');
       onLoginSuccess();
     } catch (err) {
-      setError(err.message);
-      notify(err.message, 'error');
+      const mensajes = {
+        'Failed to fetch': 'No se pudo conectar con el servidor. Intenta de nuevo en unos segundos.',
+        'Invalid username or password': 'Usuario o contraseña incorrectos.'
+      };
+      setError(mensajes[err.message] || err.message || 'No se pudo iniciar sesión.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      display: 'flex', 
-      alignItems: 'center', 
-      justifyContent: 'center', 
+    <div style={{
+      minHeight: '100vh',
+      display: 'grid',
+      placeItems: 'center',
       background: 'var(--bg-main)',
-      position: 'relative',
-      overflow: 'hidden'
+      padding: '1.5rem'
     }}>
-      {/* Background Glows */}
-      <div style={{ position: 'absolute', top: '20%', left: '10%', width: '40vw', height: '40vw', background: 'radial-gradient(circle, rgba(226, 176, 76, 0.05), transparent)', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', bottom: '10%', right: '10%', width: '30vw', height: '30vw', background: 'radial-gradient(circle, rgba(10, 132, 255, 0.03), transparent)', pointerEvents: 'none' }} />
-
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        className="premium-card"
-        style={{ width: '100%', maxWidth: '400px', padding: '2.5rem', zIndex: 1 }}
+        transition={{ duration: 0.5, ease: [0.2, 0.7, 0.2, 1] }}
+        style={{ width: '100%', maxWidth: '400px', background: 'var(--bg-card)', border: '1px solid var(--border-color)', padding: '3rem 2.5rem 2.25rem' }}
       >
         <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-          <div style={{ 
-            display: 'inline-flex', 
-            padding: '1rem', 
-            borderRadius: '20px', 
-            background: 'rgba(226, 176, 76, 0.1)', 
-            color: 'var(--accent-primary)',
-            marginBottom: '1.5rem'
-          }}>
-            <TrendingUp size={32} />
-          </div>
-          <h1 className="title-gradient" style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>ALTA DENSIDAD</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+          <span className="side-brand-mark" style={{ width: 52, height: 52, fontSize: 20, margin: '0 auto 1.5rem' }}>AD</span>
+          <p className="up" style={{ fontSize: '10px', color: 'var(--accent-primary)', marginBottom: '0.75rem' }}>Sistema de gestión</p>
+          <h1 style={{ fontFamily: 'var(--f-display)', fontWeight: 300, fontSize: '2.4rem', letterSpacing: '0.04em' }}>Alta Densidad</h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '0.75rem' }}>
             Ingresa tus credenciales para continuar
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <div style={{ position: 'relative' }}>
-            <div style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>
-              <User size={18} />
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            Usuario
+            <div style={{ position: 'relative' }}>
+              <User size={15} style={{ position: 'absolute', left: '0.9rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                style={{ width: '100%', paddingLeft: '2.6rem', textTransform: 'none', letterSpacing: 0 }}
+              />
             </div>
-            <input
-              type="text"
-              placeholder="Usuario"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-              className="glass"
-              style={{ width: '100%', padding: '0.85rem 1rem 0.85rem 3rem', borderRadius: '12px', border: '1px solid var(--glass-border)' }}
-            />
-          </div>
+          </label>
 
-          <div style={{ position: 'relative' }}>
-            <div style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>
-              <Lock size={18} />
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            Contraseña
+            <div style={{ position: 'relative' }}>
+              <Lock size={15} style={{ position: 'absolute', left: '0.9rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                style={{ width: '100%', paddingLeft: '2.6rem', textTransform: 'none', letterSpacing: 0 }}
+              />
             </div>
-            <input
-              type="password"
-              placeholder="Contraseña"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="glass"
-              style={{ width: '100%', padding: '0.85rem 1rem 0.85rem 3rem', borderRadius: '12px', border: '1px solid var(--glass-border)' }}
-            />
-          </div>
+          </label>
 
           {error && (
-            <motion.div 
-              initial={{ opacity: 0, x: -10 }} 
-              animate={{ opacity: 1, x: 0 }}
-              style={{ color: 'var(--error)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,69,58,0.05)', padding: '0.75rem', borderRadius: '8px' }}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              role="alert"
+              style={{ color: 'var(--error)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '0.5rem', borderLeft: '2px solid var(--error)', background: 'var(--error-glow)', padding: '0.7rem 0.9rem' }}
             >
               <AlertCircle size={14} />
               {error}
             </motion.div>
           )}
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={loading}
             className="btn-primary"
-            style={{ width: '100%', padding: '1rem', height: '54px', fontSize: '1rem', fontWeight: 700, marginTop: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}
+            style={{ width: '100%', height: '48px', marginTop: '0.75rem' }}
           >
-            {loading ? (
-              <div className="spinner-small" />
-            ) : (
-              <>
-                <LogIn size={20} />
-                ENTRAR
-              </>
-            )}
+            {loading ? <div className="spinner-small" /> : <><LogIn size={16} /> Entrar</>}
           </button>
         </form>
 
-        <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-            Sistema de Gestión Privado
-          </p>
-        </div>
+        <p className="up" style={{ marginTop: '2.25rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '9px' }}>
+          Acceso privado · Alta Densidad
+        </p>
       </motion.div>
     </div>
   );

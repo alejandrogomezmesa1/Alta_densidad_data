@@ -9,32 +9,31 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, Legend, BarChart, Bar
 } from 'recharts';
+import { getPayments, balanceOf, saleProductNames } from '../utils/sales';
 
 const StatCard = ({ title, value, icon: Icon, color, percentage, subValue, trend, delay = 0, onClick }) => (
   <motion.div 
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.5, delay }}
-    whileHover={{ y: -5, scale: 1.02 }}
     onClick={onClick}
     className="premium-card hover-glow" 
     style={{ flex: 1, minWidth: '220px', position: 'relative', overflow: 'hidden', cursor: onClick ? 'pointer' : 'default' }}
   >
-    <div style={{ position: 'absolute', top: '-10%', right: '-10%', width: '100px', height: '100px', background: `rgba(${color}, 0.05)`, borderRadius: '50%', filter: 'blur(20px)' }} />
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
-      <div style={{ padding: '0.75rem', borderRadius: '14px', background: `rgba(${color}, 0.1)`, color: `rgb(${color})` }}>
-        <Icon size={24} />
+      <div style={{ width: '38px', height: '38px', display: 'grid', placeItems: 'center', border: `1px solid rgba(${color}, 0.45)`, color: `rgb(${color})` }}>
+        <Icon size={18} strokeWidth={1.6} />
       </div>
       {percentage !== undefined && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: trend === 'up' ? 'var(--success)' : 'var(--error)', fontSize: '0.8rem', fontWeight: 700 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: trend === 'up' ? 'var(--success)' : 'var(--error)', fontSize: '0.8rem', fontWeight: 500 }}>
           {trend === 'up' ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
           {percentage}%
         </div>
       )}
     </div>
     <div>
-      <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', textTransform: 'uppercase' }}>{title}</p>
-      <h3 style={{ fontSize: '1.6rem', fontWeight: 800 }}>{value}</h3>
+      <p className="up" style={{ color: 'var(--text-muted)', fontSize: '10px', marginBottom: '0.6rem' }}>{title}</p>
+      <h3 style={{ fontSize: '2rem', fontWeight: 400, fontFamily: 'var(--f-display)' }}>{value}</h3>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         {subValue && <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.4rem' }}>{subValue}</p>}
         {onClick && <ChevronRight size={14} color="var(--text-muted)" />}
@@ -57,13 +56,13 @@ const DetailModal = ({ isOpen, onClose, title, data, type }) => {
           {data.length === 0 ? (
             <p style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No hay movimientos registrados.</p>
           ) : data.map((item, i) => (
-            <div key={i} className="glass" style={{ padding: '1rem', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div key={i} className="glass" style={{ padding: '1rem', borderRadius: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{item.label}</div>
+                <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{item.label}</div>
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.sublabel}</div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontWeight: 800, color: item.amount < 0 ? 'var(--error)' : 'var(--success)' }}>
+                <div style={{ fontWeight: 500, color: item.amount < 0 ? 'var(--error)' : 'var(--success)' }}>
                   {item.amount < 0 ? '-' : '+'}${Math.abs(Math.round(item.amount)).toLocaleString('es-CO')}
                 </div>
                 {item.extra && <div style={{ fontSize: '0.65rem', color: 'var(--accent-primary)' }}>{item.extra}</div>}
@@ -124,7 +123,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
     const totalSales = currentSales.reduce((acc, curr) => acc + (parseFloat(curr.total) || 0), 0);
     const periodSalesItems = currentSales.map(s => ({
       label: s.customerName || 'Venta General',
-      sublabel: s.productName || 'Varios productos',
+      sublabel: saleProductNames(s) || 'Varios productos',
       amount: parseFloat(s.total) || 0,
       extra: s.date
     }));
@@ -138,7 +137,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
       const totalAmount = parseFloat(s.total) || 0;
       if (totalAmount <= 0) return;
 
-      const paymentsInPeriod = (s.payments || []).filter(p => {
+      const paymentsInPeriod = getPayments(s).filter(p => {
         if (period === 'all') return true;
         if (period === 'today') return isToday(p.date);
 
@@ -186,20 +185,13 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
     const inventoryValue = inventoryList.reduce((acc, p) => acc + (p.stock * p.costPrice), 0);
     const potentialRevenue = inventoryList.reduce((acc, p) => acc + (p.stock * p.price), 0);
 
-    const accountsReceivable = salesList.reduce((acc, sale) => {
-      const paid = (sale.payments || []).reduce((pAcc, pCurr) => pAcc + (parseFloat(pCurr.amount) || 0), 0);
-      return acc + (parseFloat(sale.total) - paid);
-    }, 0);
+    const accountsReceivable = salesList.reduce((acc, sale) => acc + balanceOf(sale), 0);
 
-    const accountsReceivableItems = salesList.filter(s => {
-      const paid = (s.payments || []).reduce((acc, p) => acc + (parseFloat(p.amount) || 0), 0);
-      return (parseFloat(s.total) - paid) > 0.01;
-    }).map(s => {
-      const paid = (s.payments || []).reduce((acc, p) => acc + (parseFloat(p.amount) || 0), 0);
+    const accountsReceivableItems = salesList.filter(s => balanceOf(s) > 0.01).map(s => {
       return {
         label: s.customerName || 'Cliente',
-        sublabel: s.productName || 'Venta',
-        amount: parseFloat(s.total) - paid,
+        sublabel: saleProductNames(s) || 'Venta',
+        amount: balanceOf(s),
         extra: `Total: $${Math.round(s.total).toLocaleString('es-CO')}`
       };
     });
@@ -208,9 +200,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
     let totalCashIn = 0;
     const cashInItems = [];
     salesList.forEach(s => {
-      const totalAmount = parseFloat(s.total) || 0;
-      
-      const paymentsInPeriod = (s.payments || []).filter(p => {
+      const paymentsInPeriod = getPayments(s).filter(p => {
         if (period === 'all') return true;
         if (period === 'today') return isToday(p.date);
 
@@ -220,27 +210,13 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
         return isToday(p.date);
       });
 
-      let amt = paymentsInPeriod.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+      const amt = paymentsInPeriod.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
       
-      // FALLBACK: If a sale is marked as 'paid' but has NO payment records in the database,
-      // we count its total as collected on the date the sale was created.
-      if (s.status === 'paid' && (!s.payments || s.payments.length === 0)) {
-        const saleDateStr = s.date ? s.date.split(/T| /)[0] : '';
-        const saleInPeriod = (period === 'all') || 
-                             (period === 'today' && isToday(s.date)) ||
-                             (period === 'week' && safeParseDate(s.date) >= new Date(now.getTime() - 7*24*60*60*1000)) ||
-                             (period === 'month' && safeParseDate(s.date) >= new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30));
-        
-        if (saleInPeriod) {
-          amt += totalAmount;
-        }
-      }
-
       if (amt > 0) {
         totalCashIn += amt;
         cashInItems.push({
           label: s.customerName || 'Abono / Pago',
-          sublabel: s.productName || 'Venta',
+          sublabel: saleProductNames(s) || 'Venta',
           amount: amt,
           extra: `Recaudo: ${s.date ? s.date.split(/T| /)[0] : 'Fecha no registrada'}`
         });
@@ -260,17 +236,18 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
     // Calculate Top Products based on revenue
     const productSalesMap = {};
     currentSales.forEach(sale => {
-      const processItem = (pId, qty, rev) => {
-        if (!productSalesMap[pId]) {
-          const productInfo = inventoryList.find(p => String(p.id) === String(pId)) || { name: 'Producto Eliminado' };
-          productSalesMap[pId] = { name: productInfo.name, qty: 0, revenue: 0 };
+      const processItem = (pId, qty, rev, fallbackName) => {
+        const key = pId ? `p${pId}` : `n${fallbackName || 'Otros'}`;
+        if (!productSalesMap[key]) {
+          const productInfo = pId ? inventoryList.find(p => String(p.id) === String(pId)) : null;
+          productSalesMap[key] = { name: productInfo?.name || fallbackName || 'Producto eliminado', qty: 0, revenue: 0 };
         }
-        productSalesMap[pId].qty += parseInt(qty) || 0;
-        productSalesMap[pId].revenue += parseFloat(rev) || 0;
+        productSalesMap[key].qty += parseInt(qty) || 0;
+        productSalesMap[key].revenue += parseFloat(rev) || 0;
       };
 
       if (sale.items && sale.items.length > 0) {
-        sale.items.forEach(i => processItem(i.productId, i.quantity, i.unitPrice * i.quantity));
+        sale.items.forEach(i => processItem(i.productId, i.quantity, i.unitPrice * i.quantity, i.productName));
       } else if (sale.productId) {
         processItem(sale.productId, sale.quantity, sale.total);
       }
@@ -283,10 +260,8 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
     // Calculate Top Debtors
     const debtorsMap = {};
     salesList.forEach(sale => {
-      const total = parseFloat(sale.total) || 0;
-      const paid = (sale.payments || []).reduce((pAcc, p) => pAcc + (parseFloat(p.amount) || 0), 0);
-      const balance = total - paid;
-      if (balance > 0) {
+      const balance = balanceOf(sale);
+      if (balance > 0.01) {
         const cName = sale.customerName || 'Cliente General';
         if (!debtorsMap[cName]) debtorsMap[cName] = { name: cName, balance: 0 };
         debtorsMap[cName].balance += balance;
@@ -298,7 +273,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
     const activeProductIds = new Set();
     currentSales.forEach(sale => {
       if (sale.items) {
-        sale.items.forEach(i => activeProductIds.add(String(i.productId)));
+        sale.items.forEach(i => i.productId && activeProductIds.add(String(i.productId)));
       } else if (sale.productId) {
         activeProductIds.add(String(sale.productId));
       }
@@ -420,7 +395,8 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
     return Object.entries(categories).map(([name, value]) => ({ name, value }));
   }, [stats.currentSales, inventoryList]);
 
-  const COLORS = ['#E2B04C', '#0A84FF', '#32D74B', '#FF453A', '#BF5AF2', '#FF9F0A'];
+  // Paleta editorial de la marca: oros, marfil y grises cálidos
+  const COLORS = ['#C9A961', '#F2EEE6', '#9A7B3F', '#6B675F', '#3d7fc4', '#8B3A48'];
 
   const [activeModal, setActiveModal] = useState(null);
 
@@ -431,9 +407,9 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
           <h2 className="title-gradient" style={{ fontSize: '2.8rem', marginBottom: '0.5rem' }}>Evolución del Negocio</h2>
           <p style={{ color: 'var(--text-secondary)', fontWeight: 500, fontSize: '1.1rem' }}>Análisis histórico y proyección financiera (COP).</p>
         </div>
-        <div className="glass" style={{ display: 'flex', padding: '0.4rem', borderRadius: '12px', flexWrap: 'wrap' }}>
+        <div className="glass" style={{ display: 'flex', padding: '0.4rem', borderRadius: 0, flexWrap: 'wrap' }}>
           {['today', 'week', 'month', 'all'].map(p => (
-            <button key={p} onClick={() => setPeriod(p)} style={{ flex: 1, minWidth: '80px', padding: '0.6rem 0.5rem', borderRadius: '10px', background: period === p ? 'var(--accent-primary)' : 'transparent', color: period === p ? '#000' : 'var(--text-secondary)', fontWeight: 700, border: 'none', cursor: 'pointer' }}>
+            <button key={p} onClick={() => setPeriod(p)} style={{ flex: 1, minWidth: '80px', padding: '0.6rem 0.5rem', borderRadius: 0, background: period === p ? 'var(--accent-primary)' : 'transparent', color: period === p ? 'var(--bg-main)' : 'var(--text-secondary)', fontWeight: 500, border: 'none', cursor: 'pointer' }}>
               {p === 'today' ? 'Hoy' : p === 'week' ? 'Semana' : p === 'month' ? 'Mes' : 'Todo'}
             </button>
           ))}
@@ -445,21 +421,21 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
             title={period === 'month' ? "Ventas Mes" : (period === 'week' ? "Ventas Semana" : (period === 'all' ? "Ventas Totales" : "Ventas Hoy"))} 
             value={`$${Math.round(stats.totalSales).toLocaleString('es-CO')}`} 
             icon={TrendingUp} 
-            color="50, 215, 75" 
+            color="47, 158, 110" 
             onClick={() => setActiveModal({ title: period === 'month' ? "Ventas del Mes" : (period === 'week' ? "Ventas de la Semana" : (period === 'all' ? "Ventas Totales" : "Ventas Hoy")), data: stats.periodSalesItems })} 
           />
           <StatCard 
             title={period === 'month' ? "Recaudo Mes" : (period === 'week' ? "Recaudo Semana" : (period === 'all' ? "Recaudo Total" : "Recaudo Hoy"))} 
             value={`$${Math.round(stats.totalCashIn).toLocaleString('es-CO')}`} 
             icon={Wallet} 
-            color="32, 215, 75" 
+            color="201, 169, 97" 
             onClick={() => setActiveModal({ title: 'Detalle de Recaudo', data: stats.cashInItems })} 
           />
           <StatCard 
             title={period === 'month' ? "Margen Mes" : (period === 'week' ? "Margen Semana" : (period === 'all' ? "Margen Total" : "Margen Hoy"))} 
             value={`$${Math.round(stats.netProfit).toLocaleString('es-CO')}`} 
             icon={DollarSign} 
-            color="226, 176, 76" 
+            color="242, 238, 230" 
             subValue={`Rentabilidad: ${stats.totalSales > 0 ? ((stats.netProfit/stats.totalSales)*100).toFixed(1) : 0}%`} 
             onClick={() => setActiveModal({ title: 'Detalle de Margen Neto', data: stats.profitItems })} 
           />
@@ -468,7 +444,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
             title="Cartera Cliente" 
             value={`$${Math.round(stats.accountsReceivable).toLocaleString('es-CO')}`} 
             icon={Clock} 
-            color="255, 69, 58" 
+            color="194, 65, 59" 
             subValue="Por cobrar" 
             onClick={() => setActiveModal({ title: 'Detalle de Cartera', data: stats.accountsReceivableItems })} 
           />
@@ -483,30 +459,30 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
       
       {/* Critical Alerts Section */}
       {(stats.lowStockCount > 0 || stats.outOfStockCount > 0) && (
-        <div style={{ marginBottom: '2rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', color: 'var(--error)' }}>
-            <AlertCircle size={20} />
-            <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Alertas de Inventario</h4>
+        <div style={{ margin: '2.5rem 0 2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem', color: 'var(--error)' }}>
+            <AlertCircle size={15} />
+            <span className="up" style={{ fontSize: '10px' }}>Alertas de inventario</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
             {inventoryList.filter(p => p.stock <= 1).slice(0, 6).map(p => (
-              <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={p.id} className="glass" style={{ padding: '1rem 1.5rem', borderRadius: '14px', borderLeft: '4px solid var(--error)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={p.id} className="glass" style={{ padding: '1rem 1.5rem', borderRadius: 0, borderLeft: '4px solid var(--error)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{p.name}</div>
-                  <div style={{ fontSize: '0.7rem', color: p.stock === 0 ? 'var(--error)' : 'var(--warning)', fontWeight: 600 }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>{p.name}</div>
+                  <div style={{ fontSize: '0.7rem', color: p.stock === 0 ? 'var(--error)' : 'var(--warning)', fontWeight: 500 }}>
                     {p.stock === 0 ? 'PRODUCTO AGOTADO' : 'ÚLTIMA UNIDAD'}
                   </div>
                 </div>
-                <button onClick={() => setActiveTab('inventory')} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}>REURTIR</button>
+                <button onClick={() => setActiveTab('inventory')} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.7rem', fontWeight: 500, cursor: 'pointer' }}>REABASTECER</button>
               </motion.div>
             ))}
-            {inventoryList.filter(p => p.stock > 0 && p.stock < 5).slice(0, 3).map(p => (
-              <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={p.id} className="glass" style={{ padding: '1rem 1.5rem', borderRadius: '14px', borderLeft: '4px solid var(--warning)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {inventoryList.filter(p => p.stock > 1 && p.stock < 5).slice(0, 3).map(p => (
+              <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={p.id} className="glass" style={{ padding: '1rem 1.5rem', borderRadius: 0, borderLeft: '4px solid var(--warning)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{p.name}</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--warning)', fontWeight: 600 }}>STOCK BAJO: {p.stock} UNIDADES</div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>{p.name}</div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--warning)', fontWeight: 500 }}>STOCK BAJO: {p.stock} UNIDADES</div>
                 </div>
-                <button onClick={() => setActiveTab('inventory')} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}>REURTIR</button>
+                <button onClick={() => setActiveTab('inventory')} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.7rem', fontWeight: 500, cursor: 'pointer' }}>REABASTECER</button>
               </motion.div>
             ))}
           </div>
@@ -520,9 +496,9 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
             <Activity size={20} color="var(--accent-primary)" /> 
             RENDIMIENTO {period === 'week' ? 'SEMANAL' : period === 'month' ? 'MENSUAL' : 'HISTÓRICO'}: VENTAS VS UTILIDAD
           </h4>
-          <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8rem', fontWeight: 600 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--accent-primary)' }} /> VENTAS</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><div style={{ width: '10px', height: '10px', borderRadius: '2px', background: 'var(--success)' }} /> UTILIDAD</div>
+          <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8rem', fontWeight: 500 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><div style={{ width: '10px', height: '10px', borderRadius: 0, background: 'var(--accent-primary)' }} /> VENTAS</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><div style={{ width: '10px', height: '10px', borderRadius: 0, background: 'var(--success)' }} /> UTILIDAD</div>
           </div>
         </div>
         <div style={{ height: '320px', minWidth: 0 }}>
@@ -541,7 +517,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
                 axisLine={false} 
                 tickFormatter={(v) => `$${Number(v).toLocaleString('es-CO', { maximumFractionDigits: 0 })}`}
               />
-              <Tooltip contentStyle={{ background: 'rgba(10,10,12,0.95)', border: '1px solid var(--glass-border)', borderRadius: '12px' }} />
+              <Tooltip contentStyle={{ background: 'rgba(11, 11, 12,0.95)', border: '1px solid var(--glass-border)', borderRadius: 0 }} />
               <Area type="monotone" dataKey="ventas" stroke="var(--accent-primary)" strokeWidth={3} fill="url(#colorV)" />
               <Area type="monotone" dataKey="utilidad" stroke="var(--success)" strokeWidth={2} fill="url(#colorG)" />
             </AreaChart>
@@ -565,7 +541,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
             <tbody>
               {stats.topProducts.map((p, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                  <td style={{ padding: '1.2rem 0', fontWeight: 700, fontSize: '0.9rem' }}>
+                  <td style={{ padding: '1.2rem 0', fontWeight: 500, fontSize: '0.9rem' }}>
                     <span className="mobile-label">Producto</span>
                     {p.name}
                   </td>
@@ -573,7 +549,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
                     <span className="mobile-label">Ventas</span>
                     {p.qty} u.
                   </td>
-                  <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--success)' }}>
+                  <td style={{ textAlign: 'right', fontWeight: 500, color: 'var(--success)' }}>
                     <span className="mobile-label" style={{ textAlign: 'left' }}>Ingresos</span>
                     ${Math.round(p.revenue).toLocaleString('es-CO')}
                   </td>
@@ -598,11 +574,11 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
             <tbody>
               {stats.topDebtors.map((d, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                  <td style={{ padding: '1.2rem 0', fontWeight: 700, fontSize: '0.9rem' }}>
+                  <td style={{ padding: '1.2rem 0', fontWeight: 500, fontSize: '0.9rem' }}>
                     <span className="mobile-label">Cliente</span>
                     {d.name}
                   </td>
-                  <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--error)' }}>
+                  <td style={{ textAlign: 'right', fontWeight: 500, color: 'var(--error)' }}>
                     <span className="mobile-label" style={{ textAlign: 'left' }}>Deuda Pendiente</span>
                     ${Math.round(d.balance).toLocaleString('es-CO')}
                   </td>
@@ -622,23 +598,23 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
         <div className="premium-card">
           <h4 style={{ marginBottom: '2rem' }}><Zap size={20} color="var(--info)" /> ESTADO DE STOCK</h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1.25rem', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1.25rem', borderRadius: 0, border: '1px solid var(--glass-border)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                 <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Bajo Stock (&lt;5)</span>
-                <span style={{ fontWeight: 800, color: 'var(--error)' }}>{stats.lowStockCount}</span>
+                <span style={{ fontWeight: 500, color: 'var(--error)' }}>{stats.lowStockCount}</span>
               </div>
-              <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+              <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: 0, overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${(stats.lowStockCount / (inventoryList.length || 1)) * 100}%`, background: 'var(--error)' }} />
               </div>
             </div>
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div className="glass" style={{ padding: '1rem', borderRadius: '14px', textAlign: 'center' }}>
-                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--success)' }}>{inventoryList.length - stats.outOfStockCount}</div>
+              <div className="glass" style={{ padding: '1rem', borderRadius: 0, textAlign: 'center' }}>
+                <div style={{ fontSize: '1.2rem', fontWeight: 500, color: 'var(--success)' }}>{inventoryList.length - stats.outOfStockCount}</div>
                 <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Ok</div>
               </div>
-              <div className="glass" style={{ padding: '1rem', borderRadius: '14px', textAlign: 'center' }}>
-                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--error)' }}>{stats.outOfStockCount}</div>
+              <div className="glass" style={{ padding: '1rem', borderRadius: 0, textAlign: 'center' }}>
+                <div style={{ fontSize: '1.2rem', fontWeight: 500, color: 'var(--error)' }}>{stats.outOfStockCount}</div>
                 <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Agotado</div>
               </div>
             </div>
@@ -656,7 +632,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
                 <Pie data={categoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
                   {categoryData.map((e, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
-                <Tooltip contentStyle={{ background: '#000', border: '1px solid #333' }} />
+                <Tooltip contentStyle={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 0, fontFamily: 'var(--f-ui)', fontSize: 12 }} itemStyle={{ color: 'var(--text-main)' }} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
@@ -682,7 +658,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
                   <Cell fill="var(--accent-primary)" />
                   <Cell fill="var(--error)" />
                 </Pie>
-                <Tooltip contentStyle={{ background: '#000', border: '1px solid #333' }} />
+                <Tooltip contentStyle={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 0, fontFamily: 'var(--f-ui)', fontSize: 12 }} itemStyle={{ color: 'var(--text-main)' }} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
@@ -691,42 +667,42 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
       </div>
 
       {/* Strategic Insights */}
-      <div className="premium-card" style={{ background: 'linear-gradient(90deg, rgba(226,176,76,0.05) 0%, transparent 100%)', borderLeft: '4px solid var(--accent-primary)' }}>
+      <div className="premium-card" style={{ background: 'linear-gradient(90deg, rgba(201, 169, 97,0.05) 0%, transparent 100%)', borderLeft: '4px solid var(--accent-primary)' }}>
         <h4 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}><Activity size={20} color="var(--accent-primary)" /> INSIGHTS ESTRATÉGICOS</h4>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
           <div style={{ display: 'flex', gap: '1rem' }}>
-            <div style={{ minWidth: '40px', height: '40px', borderRadius: '10px', background: 'rgba(50,215,75,0.1)', color: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ minWidth: '40px', height: '40px', borderRadius: 0, background: 'rgba(47, 158, 110,0.1)', color: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Trophy size={20} />
             </div>
             <div>
-              <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Ticket Promedio</div>
+              <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>Ticket Promedio</div>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Cada cliente deja en promedio <strong>${Math.round(stats.avgTicket).toLocaleString('es-CO')}</strong>.</p>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '1rem' }}>
-            <div style={{ minWidth: '40px', height: '40px', borderRadius: '10px', background: 'rgba(255,69,58,0.1)', color: 'var(--error)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ minWidth: '40px', height: '40px', borderRadius: 0, background: 'rgba(194, 65, 59,0.1)', color: 'var(--error)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <AlertCircle size={20} />
             </div>
             <div>
-              <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Cartera en Riesgo</div>
+              <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>Cartera en Riesgo</div>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Tienes <strong>${Math.round(stats.accountsReceivable).toLocaleString('es-CO')}</strong> por cobrar. Usa el panel de deudores para hacer seguimiento.</p>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '1rem' }}>
-            <div style={{ minWidth: '40px', height: '40px', borderRadius: '10px', background: 'rgba(255,159,10,0.1)', color: 'var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ minWidth: '40px', height: '40px', borderRadius: 0, background: 'rgba(201, 138, 27,0.1)', color: 'var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Package size={20} />
             </div>
             <div>
-              <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Capital Inmovilizado</div>
+              <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>Capital Inmovilizado</div>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Tienes <strong>${Math.round(stats.slowMovingCapital).toLocaleString('es-CO')}</strong> atrapados en {stats.slowMovingProductsCount} productos sin rotación.</p>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '1rem' }}>
-            <div style={{ minWidth: '40px', height: '40px', borderRadius: '10px', background: 'rgba(10,132,255,0.1)', color: 'var(--info)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ minWidth: '40px', height: '40px', borderRadius: 0, background: 'rgba(61, 127, 196,0.1)', color: 'var(--info)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <CheckCircle size={20} />
             </div>
             <div>
-              <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Efectividad de Flujo</div>
+              <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>Efectividad de Flujo</div>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>El ingreso real del periodo cubre tus gastos operativos con un saldo de <strong>${Math.round(stats.totalCashIn - stats.totalExpenses).toLocaleString('es-CO')}</strong>.</p>
             </div>
           </div>

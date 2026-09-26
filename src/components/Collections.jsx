@@ -2,28 +2,27 @@ import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, User, Phone, DollarSign, ChevronRight, Search, Filter, Calendar, MessageSquare, AlertCircle, X } from 'lucide-react';
 import { NumericFormat } from 'react-number-format';
+import { paidAmount, balanceOf, saleProductNames } from '../utils/sales';
 
 const Collections = ({ sales, onAddPayment, notify, confirm }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('all'); // all, critical (> 30 days?), high_value
 
   const debtors = useMemo(() => {
-    const list = sales.filter(s => {
-      const total = parseFloat(s.total) || 0;
-      const paid = (s.payments || []).reduce((acc, p) => acc + (parseFloat(p.amount) || 0), 0);
-      const hasBalance = total - paid > 0.01;
-      const matchesSearch = (s.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            (s.productName || '').toLowerCase().includes(searchTerm.toLowerCase());
-      return hasBalance && matchesSearch;
+    const term = searchTerm.toLowerCase();
+    const list = (sales || []).filter(s => {
+      const matchesSearch = (s.customerName || '').toLowerCase().includes(term) ||
+                            saleProductNames(s).toLowerCase().includes(term);
+      return balanceOf(s) > 0.01 && matchesSearch;
     });
 
     return list.map(s => {
       const total = parseFloat(s.total) || 0;
-      const paid = (s.payments || []).reduce((acc, p) => acc + (parseFloat(p.amount) || 0), 0);
       return {
         ...s,
-        balance: total - paid,
-        paidPercent: (paid / total) * 100
+        productName: s.productName || saleProductNames(s),
+        balance: balanceOf(s),
+        paidPercent: total > 0 ? (paidAmount(s) / total) * 100 : 0
       };
     }).sort((a, b) => b.balance - a.balance);
   }, [sales, searchTerm]);
@@ -43,9 +42,18 @@ const Collections = ({ sales, onAddPayment, notify, confirm }) => {
   const handleQuickPayment = (e) => {
     e.preventDefault();
     if (!selectedDebtor || !paymentAmount) return;
-    
+    const amount = parseFloat(paymentAmount);
+    if (!(amount > 0)) {
+      notify('El abono debe ser mayor a cero.', 'warning');
+      return;
+    }
+    if (amount - selectedDebtor.balance > 0.01) {
+      notify(`El abono supera el saldo pendiente ($${Math.round(selectedDebtor.balance).toLocaleString('es-CO')}).`, 'warning');
+      return;
+    }
+
     onAddPayment(selectedDebtor.id, {
-      amount: parseFloat(paymentAmount),
+      amount,
       date: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }),
       method: 'Efectivo',
       note: 'Abono desde Cartera'
@@ -53,7 +61,6 @@ const Collections = ({ sales, onAddPayment, notify, confirm }) => {
     
     setSelectedDebtor(null);
     setPaymentAmount('');
-    notify('Abono registrado con éxito.', 'success');
   };
 
   return (
@@ -67,13 +74,13 @@ const Collections = ({ sales, onAddPayment, notify, confirm }) => {
 
       <div className="stat-card-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
         <div className="premium-card" style={{ borderLeft: '4px solid var(--error)' }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Total por Cobrar</p>
-          <h3 style={{ fontSize: '1.8rem', fontWeight: 900, color: 'var(--error)' }}>${Math.round(stats.totalDue).toLocaleString('es-CO')}</h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Total por Cobrar</p>
+          <h3 style={{ fontSize: '1.8rem', fontWeight: 500, color: 'var(--error)' }}>${Math.round(stats.totalDue).toLocaleString('es-CO')}</h3>
           <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>{stats.count} clientes con deuda activa</p>
         </div>
         <div className="premium-card" style={{ borderLeft: '4px solid var(--warning)' }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Saldos Críticos</p>
-          <h3 style={{ fontSize: '1.8rem', fontWeight: 900, color: 'var(--warning)' }}>{stats.critical}</h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', marginBottom: '0.5rem' }}>Saldos Críticos</p>
+          <h3 style={{ fontSize: '1.8rem', fontWeight: 500, color: 'var(--warning)' }}>{stats.critical}</h3>
           <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Deudas mayores a $100.000</p>
         </div>
       </div>
@@ -113,14 +120,14 @@ const Collections = ({ sales, onAddPayment, notify, confirm }) => {
                 <tr key={d.id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
                   <td style={{ padding: '1.25rem 2rem' }}>
                     <span className="mobile-label">Cliente / Fecha</span>
-                    <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>{d.customerName}</div>
+                    <div style={{ fontWeight: 500, fontSize: '0.95rem' }}>{d.customerName}</div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                       <Calendar size={10} /> {d.date}
                     </div>
                   </td>
                   <td style={{ padding: '1.25rem 2rem' }}>
                     <span className="mobile-label">Concepto</span>
-                    <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{d.productName}</div>
+                    <div style={{ fontWeight: 500, fontSize: '0.85rem' }}>{d.productName}</div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Total Venta: ${Math.round(d.total).toLocaleString('es-CO')}</div>
                   </td>
                   <td style={{ padding: '1.25rem 2rem' }}>
@@ -129,14 +136,14 @@ const Collections = ({ sales, onAddPayment, notify, confirm }) => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', marginBottom: '0.3rem' }}>
                         <span>{Math.round(d.paidPercent)}% pagado</span>
                       </div>
-                      <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: 0, overflow: 'hidden' }}>
                         <div style={{ height: '100%', width: `${d.paidPercent}%`, background: d.paidPercent > 50 ? 'var(--success)' : 'var(--accent-primary)' }} />
                       </div>
                     </div>
                   </td>
                   <td style={{ padding: '1.25rem 2rem' }}>
                     <span className="mobile-label">Saldo Pendiente</span>
-                    <div style={{ fontWeight: 900, color: 'var(--error)', fontSize: '1.1rem' }}>
+                    <div style={{ fontWeight: 500, color: 'var(--error)', fontSize: '1.1rem' }}>
                       ${Math.round(d.balance).toLocaleString('es-CO')}
                     </div>
                   </td>
@@ -150,7 +157,7 @@ const Collections = ({ sales, onAddPayment, notify, confirm }) => {
                         ABONAR
                       </button>
                       <button 
-                        style={{ padding: '0.5rem', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', color: 'var(--text-muted)', border: 'none' }}
+                        style={{ padding: '0.5rem', borderRadius: 0, background: 'rgba(255,255,255,0.03)', color: 'var(--text-muted)', border: 'none' }}
                       >
                         <MessageSquare size={16} />
                       </button>
@@ -180,22 +187,22 @@ const Collections = ({ sales, onAddPayment, notify, confirm }) => {
                   <h3 style={{ color: 'var(--accent-primary)', fontSize: '1.5rem', marginBottom: '0.25rem' }}>REGISTRAR COBRO</h3>
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Gestión de Cartera - {selectedDebtor.date}</p>
                 </div>
-                <button onClick={() => setSelectedDebtor(null)} style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
+                <button onClick={() => setSelectedDebtor(null)} style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-main)', cursor: 'pointer', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} aria-label="Cerrar"><X size={16} /></button>
               </div>
 
-              <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: '12px', marginBottom: '2rem', border: '1px solid var(--glass-border)' }}>
+              <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: 0, marginBottom: '2rem', border: '1px solid var(--glass-border)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cliente:</span>
-                  <span style={{ fontWeight: 700 }}>{selectedDebtor.customerName}</span>
+                  <span style={{ fontWeight: 500 }}>{selectedDebtor.customerName}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Total Venta:</span>
-                  <span style={{ fontWeight: 700 }}>${Math.round(selectedDebtor.total).toLocaleString('es-CO')}</span>
+                  <span style={{ fontWeight: 500 }}>${Math.round(selectedDebtor.total).toLocaleString('es-CO')}</span>
                 </div>
                 <div style={{ height: '1px', background: 'var(--glass-border)', margin: '0.75rem 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--error)', fontWeight: 800 }}>SALDO PENDIENTE:</span>
-                  <span style={{ fontWeight: 900, color: 'var(--error)', fontSize: '1.25rem' }}>
+                  <span style={{ color: 'var(--error)', fontWeight: 500 }}>SALDO PENDIENTE:</span>
+                  <span style={{ fontWeight: 500, color: 'var(--error)', fontSize: '1.25rem' }}>
                     ${Math.round(selectedDebtor.balance).toLocaleString('es-CO')}
                   </span>
                 </div>
@@ -203,9 +210,9 @@ const Collections = ({ sales, onAddPayment, notify, confirm }) => {
 
               <form onSubmit={handleQuickPayment}>
                 <div style={{ marginBottom: '2rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.75rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Monto a Recibir (COP)</label>
+                  <label style={{ display: 'block', marginBottom: '0.75rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Monto a Recibir (COP)</label>
                   <div style={{ position: 'relative' }}>
-                    <div style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--accent-primary)', fontWeight: 800 }}>$</div>
+                    <div style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--accent-primary)', fontWeight: 500 }}>$</div>
                     <NumericFormat 
                       required 
                       autoFocus
@@ -214,14 +221,14 @@ const Collections = ({ sales, onAddPayment, notify, confirm }) => {
                       allowNegative={false} 
                       value={paymentAmount} 
                       onValueChange={(values) => setPaymentAmount(values.value)} 
-                      style={{ width: '100%', height: '60px', paddingLeft: '2.5rem', fontSize: '1.5rem', fontWeight: 900, borderRadius: '12px' }} 
+                      style={{ width: '100%', height: '60px', paddingLeft: '2.5rem', fontSize: '1.5rem', fontWeight: 500, borderRadius: 0 }} 
                       placeholder="0"
                     />
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem' }}>
                   <button type="button" onClick={() => setSelectedDebtor(null)} className="btn-secondary" style={{ flex: 1 }}>CANCELAR</button>
-                  <button type="submit" className="btn-primary" style={{ flex: 2, height: '55px', fontSize: '1rem', fontWeight: 800 }}>
+                  <button type="submit" className="btn-primary" style={{ flex: 2, height: '55px', fontSize: '1rem', fontWeight: 500 }}>
                     GUARDAR PAGO
                   </button>
                 </div>

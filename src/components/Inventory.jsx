@@ -124,12 +124,12 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
           <button 
             onClick={handleExportStockZero} 
             className="glass" 
-            style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.8rem 1.2rem', borderRadius: '12px', color: 'var(--error)', border: '1px solid rgba(255,69,58,0.2)', cursor: 'pointer', fontWeight: 600 }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.8rem 1.2rem', borderRadius: 0, color: 'var(--error)', border: '1px solid rgba(194, 65, 59,0.2)', cursor: 'pointer', fontWeight: 500 }}
           >
             <ClipboardList size={20} />
             <span style={{ fontSize: '0.85rem' }}>Reporte Faltantes (0-1)</span>
           </button>
-          <button onClick={exportData} className="glass" style={{ padding: '0.8rem', borderRadius: '12px', color: 'var(--text-secondary)', border: 'none', cursor: 'pointer' }}>
+          <button onClick={exportData} className="glass" style={{ padding: '0.8rem', borderRadius: 0, color: 'var(--text-secondary)', border: 'none', cursor: 'pointer' }}>
             <Download size={20} />
           </button>
           <button 
@@ -158,23 +158,23 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
             <h4 style={{ marginBottom: '1.5rem', color: 'var(--accent-primary)' }}>{editingId ? 'EDITAR PRODUCTO' : 'CREAR NUEVO PRODUCTO'}</h4>
             <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.5rem', alignItems: 'flex-end' }}>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>NOMBRE</label>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>NOMBRE</label>
                 <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nombre del producto" style={{ width: '100%' }} />
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>CATEGORÍA</label>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>CATEGORÍA</label>
                 <input required type="text" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="Categoría" style={{ width: '100%' }} />
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>P. VENTA (COP)</label>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>P. VENTA (COP)</label>
                 <NumericFormat required value={formData.price} onValueChange={(values) => setFormData({...formData, price: values.value})} thousandSeparator="." decimalSeparator="," placeholder="0" style={{ width: '100%' }} />
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>P. COSTO (COP)</label>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>P. COSTO (COP)</label>
                 <NumericFormat required value={formData.costPrice} onValueChange={(values) => setFormData({...formData, costPrice: values.value})} thousandSeparator="." decimalSeparator="," placeholder="0" style={{ width: '100%' }} />
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>STOCK INICIAL</label>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>STOCK INICIAL</label>
                 <NumericFormat required value={formData.stock} onValueChange={(values) => setFormData({...formData, stock: values.value})} thousandSeparator="." decimalSeparator="," style={{ width: '100%' }} />
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -196,10 +196,10 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
               placeholder="Buscar por nombre, categoría..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              style={{ width: '100%', paddingLeft: '3rem', borderRadius: '12px' }}
+              style={{ width: '100%', paddingLeft: '3rem', borderRadius: 0 }}
             />
           </div>
-          <button className="glass" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1.2rem', borderRadius: '12px', color: 'var(--text-secondary)', fontWeight: 600, border: 'none', cursor: 'pointer' }}>
+          <button className="glass" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1.2rem', borderRadius: 0, color: 'var(--text-secondary)', fontWeight: 500, border: 'none', cursor: 'pointer' }}>
             <Filter size={16} />
             Filtrar
           </button>
@@ -233,10 +233,10 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <span className="mobile-label">Producto</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                        <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(226, 176, 76, 0.08)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'var(--accent-primary)', fontWeight: 800, fontSize: '0.9rem' }}>
+                        <div style={{ width: '36px', height: '36px', borderRadius: 0, background: 'rgba(201, 169, 97, 0.08)', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'var(--accent-primary)', fontWeight: 500, fontSize: '0.9rem' }}>
                           {String(product.name || 'P').charAt(0).toUpperCase()}
                         </div>
-                        <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{product.name}</span>
+                        <span style={{ fontWeight: 500, fontSize: '0.95rem' }}>{product.name}</span>
                       </div>
                     </td>
                     <td style={{ padding: '1.25rem 2rem' }}>
@@ -246,33 +246,32 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <span className="mobile-label">Stock</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: product.stock < 2 ? 'var(--error)' : 'var(--success)', boxShadow: `0 0 10px ${product.stock < 2 ? 'var(--error)' : 'var(--success)'}` }} />
-                        <span style={{ fontWeight: 700, color: product.stock < 2 ? 'var(--error)' : 'var(--success)', fontSize: '0.9rem' }}>{product.stock}</span>
+                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: product.stock < 2 ? 'var(--error)' : 'var(--success)' }} />
+                        <span style={{ fontWeight: 500, color: product.stock < 2 ? 'var(--error)' : 'var(--success)', fontSize: '0.9rem' }}>{product.stock}</span>
                       </div>
                     </td>
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <span className="mobile-label">Ganancia Est.</span>
-                      <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--success)' }}>+${Math.round(profit).toLocaleString('es-CO')}</div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--success)' }}>+${Math.round(profit).toLocaleString('es-CO')}</div>
                       <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>M: {margin.toFixed(1)}%</div>
                     </td>
-                    <td style={{ padding: '1.25rem 2rem', fontWeight: 800 }}>
+                    <td style={{ padding: '1.25rem 2rem', fontWeight: 500 }}>
                       <span className="mobile-label">P. Venta</span>
                       ${Math.round(product.price).toLocaleString('es-CO')}
                     </td>
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button onClick={() => setSelectedDetail(product)} style={{ padding: '0.5rem', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', color: 'var(--info)', border: 'none', cursor: 'pointer' }}>
+                        <button onClick={() => setSelectedDetail(product)} className="btn-icon">
                           <Eye size={16} />
                         </button>
-                        <button onClick={() => handleEdit(product)} style={{ padding: '0.5rem', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', color: 'var(--text-muted)', border: 'none', cursor: 'pointer' }}>
+                        <button onClick={() => handleEdit(product)} className="btn-icon">
                           <Edit2 size={16} />
                         </button>
                         <button 
                           onClick={() => confirm(`¿Estás seguro de eliminar "${product.name}"? Esta acción no se puede deshacer.`, () => {
                             deleteProduct(product.id);
-                            notify('Producto eliminado correctamente.', 'info');
                           })}
-                          style={{ padding: '0.5rem', borderRadius: '8px', background: 'rgba(255,69,58,0.08)', color: 'var(--error)', border: 'none', cursor: 'pointer' }}
+                          className="btn-icon danger" title="Eliminar" aria-label="Eliminar"
                         >
                           <Trash2 size={16} />
                         </button>

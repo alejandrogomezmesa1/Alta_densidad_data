@@ -97,10 +97,10 @@ const Clients = ({ customers, sales, updateCustomer, deleteCustomer, notify, con
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <div style={{ 
-                  width: '50px', height: '50px', borderRadius: '15px', 
-                  background: 'rgba(226, 176, 76, 0.1)', color: 'var(--accent-primary)',
+                  width: '50px', height: '50px', borderRadius: 0, 
+                  background: 'rgba(201, 169, 97, 0.1)', color: 'var(--accent-primary)',
                   display: 'flex', justifyContent: 'center', alignItems: 'center',
-                  fontSize: '1.2rem', fontWeight: 800
+                  fontSize: '1.2rem', fontWeight: 500
                 }}>
                   {client.nombre.charAt(0).toUpperCase()}
                 </div>
@@ -116,13 +116,13 @@ const Clients = ({ customers, sales, updateCustomer, deleteCustomer, notify, con
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
-              <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+              <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: 0, border: '1px solid var(--glass-border)' }}>
                 <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Total Compras</div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--success)' }}>${Math.round(client.totalSpent).toLocaleString('es-CO')}</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 500, color: 'var(--success)' }}>${Math.round(client.totalSpent).toLocaleString('es-CO')}</div>
               </div>
-              <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+              <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: 0, border: '1px solid var(--glass-border)' }}>
                 <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Frecuencia</div>
-                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-primary)' }}>{client.salesCount} <span style={{ fontSize: '0.7rem', fontWeight: 400 }}>pedidos</span></div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 500, color: 'var(--accent-primary)' }}>{client.salesCount} <span style={{ fontSize: '0.7rem', fontWeight: 400 }}>pedidos</span></div>
               </div>
             </div>
 
@@ -138,7 +138,7 @@ const Clients = ({ customers, sales, updateCustomer, deleteCustomer, notify, con
                 style={{ 
                     width: '100%', marginTop: '1.5rem', padding: '0.75rem', 
                     background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)',
-                    borderRadius: '10px', color: '#fff', fontSize: '0.8rem', fontWeight: 600,
+                    borderRadius: 0, color: 'var(--text-main)', fontSize: '0.8rem', fontWeight: 500,
                     cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem'
                 }}
             >
@@ -154,7 +154,7 @@ const Clients = ({ customers, sales, updateCustomer, deleteCustomer, notify, con
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="premium-card" style={{ maxWidth: '450px', width: '90%' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem' }}>
                 <h3 style={{ color: 'var(--accent-primary)' }}>Editar Cliente</h3>
-                <button onClick={() => setIsEditing(null)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}><X size={20} /></button>
+                <button onClick={() => setIsEditing(null)} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer' }}><X size={20} /></button>
               </div>
               <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 <div>
@@ -193,23 +193,23 @@ const Clients = ({ customers, sales, updateCustomer, deleteCustomer, notify, con
                     <h3 style={{ margin: 0, color: 'var(--accent-primary)' }}>Historial: {selectedClient.nombre}</h3>
                     <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>Resumen de actividad comercial</p>
                 </div>
-                <button onClick={() => setSelectedClient(null)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}><X size={24} /></button>
+                <button onClick={() => setSelectedClient(null)} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer' }}><X size={24} /></button>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
-                <div className="glass" style={{ padding: '1rem', borderRadius: '12px', textAlign: 'center' }}>
+                <div className="glass" style={{ padding: '1rem', borderRadius: 0, textAlign: 'center' }}>
                     <DollarSign size={20} color="var(--success)" style={{ marginBottom: '0.5rem' }} />
-                    <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>${Math.round(selectedClient.totalSpent).toLocaleString('es-CO')}</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 500 }}>${Math.round(selectedClient.totalSpent).toLocaleString('es-CO')}</div>
                     <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Invertido</div>
                 </div>
-                <div className="glass" style={{ padding: '1rem', borderRadius: '12px', textAlign: 'center' }}>
+                <div className="glass" style={{ padding: '1rem', borderRadius: 0, textAlign: 'center' }}>
                     <ShoppingBag size={20} color="var(--accent-primary)" style={{ marginBottom: '0.5rem' }} />
-                    <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{selectedClient.salesCount}</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 500 }}>{selectedClient.salesCount}</div>
                     <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Compras</div>
                 </div>
-                <div className="glass" style={{ padding: '1rem', borderRadius: '12px', textAlign: 'center' }}>
+                <div className="glass" style={{ padding: '1rem', borderRadius: 0, textAlign: 'center' }}>
                     <Calendar size={20} color="var(--info)" style={{ marginBottom: '0.5rem' }} />
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{selectedClient.lastPurchase}</div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>{selectedClient.lastPurchase}</div>
                     <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Última vez</div>
                 </div>
               </div>
@@ -217,13 +217,13 @@ const Clients = ({ customers, sales, updateCustomer, deleteCustomer, notify, con
               <h4 style={{ fontSize: '0.9rem', marginBottom: '1rem', color: 'var(--text-secondary)' }}>FACTURAS RECIENTES</h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 {(sales || []).filter(s => s.customerId === selectedClient.id).map(sale => (
-                  <div key={sale.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                  <div key={sale.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: 0, border: '1px solid var(--glass-border)' }}>
                     <div>
-                        <div style={{ fontWeight: 700 }}>Factura #{sale.id}</div>
+                        <div style={{ fontWeight: 500 }}>Factura #{sale.id}</div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{sale.date} • {sale.method}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontWeight: 800, color: 'var(--accent-primary)' }}>${Math.round(sale.total).toLocaleString('es-CO')}</div>
+                        <div style={{ fontWeight: 500, color: 'var(--accent-primary)' }}>${Math.round(sale.total).toLocaleString('es-CO')}</div>
                         <div style={{ fontSize: '0.7rem', color: sale.status === 'paid' ? 'var(--success)' : 'var(--warning)' }}>{sale.status === 'paid' ? 'PAGADO' : 'PENDIENTE'}</div>
                     </div>
                   </div>

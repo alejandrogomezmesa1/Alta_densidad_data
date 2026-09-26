@@ -5,6 +5,7 @@ import DetailModal from './DetailModal';
 import { NumericFormat } from 'react-number-format';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { paidAmount, balanceOf } from '../utils/sales';
 
 const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, onUpdate, onAddPayment, notify, confirm, suppliers = [], mostFrequentSupplierId }) => {
   const [isAdding, setIsAdding] = useState(false);
@@ -218,7 +219,7 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
     let loadedCart = [];
     if (item.items && item.items.length > 0) {
       loadedCart = item.items.map(i => ({
-        productId: String(i.productId),
+        productId: i.productId ? String(i.productId) : '',
         productName: i.productName,
         quantity: String(i.quantity),
         unitPrice: String(i.unitPrice),
@@ -275,15 +276,25 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
   const handleAddPayment = (e) => {
     e.preventDefault();
     if (!selectedSale || !paymentAmount) return;
-    onAddPayment(selectedSale.id, { amount: parseFloat(paymentAmount), date: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }), method: 'Efectivo' });
+    const amount = parseFloat(paymentAmount);
+    const saldo = balanceOf(selectedSale);
+    if (!(amount > 0)) {
+      notify?.('El abono debe ser mayor a cero.', 'warning');
+      return;
+    }
+    if (amount - saldo > 0.01) {
+      notify?.(`El abono supera el saldo pendiente ($${Math.round(saldo).toLocaleString('es-CO')}).`, 'warning');
+      return;
+    }
+    onAddPayment(selectedSale.id, { amount, date: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }), method: 'Efectivo' });
     setSelectedSale(null);
     setPaymentAmount('');
   };
 
   const handlePrintReceipt = (item) => {
-    const paid = (item.payments || []).reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+    const paid = paidAmount(item);
     const total = parseFloat(item.total || item.amount || 0);
-    const balance = total - paid;
+    const balance = balanceOf(item);
 
     // Create PDF with ticket-like dimensions (80mm width is common for thermal printers)
     // For standard PDF viewers, we'll use a larger width but keep the ticket layout
@@ -418,7 +429,7 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                     </div>
                     <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
                       <div style={{ flex: 1 }}>
-                        <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>SELECCIONAR CLIENTE</label>
+                        <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>SELECCIONAR CLIENTE</label>
                         <select 
                           value={formData.customerId || 'NEW'} 
                           onChange={(e) => {
@@ -448,23 +459,23 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                       </div>
                     </div>
                     <div>
-                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>NOMBRE (Obligatorio)</label>
+                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>NOMBRE (Obligatorio)</label>
                       <input required type="text" readOnly={!!formData.customerId} value={formData.customerName} onChange={e => setFormData({...formData, customerName: e.target.value})} placeholder="Nombre del cliente" style={{ width: '100%', opacity: formData.customerId ? 0.7 : 1 }} />
                     </div>
                     <div>
-                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>CÉDULA / NIT</label>
+                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>CÉDULA / NIT</label>
                       <input type="text" readOnly={!!formData.customerId} value={formData.idDocument} onChange={e => setFormData({...formData, idDocument: e.target.value})} placeholder="Opcional" style={{ width: '100%', opacity: formData.customerId ? 0.7 : 1 }} />
                     </div>
                     <div>
-                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>TELÉFONO</label>
+                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>TELÉFONO</label>
                       <input type="text" readOnly={!!formData.customerId} value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="Opcional" style={{ width: '100%', opacity: formData.customerId ? 0.7 : 1 }} />
                     </div>
                     <div>
-                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>CIUDAD / MUNICIPIO</label>
+                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>CIUDAD / MUNICIPIO</label>
                       <input type="text" readOnly={!!formData.customerId} value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} placeholder="Opcional" style={{ width: '100%', opacity: formData.customerId ? 0.7 : 1 }} />
                     </div>
                     <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>DIRECCIÓN</label>
+                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>DIRECCIÓN</label>
                       <input type="text" readOnly={!!formData.customerId} value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Opcional" style={{ width: '100%', opacity: formData.customerId ? 0.7 : 1 }} />
                     </div>
                     <div style={{ gridColumn: '1 / -1', height: '1px', background: 'var(--glass-border)', margin: '1rem 0' }} />
@@ -472,7 +483,7 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                 )}
                 {type === 'purchases' && (
                   <div>
-                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>PROVEEDOR</label>
+                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>PROVEEDOR</label>
                     <select value={formData.supplierId} onChange={e => setFormData({...formData, supplierId: e.target.value})} style={{ width: '100%', height: '45px' }}>
                       <option value="">Seleccionar Proveedor...</option>
                       {supplierList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -481,17 +492,17 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                 )}
                 {type === 'expenses' && (
                   <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>DESCRIPCIÓN</label>
+                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>DESCRIPCIÓN</label>
                     <input required type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} style={{ width: '100%' }} />
                   </div>
                 )}
                 <div>
-                  <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>FECHA</label>
+                  <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>FECHA</label>
                   <input required type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} style={{ width: '100%' }} />
                 </div>
                 {type === 'sales' && (
                   <div>
-                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>MÉTODO DE PAGO</label>
+                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>MÉTODO DE PAGO</label>
                     <select required value={formData.method} onChange={e => setFormData({...formData, method: e.target.value})} style={{ width: '100%', height: '45px' }}>
                       <option value="Efectivo">Efectivo</option>
                       <option value="Transferencia">Transferencia</option>
@@ -502,7 +513,7 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
 
               {/* Cart Section for Sales */}
               {type === 'sales' && (
-                <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: 0, border: '1px solid rgba(255,255,255,0.05)' }}>
                   <h5 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Añadir Productos</h5>
                   <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                     <div style={{ flex: 2, minWidth: '200px' }}>
@@ -520,14 +531,14 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                       <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>P. UNITARIO</label>
                       <NumericFormat thousandSeparator="." decimalSeparator="," allowNegative={false} value={currentItem.unitPrice} onValueChange={(values) => setCurrentItem({...currentItem, unitPrice: values.value})} style={{ width: '100%' }} />
                     </div>
-                    <button type="button" onClick={addToCart} style={{ height: '45px', padding: '0 1.5rem', background: 'var(--glass-bg)', color: 'var(--accent-primary)', border: '1px solid var(--accent-primary)', borderRadius: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                    <button type="button" onClick={addToCart} style={{ height: '45px', padding: '0 1.5rem', background: 'var(--glass-bg)', color: 'var(--accent-primary)', border: '1px solid var(--accent-primary)', borderRadius: 0, fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                       <ListPlus size={18} /> Añadir
                     </button>
                   </div>
 
                   {/* Cart Items Table */}
                   {cart.length > 0 && (
-                    <div className="table-responsive-wrapper" style={{ marginTop: '1.5rem', background: 'var(--bg-main)', borderRadius: '12px' }}>
+                    <div className="table-responsive-wrapper" style={{ marginTop: '1.5rem', background: 'var(--bg-main)', borderRadius: 0 }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                           <tr style={{ background: 'rgba(255,255,255,0.02)', textAlign: 'left' }}>
@@ -541,10 +552,10 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                         <tbody>
                           {cart.map((item, idx) => (
                             <tr key={idx} style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                              <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{item.productName}</td>
+                              <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{item.productName}</td>
                               <td style={{ padding: '0.75rem 1rem' }}>{item.quantity}</td>
                               <td style={{ padding: '0.75rem 1rem' }}>${Math.round(item.unitPrice).toLocaleString('es-CO')}</td>
-                              <td style={{ padding: '0.75rem 1rem', color: 'var(--accent-primary)', fontWeight: 700 }}>${Math.round(item.quantity * item.unitPrice).toLocaleString('es-CO')}</td>
+                              <td style={{ padding: '0.75rem 1rem', color: 'var(--accent-primary)', fontWeight: 500 }}>${Math.round(item.quantity * item.unitPrice).toLocaleString('es-CO')}</td>
                               <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
                                 <button type="button" onClick={() => removeFromCart(idx)} style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer' }}><Trash2 size={16} /></button>
                               </td>
@@ -559,42 +570,42 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
 
               {/* Single Product Section for Purchases */}
               {type === 'purchases' && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: 0, border: '1px solid rgba(255,255,255,0.05)' }}>
                   <div>
-                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>PRODUCTO A COMPRAR</label>
+                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>PRODUCTO A COMPRAR</label>
                     <select required value={currentItem.productId} onChange={e => setCurrentItem({...currentItem, productId: e.target.value})} style={{ width: '100%', height: '45px' }}>
                       <option value="">Seleccionar Producto...</option>
                       {productList.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>CANTIDAD</label>
+                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>CANTIDAD</label>
                     <NumericFormat required thousandSeparator="." decimalSeparator="," allowNegative={false} value={currentItem.quantity} onValueChange={(values) => setCurrentItem({...currentItem, quantity: values.value})} style={{ width: '100%' }} />
                   </div>
                   <div>
-                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>PRECIO UNITARIO</label>
+                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>PRECIO UNITARIO</label>
                     <NumericFormat required thousandSeparator="." decimalSeparator="," allowNegative={false} value={currentItem.unitPrice} onValueChange={(values) => setCurrentItem({...currentItem, unitPrice: values.value})} style={{ width: '100%' }} />
                   </div>
                 </div>
               )}
 
               {/* Totals & Payments */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '2rem', background: 'rgba(226, 176, 76, 0.05)', padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(226, 176, 76, 0.1)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '2rem', background: 'rgba(201, 169, 97, 0.05)', padding: '1.5rem', borderRadius: 0, border: '1px solid rgba(201, 169, 97, 0.1)' }}>
                 {type === 'expenses' ? (
                   <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>MONTO TOTAL</label>
-                    <NumericFormat required thousandSeparator="." decimalSeparator="," allowNegative={false} value={formData.amount} onValueChange={(values) => setFormData({...formData, amount: values.value})} style={{ width: '100%', maxWidth: '300px', fontSize: '1.5rem', fontWeight: 800, color: 'var(--error)' }} />
+                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>MONTO TOTAL</label>
+                    <NumericFormat required thousandSeparator="." decimalSeparator="," allowNegative={false} value={formData.amount} onValueChange={(values) => setFormData({...formData, amount: values.value})} style={{ width: '100%', maxWidth: '300px', fontSize: '1.5rem', fontWeight: 500, color: 'var(--error)' }} />
                   </div>
                 ) : (
                   <div>
-                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 800, display: 'block', marginBottom: '0.5rem' }}>Total a Pagar</span>
-                    <span style={{ fontSize: '2.5rem', fontWeight: 900, color: 'var(--accent-primary)' }}>${Math.round(calculatedTotal).toLocaleString('es-CO')}</span>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 500, display: 'block', marginBottom: '0.5rem' }}>Total a Pagar</span>
+                    <span style={{ fontSize: '2.5rem', fontWeight: 500, color: 'var(--accent-primary)' }}>${Math.round(calculatedTotal).toLocaleString('es-CO')}</span>
                   </div>
                 )}
 
                 {type === 'sales' && (
                   <div style={{ flex: 1, minWidth: '200px' }}>
-                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)' }}>ABONO INICIAL (Opcional)</label>
+                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>ABONO INICIAL (Opcional)</label>
                     <NumericFormat thousandSeparator="." decimalSeparator="," allowNegative={false} value={formData.initialPayment} onValueChange={(values) => setFormData({...formData, initialPayment: values.value})} placeholder="Ej. 50000" style={{ width: '100%' }} />
                   </div>
                 )}
@@ -636,8 +647,7 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
               {filteredData.map((item) => {
                 const supplier = supplierList.find(s => s.id === item.supplierId || s.id == item.supplierId);
                 const total = parseFloat(item.total || item.amount || 0);
-                const paid = (item.payments || []).reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
-                const balance = total - paid;
+                const balance = type === 'sales' ? balanceOf(item) : 0;
 
                 let saleCost = 0;
                 if (type === 'sales') {
@@ -651,11 +661,11 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                 
                 let conceptHtml = null;
                 if (type === 'expenses') {
-                  conceptHtml = <div style={{ fontWeight: 700 }}>{item.description}</div>;
+                  conceptHtml = <div style={{ fontWeight: 500 }}>{item.description}</div>;
                 } else if (item.items && item.items.length > 0) {
                   conceptHtml = (
                     <div>
-                      <div style={{ fontWeight: 700 }}>{item.items.length} producto(s)</div>
+                      <div style={{ fontWeight: 500 }}>{item.items.length} producto(s)</div>
                       <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.items.map(i => i.productName).join(', ').substring(0, 40)}...</div>
                     </div>
                   );
@@ -664,7 +674,7 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                   const pName = product?.name || item.productName || 'Desconocido';
                   conceptHtml = (
                     <div>
-                      <div style={{ fontWeight: 700 }}>{pName}</div>
+                      <div style={{ fontWeight: 500 }}>{pName}</div>
                       {supplier && <div style={{ fontSize: '0.7rem', color: 'var(--accent-primary)' }}>Prov: {supplier.name}</div>}
                       {item.quantity && <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Cant: {item.quantity}</div>}
                     </div>
@@ -676,7 +686,7 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <span className="mobile-label">Fecha / Cliente</span>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.date}</div>
-                      <div style={{ fontWeight: 700 }}>{item.customerName || (type === 'purchases' ? 'Compra' : 'General')}</div>
+                      <div style={{ fontWeight: 500 }}>{item.customerName || (type === 'purchases' ? 'Compra' : 'General')}</div>
                     </td>
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <span className="mobile-label">Concepto</span>
@@ -688,10 +698,10 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <span className="mobile-label">Estado</span>
                       {type === 'sales' ? (
-                        <span style={{ fontSize: '0.7rem', fontWeight: 800, color: item.status === 'paid' ? 'var(--success)' : 'var(--warning)' }}>{item.status === 'paid' ? 'PAGADA' : 'PENDIENTE'}</span>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 500, color: item.status === 'paid' ? 'var(--success)' : 'var(--warning)' }}>{item.status === 'paid' ? 'PAGADA' : 'PENDIENTE'}</span>
                       ) : <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>CONTADO</span>}
                     </td>
-                    <td style={{ padding: '1.25rem 2rem', fontWeight: 800 }}>
+                    <td style={{ padding: '1.25rem 2rem', fontWeight: 500 }}>
                       <span className="mobile-label">Total</span>
                       ${Math.round(total).toLocaleString('es-CO')}
                       {type === 'sales' && (
@@ -702,11 +712,11 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                     </td>
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button onClick={() => setSelectedDetail(item)} style={{ background: 'var(--info)', color: 'white', border: 'none', padding: '0.4rem', borderRadius: '6px', cursor: 'pointer' }} title="Ver Detalles"><Eye size={14} /></button>
-                        <button onClick={() => handleEdit(item)} style={{ background: 'var(--accent-primary)', color: 'white', border: 'none', padding: '0.4rem', borderRadius: '6px', cursor: 'pointer' }}><Edit2 size={14} /></button>
-                        <button onClick={() => confirm('¿Eliminar registro?', () => onDelete(item.id))} style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', padding: '0.4rem', borderRadius: '6px', cursor: 'pointer' }}><Trash2 size={14} /></button>
-                        {type === 'sales' && <button onClick={() => handlePrintReceipt(item)} style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', border: 'none', padding: '0.4rem', borderRadius: '6px', cursor: 'pointer' }}><Printer size={14} /></button>}
-                        {type === 'sales' && balance > 0 && <button onClick={() => setSelectedSale(item)} style={{ background: 'var(--glass-bg)', color: 'var(--accent-primary)', border: '1px solid var(--accent-primary)', padding: '0.4rem 0.8rem', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}>ABONAR</button>}
+                        <button className="btn-icon" onClick={() => setSelectedDetail(item)} title="Ver detalle" aria-label="Ver detalle"><Eye size={14} /></button>
+                        <button className="btn-icon" onClick={() => handleEdit(item)} title="Editar" aria-label="Editar"><Edit2 size={14} /></button>
+                        <button className="btn-icon danger" onClick={() => confirm('¿Eliminar registro?', () => onDelete(item.id))} title="Eliminar" aria-label="Eliminar"><Trash2 size={14} /></button>
+                        {type === 'sales' && <button className="btn-icon" onClick={() => handlePrintReceipt(item)} title="Imprimir recibo" aria-label="Imprimir recibo"><Printer size={14} /></button>}
+                        {type === 'sales' && balance > 0 && <button className="btn-secondary" onClick={() => setSelectedSale(item)} style={{ minHeight: 34, color: 'var(--accent-primary)', borderColor: 'var(--accent-primary)' }}>Abonar</button>}
                       </div>
                     </td>
                   </motion.tr>
@@ -726,26 +736,26 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                   <h3 style={{ color: 'var(--accent-primary)', fontSize: '1.5rem', marginBottom: '0.25rem' }}>REGISTRAR ABONO</h3>
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Venta #{String(selectedSale.id).padStart(6, '0')}</p>
                 </div>
-                <button onClick={() => setSelectedSale(null)} style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
+                <button onClick={() => setSelectedSale(null)} style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-main)', cursor: 'pointer', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} aria-label="Cerrar"><X size={16} /></button>
               </div>
 
-              <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: '12px', marginBottom: '2rem', border: '1px solid var(--glass-border)' }}>
+              <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: 0, marginBottom: '2rem', border: '1px solid var(--glass-border)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cliente:</span>
-                  <span style={{ fontWeight: 700 }}>{selectedSale.customerName || 'General'}</span>
+                  <span style={{ fontWeight: 500 }}>{selectedSale.customerName || 'General'}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Total Venta:</span>
-                  <span style={{ fontWeight: 700 }}>${Math.round(selectedSale.total).toLocaleString('es-CO')}</span>
+                  <span style={{ fontWeight: 500 }}>${Math.round(selectedSale.total).toLocaleString('es-CO')}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Pagado:</span>
-                  <span style={{ fontWeight: 700, color: 'var(--success)' }}>${Math.round((selectedSale.payments || []).reduce((acc, p) => acc + parseFloat(p.amount), 0)).toLocaleString('es-CO')}</span>
+                  <span style={{ fontWeight: 500, color: 'var(--success)' }}>${Math.round((selectedSale.payments || []).reduce((acc, p) => acc + parseFloat(p.amount), 0)).toLocaleString('es-CO')}</span>
                 </div>
                 <div style={{ height: '1px', background: 'var(--glass-border)', margin: '0.75rem 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--accent-primary)', fontWeight: 800 }}>SALDO PENDIENTE:</span>
-                  <span style={{ fontWeight: 900, color: 'var(--accent-primary)', fontSize: '1.25rem' }}>
+                  <span style={{ color: 'var(--accent-primary)', fontWeight: 500 }}>SALDO PENDIENTE:</span>
+                  <span style={{ fontWeight: 500, color: 'var(--accent-primary)', fontSize: '1.25rem' }}>
                     ${Math.round(selectedSale.total - (selectedSale.payments || []).reduce((acc, p) => acc + parseFloat(p.amount), 0)).toLocaleString('es-CO')}
                   </span>
                 </div>
@@ -753,9 +763,9 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
 
               <form onSubmit={handleAddPayment}>
                 <div style={{ marginBottom: '2rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.75rem', fontSize: '0.75rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Monto del Abono (COP)</label>
+                  <label style={{ display: 'block', marginBottom: '0.75rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Monto del Abono (COP)</label>
                   <div style={{ position: 'relative' }}>
-                    <div style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--accent-primary)', fontWeight: 800 }}>$</div>
+                    <div style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--accent-primary)', fontWeight: 500 }}>$</div>
                     <NumericFormat 
                       required 
                       autoFocus
@@ -764,12 +774,12 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                       allowNegative={false} 
                       value={paymentAmount} 
                       onValueChange={(values) => setPaymentAmount(values.value)} 
-                      style={{ width: '100%', height: '60px', paddingLeft: '2.5rem', fontSize: '1.5rem', fontWeight: 900, borderRadius: '12px' }} 
+                      style={{ width: '100%', height: '60px', paddingLeft: '2.5rem', fontSize: '1.5rem', fontWeight: 500, borderRadius: 0 }} 
                       placeholder="0"
                     />
                   </div>
                 </div>
-                <button type="submit" className="btn-primary" style={{ width: '100%', height: '55px', fontSize: '1rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
+                <button type="submit" className="btn-primary" style={{ width: '100%', height: '55px', fontSize: '1rem', fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
                   <CheckCircle2 size={20} /> CONFIRMAR ABONO
                 </button>
               </form>

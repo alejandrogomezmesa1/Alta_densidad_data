@@ -3,10 +3,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Wallet, ArrowDownCircle, ArrowUpCircle, Calculator, CheckCircle, Save, History, DollarSign, Trash2, X } from 'lucide-react';
 import { api } from '../services/api';
 
+// Montos con signo correcto: "+$1.000" / "-$1.000" (antes salía "+$-1.000")
+const conSigno = (v) => `${v < 0 ? '-' : '+'}$${Math.abs(Math.round(Number(v) || 0)).toLocaleString('es-CO')}`;
+const monto = (v) => `${v < 0 ? '-' : ''}$${Math.abs(Math.round(Number(v) || 0)).toLocaleString('es-CO')}`;
+const colorSigno = (v) => (v < 0 ? 'var(--error)' : 'var(--success)');
+
 const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
   const [closingHistory, setClosingHistory] = useState([]);
   const [selectedHistory, setSelectedHistory] = useState(null);
-  const [closedIds, setClosedIds] = useState(() => {
+  // Marca local heredada (versiones anteriores solo guardaban el cierre en este navegador)
+  const [localIds, setLocalIds] = useState(() => {
     try {
       const stored = localStorage.getItem('alta_densidad_closed_ids');
       return stored ? JSON.parse(stored) : { payment: 0, expense: 0, purchase: 0 };
@@ -41,6 +47,20 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
 
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
 
+  // Hasta dónde llegó el último cierre: se toma del servidor (compartido entre equipos)
+  const closedIds = useMemo(() => {
+    const fromServer = closingHistory.reduce((acc, h) => ({
+      payment: Math.max(acc.payment, Number(h.lastPaymentId) || 0),
+      expense: Math.max(acc.expense, Number(h.lastExpenseId) || 0),
+      purchase: Math.max(acc.purchase, Number(h.lastPurchaseId) || 0)
+    }), { payment: 0, expense: 0, purchase: 0 });
+    return {
+      payment: Math.max(fromServer.payment, Number(localIds.payment) || 0),
+      expense: Math.max(fromServer.expense, Number(localIds.expense) || 0),
+      purchase: Math.max(fromServer.purchase, Number(localIds.purchase) || 0)
+    };
+  }, [closingHistory, localIds]);
+
   const dailyStats = useMemo(() => {
     // Safely handle inputs
     const salesArr = Array.isArray(sales) ? sales : [];
@@ -67,7 +87,12 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
     let currentMaxPaymentId = closedIds.payment;
 
     salesArr.forEach(s => {
-      const paymentsThisSession = (s.payments || []).filter(p => p.id > closedIds.payment);
+      // Sin marca de cierre conocida, solo se cuentan los abonos de hoy (nunca toda la historia)
+      const paymentsThisSession = (s.payments || []).filter(p => {
+        if (!(p.id > closedIds.payment)) return false;
+        if (closedIds.payment > 0) return true;
+        return (p.date ? p.date.split(/T| /)[0] : '') === today;
+      });
       if (paymentsThisSession.length > 0) {
         const paidThisSession = paymentsThisSession.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
         cashSales += paidThisSession;
@@ -174,13 +199,16 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
         purchasesTotal: dailyStats.purchasesTotal,
         expensesTotal: dailyStats.expensesTotal,
         profit: dailyStats.profit,
-        notes: JSON.stringify(dailyStats.movements)
+        notes: JSON.stringify(dailyStats.movements),
+        lastPaymentId: dailyStats.newClosedIds.payment,
+        lastExpenseId: dailyStats.newClosedIds.expense,
+        lastPurchaseId: dailyStats.newClosedIds.purchase
       };
       
       try {
         await api.post('/cash-closings', newClosing);
 
-        setClosedIds(dailyStats.newClosedIds);
+        setLocalIds(dailyStats.newClosedIds);
         localStorage.setItem('alta_densidad_closed_ids', JSON.stringify(dailyStats.newClosedIds));
         // Clean up old corrupt id
         localStorage.removeItem('alta_densidad_last_closing_id');
@@ -219,10 +247,10 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
         <div>
           <div className="premium-card" style={{ marginBottom: '2rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2.5rem' }}>
-              <div style={{ padding: '0.75rem', borderRadius: '12px', background: 'rgba(226, 176, 76, 0.1)', color: 'var(--accent-primary)' }}>
+              <div style={{ padding: '0.75rem', borderRadius: 0, background: 'rgba(201, 169, 97, 0.1)', color: 'var(--accent-primary)' }}>
                 <Calculator size={24} />
               </div>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>RESUMEN DE HOY</h3>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 500 }}>RESUMEN DE HOY</h3>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
@@ -231,7 +259,7 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
                   <ArrowUpCircle size={16} color="var(--success)" />
                   Ingresos Efectivo (Ventas/Abonos)
                 </div>
-                <div style={{ fontWeight: 800, color: 'var(--success)' }}>+${dailyStats.cashIn.toLocaleString('es-CO')}</div>
+                <div style={{ fontWeight: 500, color: 'var(--success)' }}>+${dailyStats.cashIn.toLocaleString('es-CO')}</div>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -239,19 +267,19 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
                   <ArrowDownCircle size={16} color="var(--error)" />
                   Egresos (Gastos y Compras)
                 </div>
-                <div style={{ fontWeight: 800, color: 'var(--error)' }}>-${dailyStats.cashOut.toLocaleString('es-CO')}</div>
+                <div style={{ fontWeight: 500, color: 'var(--error)' }}>-${dailyStats.cashOut.toLocaleString('es-CO')}</div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', borderRadius: '10px', background: 'rgba(50,215,75,0.05)' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--success)' }}>GANANCIA ESTIMADA</div>
-                <div style={{ fontWeight: 800, color: 'var(--success)' }}>+${dailyStats.profit.toLocaleString('es-CO')}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', borderRadius: 0, background: 'rgba(47, 158, 110,0.05)' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--success)' }}>GANANCIA ESTIMADA</div>
+                <div style={{ fontWeight: 500, color: colorSigno(dailyStats.profit) }}>{conSigno(dailyStats.profit)}</div>
               </div>
 
               <div style={{ height: '1px', background: 'var(--glass-border)', margin: '0.5rem 0' }} />
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontWeight: 800, color: 'var(--text-secondary)' }}>EFECTIVO EN CAJA</div>
-                <div style={{ fontWeight: 900, fontSize: '1.8rem', color: 'var(--accent-primary)' }}>${dailyStats.net.toLocaleString('es-CO')}</div>
+                <div style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>EFECTIVO EN CAJA</div>
+                <div style={{ fontWeight: 500, fontSize: '1.8rem', color: dailyStats.net < 0 ? 'var(--error)' : 'var(--accent-primary)' }}>{monto(dailyStats.net)}</div>
               </div>
             </div>
 
@@ -265,10 +293,10 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
             </button>
           </div>
           
-          <div className="premium-card" style={{ background: 'rgba(50,215,75,0.05)', border: '1px solid rgba(50,215,75,0.1)' }}>
+          <div className="premium-card" style={{ background: 'rgba(47, 158, 110,0.05)', border: '1px solid rgba(47, 158, 110,0.1)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--success)' }}>
               <CheckCircle size={18} />
-              <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>CAJA BALANCEADA Y AUDITADA</span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>CAJA BALANCEADA Y AUDITADA</span>
             </div>
           </div>
         </div>
@@ -276,10 +304,10 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
         {/* History */}
         <div className="premium-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
-            <div style={{ padding: '0.75rem', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', color: 'var(--text-muted)' }}>
+            <div style={{ padding: '0.75rem', borderRadius: 0, background: 'rgba(255,255,255,0.03)', color: 'var(--text-muted)' }}>
               <History size={24} />
             </div>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 800 }}>HISTORIAL DE CIERRES</h3>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 500 }}>HISTORIAL DE CIERRES</h3>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -289,7 +317,7 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
                 onClick={() => setSelectedHistory(h)}
                 style={{ 
                   padding: '1.25rem', 
-                  borderRadius: '16px', 
+                  borderRadius: 0, 
                   background: 'rgba(255,255,255,0.01)', 
                   border: '1px solid var(--glass-border)',
                   display: 'grid',
@@ -301,25 +329,25 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
                 className="hover-glow"
               >
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: '0.9rem' }}>{h.date}</div>
+                  <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{h.date}</div>
                   <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{new Date(h.createdAt).toLocaleTimeString()}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Egresos Totales</div>
-                  <div style={{ fontWeight: 700, color: 'var(--error)', fontSize: '0.85rem' }}>-${Math.round(Number(h.expensesTotal || 0) + Number(h.purchasesTotal || 0)).toLocaleString('es-CO')}</div>
+                  <div style={{ fontWeight: 500, color: 'var(--error)', fontSize: '0.85rem' }}>-${Math.round(Number(h.expensesTotal || 0) + Number(h.purchasesTotal || 0)).toLocaleString('es-CO')}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Ganancia</div>
-                  <div style={{ fontWeight: 700, color: 'var(--success)', fontSize: '0.85rem' }}>+${Math.round(Number(h.profit || 0)).toLocaleString('es-CO')}</div>
+                  <div style={{ fontWeight: 500, color: colorSigno(Number(h.profit || 0)), fontSize: '0.85rem' }}>{conSigno(Number(h.profit || 0))}</div>
                 </div>
                 <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1rem' }}>
                   <div>
                     <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Saldo Final</div>
-                    <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--accent-primary)' }}>${Math.round(Number(h.initialCash || 0) + Number(h.salesTotal || 0) - Number(h.expensesTotal || 0) - Number(h.purchasesTotal || 0)).toLocaleString('es-CO')}</div>
+                    <div style={{ fontWeight: 500, fontSize: '1rem', color: 'var(--accent-primary)' }}>{monto(Number(h.initialCash || 0) + Number(h.salesTotal || 0) - Number(h.expensesTotal || 0) - Number(h.purchasesTotal || 0))}</div>
                   </div>
                   <button 
                     onClick={(e) => { e.stopPropagation(); deleteHistoryItem(h.id); }}
-                    style={{ background: 'rgba(255,69,58,0.1)', color: 'var(--error)', border: 'none', padding: '0.5rem', borderRadius: '8px', cursor: 'pointer' }}
+                    className="btn-icon danger" title="Eliminar" aria-label="Eliminar"
                   >
                     <Trash2 size={16} />
                   </button>
@@ -348,33 +376,33 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
-                <div className="glass" style={{ padding: '1.5rem', borderRadius: '16px', textAlign: 'center' }}>
+                <div className="glass" style={{ padding: '1.5rem', borderRadius: 0, textAlign: 'center' }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Movimientos</div>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{selectedHistory.movements.length}</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 500 }}>{selectedHistory.movements.length}</div>
                 </div>
-                <div className="glass" style={{ padding: '1.5rem', borderRadius: '16px', textAlign: 'center' }}>
+                <div className="glass" style={{ padding: '1.5rem', borderRadius: 0, textAlign: 'center' }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Efectivo Total</div>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--accent-primary)' }}>${Math.round(Number(selectedHistory.initialCash || 0) + Number(selectedHistory.salesTotal || 0) - Number(selectedHistory.expensesTotal || 0) - Number(selectedHistory.purchasesTotal || 0)).toLocaleString('es-CO')}</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 500, color: 'var(--accent-primary)' }}>{monto(Number(selectedHistory.initialCash || 0) + Number(selectedHistory.salesTotal || 0) - Number(selectedHistory.expensesTotal || 0) - Number(selectedHistory.purchasesTotal || 0))}</div>
                 </div>
               </div>
 
-              <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '20px', padding: '1.5rem', border: '1px solid var(--glass-border)', marginBottom: '2rem' }}>
+              <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 0, padding: '1.5rem', border: '1px solid var(--glass-border)', marginBottom: '2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.2rem' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Ingresos (Ventas/Abonos)</span>
-                  <span style={{ fontWeight: 700, color: 'var(--success)' }}>+${Math.round(Number(selectedHistory.salesTotal || 0)).toLocaleString('es-CO')}</span>
+                  <span style={{ fontWeight: 500, color: 'var(--success)' }}>+${Math.round(Number(selectedHistory.salesTotal || 0)).toLocaleString('es-CO')}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.2rem' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Egresos (Gastos)</span>
-                  <span style={{ fontWeight: 700, color: 'var(--error)' }}>-${Math.round(Number(selectedHistory.expensesTotal || 0)).toLocaleString('es-CO')}</span>
+                  <span style={{ fontWeight: 500, color: 'var(--error)' }}>-${Math.round(Number(selectedHistory.expensesTotal || 0)).toLocaleString('es-CO')}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.2rem' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Egresos (Compras)</span>
-                  <span style={{ fontWeight: 700, color: 'var(--error)' }}>-${Math.round(Number(selectedHistory.purchasesTotal || 0)).toLocaleString('es-CO')}</span>
+                  <span style={{ fontWeight: 500, color: 'var(--error)' }}>-${Math.round(Number(selectedHistory.purchasesTotal || 0)).toLocaleString('es-CO')}</span>
                 </div>
                 <div style={{ height: '1px', background: 'var(--glass-border)', margin: '1.2rem 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontWeight: 800 }}>GANANCIA REAL</span>
-                  <span style={{ fontWeight: 900, color: 'var(--success)', fontSize: '1.2rem' }}>+${Math.round(Number(selectedHistory.profit || 0)).toLocaleString('es-CO')}</span>
+                  <span style={{ fontWeight: 500 }}>GANANCIA REAL</span>
+                  <span style={{ fontWeight: 500, color: colorSigno(Number(selectedHistory.profit || 0)), fontSize: '1.2rem' }}>{conSigno(Number(selectedHistory.profit || 0))}</span>
                 </div>
               </div>
 
@@ -383,9 +411,9 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
                   <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '1rem', letterSpacing: '1px' }}>Detalle de Movimientos</h4>
                   <div style={{ maxHeight: '200px', overflowY: 'auto', paddingRight: '0.5rem' }}>
                     {selectedHistory.movements.map((m, idx) => (
-                      <div key={idx} style={{ padding: '0.75rem', borderRadius: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div key={idx} style={{ padding: '0.75rem', borderRadius: 0, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
-                          <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>
                             {m.type === 'expense' ? `Gasto: ${m.description}` : 
                              m.type === 'purchase' ? `Compra: ${m.supplier}` : 
                              m.customer}
@@ -395,17 +423,17 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
                           </div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: m.type === 'expense' || m.type === 'purchase' ? 'var(--error)' : 'var(--success)' }}>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 500, color: m.type === 'expense' || m.type === 'purchase' ? 'var(--error)' : 'var(--success)' }}>
                             {m.type === 'expense' || m.type === 'purchase' ? `-$${m.amount.toLocaleString('es-CO')}` : `+$${(m.paid || 0).toLocaleString('es-CO')}`}
                           </div>
                           {(m.type === 'sale' || !m.type) ? (
                             <>
                               {m.balance > 0 ? (
-                                <div style={{ fontSize: '0.65rem', color: 'var(--warning)', fontWeight: 700 }}>Debe: ${Math.round(m.balance).toLocaleString('es-CO')}</div>
+                                <div style={{ fontSize: '0.65rem', color: 'var(--warning)', fontWeight: 500 }}>Debe: ${Math.round(m.balance).toLocaleString('es-CO')}</div>
                               ) : (
-                                <div style={{ fontSize: '0.65rem', color: 'var(--success)', fontWeight: 800, textTransform: 'uppercase' }}>PAGADA</div>
+                                <div style={{ fontSize: '0.65rem', color: 'var(--success)', fontWeight: 500, textTransform: 'uppercase' }}>PAGADA</div>
                               )}
-                              <div style={{ fontSize: '0.65rem', color: 'var(--success)', marginTop: '0.1rem', fontWeight: 600 }}>Ganancia: +${Math.round(m.profit || 0).toLocaleString('es-CO')}</div>
+                              <div style={{ fontSize: '0.65rem', color: 'var(--success)', marginTop: '0.1rem', fontWeight: 500 }}>Ganancia: {conSigno(m.profit || 0)}</div>
                             </>
                           ) : null}
                         </div>

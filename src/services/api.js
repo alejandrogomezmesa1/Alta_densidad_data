@@ -44,12 +44,11 @@ class ApiService {
         },
       });
 
-      if (response.status === 401 || response.status === 403) {
-        // Token expired or invalid
-        if (endpoint !== '/auth/login') {
-            localStorage.removeItem('alta_token');
-            // Notify or redirect to login
-        }
+      if ((response.status === 401 || response.status === 403) && endpoint !== '/auth/login') {
+        // Sesión vencida o inválida: se limpia y la app vuelve al login
+        localStorage.removeItem('alta_token');
+        localStorage.removeItem('alta_user');
+        window.dispatchEvent(new Event('alta:session-expired'));
       }
 
       if (!response.ok) {

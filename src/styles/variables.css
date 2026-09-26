@@ -1,61 +1,81 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+/* ==========================================================================
+   DESIGN TOKENS — Alta Densidad (Haute Parfumerie System)
+   Mismo sistema visual que la tienda web y su panel de administración.
+   Los nombres antiguos (--bg-main, --accent-primary…) se conservan como alias
+   porque los componentes los usan en estilos en línea.
+   ========================================================================== */
 
 :root {
-  /* Color Palette - Ultra Premium Dark */
-  --bg-main: #050505;
-  --bg-card: #0d0d0f;
-  --bg-sidebar: #08080a;
-  --accent-primary: #e2b04c; /* Richer Gold */
-  --accent-secondary: #c28e2a;
-  --accent-glow: rgba(226, 176, 76, 0.15);
-  
-  --text-main: #f0f0f2;
-  --text-secondary: #b0b0b5;
-  --text-muted: #6e6e73;
-  
-  --border-color: rgba(226, 176, 76, 0.1);
-  --glass-bg: rgba(13, 13, 15, 0.6);
-  --glass-border: rgba(255, 255, 255, 0.04);
-  
-  /* Status Colors with Glows */
-  --success: #32d74b;
-  --success-glow: rgba(50, 215, 75, 0.15);
-  --error: #ff453a;
-  --error-glow: rgba(255, 69, 58, 0.15);
-  --warning: #ffd60a;
-  --info: #0a84ff;
+  /* ── Paleta base (idéntica a la web) ─────────────────────────────────── */
+  --tinta:     #0B0B0C;
+  --grafito:   #151517;
+  --filete-2:  #2A2A2D;
+  --humo:      #F2EEE6;
+  --oro:       #9A7B3F;
+  --oro-claro: #C9A961;
+  --vino:      #5A1220;
+  --gris:      #6B675F;
+  --gris-2:    #9A958A;
 
-  /* Spacing & Radii */
-  --radius-sm: 8px;
-  --radius-md: 16px;
-  --radius-lg: 24px;
-  
-  /* Transitions */
-  --transition-bounce: 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
+  /* ── Semántica (modo oscuro) ─────────────────────────────────────────── */
+  --c-bg:      var(--tinta);
+  --c-surface: var(--grafito);
+  --c-ink:     var(--humo);
+  --c-mute:    var(--gris-2);
+  --c-line:    var(--filete-2);
+  --c-accent:  var(--oro-claro);
+  --c-inv-bg:  var(--humo);
+  --c-inv-ink: var(--tinta);
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+  /* Estados (mismos del panel web) */
+  --ok:   #2f9e6e;
+  --warn: #c98a1b;
+  --err:  #c2413b;
+  --inf:  #3d7fc4;
 
-body {
-  background-color: var(--bg-main);
-  color: var(--text-main);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+  /* ── Tipografía ──────────────────────────────────────────────────────── */
+  --f-display: "Cormorant Garamond", "Playfair Display", Georgia, serif;
+  --f-ui:      "Jost", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --ls-ui:   0.16em;
+  --ls-logo: 0.42em;
 
-button {
-  cursor: pointer;
-  border: none;
-  background: none;
-  font-family: inherit;
-}
+  /* ── Forma y movimiento ──────────────────────────────────────────────── */
+  --bw:   1px;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --t-1:  0.25s;
+  --side-w: 256px;
+  --top-h:  64px;
 
-input, select, textarea {
-  font-family: inherit;
+  /* ── Alias usados por los componentes ────────────────────────────────── */
+  --bg-main:    var(--c-bg);
+  --bg-card:    var(--c-surface);
+  --bg-sidebar: var(--c-surface);
+  --accent-primary:   var(--c-accent);
+  --accent-secondary: var(--oro);
+  --accent-glow:      rgba(201, 169, 97, 0.14);
+
+  --text-main:      var(--c-ink);
+  --text-secondary: #BDB7AB;
+  --text-muted:     var(--c-mute);
+
+  --border-color: var(--c-line);
+  --glass-bg:     var(--c-surface);
+  --glass-border: var(--c-line);
+
+  --success:      var(--ok);
+  --success-glow: rgba(47, 158, 110, 0.14);
+  --error:        var(--err);
+  --error-glow:   rgba(194, 65, 59, 0.14);
+  --warning:      var(--warn);
+  --info:         var(--inf);
+
+  /* Ángulos puros editoriales */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+
+  --transition-bounce: var(--t-1) var(--ease);
+  --transition-smooth: var(--t-1) var(--ease);
+
+  color-scheme: dark;
 }

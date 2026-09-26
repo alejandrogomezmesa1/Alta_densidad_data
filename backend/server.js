@@ -116,6 +116,7 @@ app.use('/api/cash-closings', authenticateToken);
 
 // Test DB Connection
 let esquemaIntegracionListo = false;
+let marcasCierreListas = false;
 try {
     await db.query('SELECT 1');
     console.log('Successfully connected to MySQL database');
@@ -125,6 +126,16 @@ try {
         await db.query('ALTER TABLE cierres_caja MODIFY COLUMN notas MEDIUMTEXT;');
     } catch (e) {
         console.log('Note: Could not alter cierres_caja table (might not exist yet).');
+    }
+
+    try {
+        const [marcas] = await db.query("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cierres_caja' AND COLUMN_NAME = 'ultimo_pago_id'");
+        if (!marcas.length) {
+            await db.query('ALTER TABLE cierres_caja ADD COLUMN ultimo_pago_id INT NULL, ADD COLUMN ultimo_gasto_id INT NULL, ADD COLUMN ultima_compra_id INT NULL');
+        }
+        marcasCierreListas = true;
+    } catch (e) {
+        console.error('No se pudieron preparar las marcas de cierre de caja:', e.message);
     }
 
     try {
@@ -294,36 +305,88 @@ app.delete('/api/customers/:id', async (req, res, next) => {
 });
 
 // --- VENTAS & PAGOS (Sales & Payments) ---
+// MySQL devuelve DECIMAL como texto: toda comparación de montos debe pasar por Number
+const toNumber = (v) => Number.parseFloat(v) || 0;
+
+// Normaliza las líneas del carrito. Las líneas sin producto (p. ej. envío de la web)
+// conservan su descripción para que sigan identificándose en reportes.
+const normalizarItems = (items) => (Array.isArray(items) ? items : []).map(item => {
+    const rawId = item.productId;
+    const productId = rawId !== undefined && rawId !== null && rawId !== '' && rawId !== 'null' ? Number.parseInt(rawId, 10) : null;
+    return {
+        productId: Number.isInteger(productId) ? productId : null,
+        quantity: Math.max(1, Number.parseInt(item.quantity, 10) || 1),
+        unitPrice: Math.max(0, toNumber(item.unitPrice)),
+        costAtSale: Math.max(0, toNumber(item.costAtSale)),
+        description: item.productName ? String(item.productName).substring(0, 255) : null
+    };
+});
+
+const totalDeItems = (items) => items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
+
+const insertarDetalle = async (connection, saleId, item) => {
+    if (esquemaIntegracionListo) {
+        await connection.query(
+            'INSERT INTO venta_detalles (venta_id, inventario_id, cantidad, precio_unitario, costo_al_vender, descripcion) VALUES (?, ?, ?, ?, ?, ?)',
+            [saleId, item.productId, item.quantity, item.unitPrice, item.costAtSale, item.productId ? null : item.description]
+        );
+    } else {
+        await connection.query(
+            'INSERT INTO venta_detalles (venta_id, inventario_id, cantidad, precio_unitario, costo_al_vender) VALUES (?, ?, ?, ?, ?)',
+            [saleId, item.productId, item.quantity, item.unitPrice, item.costAtSale]
+        );
+    }
+    await updateStock(connection, item.productId, item.quantity, 'subtract');
+};
+
 app.get('/api/sales', async (req, res, next) => {
     try {
         const [sales] = await db.query(`
-            SELECT v.id, v.total, v.fecha as date, v.estado as status, v.metodo as method, 
-                   c.id as customerId, c.nombre as customerName, c.telefono as phone, 
-                   c.cedula as idDocument, c.ciudad as city, c.direccion as address 
-            FROM ventas v 
-            LEFT JOIN clientes c ON v.cliente_id = c.id 
+            SELECT v.id, v.total, v.fecha as date, v.estado as status, v.metodo as method,
+                   c.id as customerId, c.nombre as customerName, c.telefono as phone,
+                   c.cedula as idDocument, c.ciudad as city, c.direccion as address
+            FROM ventas v
+            LEFT JOIN clientes c ON v.cliente_id = c.id
             ORDER BY v.fecha DESC
         `);
-        
-        const salesWithDetails = await Promise.all((sales || []).map(async (sale) => {
-            try {
-                const [payments] = await db.query('SELECT id, venta_id as saleId, monto as amount, fecha as date, metodo as method FROM pagos WHERE venta_id = ?', [sale.id]);
-                const [items] = await db.query(`SELECT vd.id, vd.inventario_id as productId, vd.cantidad as quantity, vd.precio_unitario as unitPrice, vd.costo_al_vender as costAtSale, ${esquemaIntegracionListo ? 'COALESCE(p.nombre, vd.descripcion)' : 'p.nombre'} as productName FROM venta_detalles vd LEFT JOIN inventario p ON vd.inventario_id = p.id WHERE vd.venta_id = ?`, [sale.id]);
-                return { ...sale, payments, items };
-            } catch (e) { return { ...sale, payments: [], items: [] }; }
-        }));
-        res.json(salesWithDetails);
+        if (!sales.length) return res.json([]);
+
+        // Dos consultas en total (antes eran 2 por cada venta)
+        const [payments] = await db.query('SELECT id, venta_id as saleId, monto as amount, fecha as date, metodo as method FROM pagos ORDER BY id ASC');
+        const [items] = await db.query(`SELECT vd.id, vd.venta_id as saleId, vd.inventario_id as productId, vd.cantidad as quantity, vd.precio_unitario as unitPrice, vd.costo_al_vender as costAtSale, ${esquemaIntegracionListo ? 'COALESCE(p.nombre, vd.descripcion)' : 'p.nombre'} as productName FROM venta_detalles vd LEFT JOIN inventario p ON vd.inventario_id = p.id ORDER BY vd.id ASC`);
+
+        const agrupar = (rows) => rows.reduce((map, r) => {
+            if (!map.has(r.saleId)) map.set(r.saleId, []);
+            map.get(r.saleId).push(r);
+            return map;
+        }, new Map());
+        const pagosPorVenta = agrupar(payments);
+        const itemsPorVenta = agrupar(items);
+
+        res.json(sales.map(sale => ({
+            ...sale,
+            payments: pagosPorVenta.get(sale.id) || [],
+            items: itemsPorVenta.get(sale.id) || []
+        })));
     } catch (error) { next(error); }
 });
 
 app.post('/api/sales', async (req, res, next) => {
-    const { items, total, date, customerId, customerName, phone, idDocument, city, address, status, method, initialPayment } = req.body;
+    const { date, customerId, customerName, phone, idDocument, city, address, method } = req.body;
+    const items = normalizarItems(req.body.items);
+    if (!items.length) return res.status(400).json({ error: 'La venta debe tener al menos un producto' });
+
+    // El total y el estado se calculan en el servidor, no se confía en el cliente
+    const total = totalDeItems(items);
+    const initialPayment = Math.min(Math.max(0, toNumber(req.body.initialPayment)), total);
+    const status = initialPayment >= total ? 'paid' : 'pending';
+
     let connection;
     try {
         connection = await db.getConnection();
         await connection.beginTransaction();
 
-        let finalCustomerId = customerId;
+        let finalCustomerId = customerId || null;
         if (!finalCustomerId && customerName) {
             const [clientResult] = await connection.query(
                 'INSERT INTO clientes (nombre, telefono, cedula, ciudad, direccion) VALUES (?, ?, ?, ?, ?)',
@@ -334,31 +397,18 @@ app.post('/api/sales', async (req, res, next) => {
 
         const [saleResult] = await connection.query(
             'INSERT INTO ventas (total, fecha, cliente_id, estado, metodo) VALUES (?, ?, ?, ?, ?)',
-            [total, date, finalCustomerId || null, status, method]
+            [total, date, finalCustomerId, status, method]
         );
         const saleId = saleResult.insertId;
-        
+
         if (initialPayment > 0) {
             await connection.query('INSERT INTO pagos (venta_id, monto, fecha, metodo) VALUES (?, ?, ?, ?)', [saleId, initialPayment, date, method]);
         }
-        
-        if (items && items.length > 0) {
-            for (const item of items) {
-                const targetId = (item.productId && item.productId !== '') ? parseInt(item.productId) : null;
-                const qty = parseInt(item.quantity) || 1;
-                const price = parseFloat(item.unitPrice) || 0;
-                const cost = parseFloat(item.costAtSale) || 0;
-                
-                await connection.query(
-                    'INSERT INTO venta_detalles (venta_id, inventario_id, cantidad, precio_unitario, costo_al_vender) VALUES (?, ?, ?, ?, ?)',
-                    [saleId, targetId, qty, price, cost]
-                );
-                await updateStock(connection, targetId, qty, 'subtract');
-            }
-        }
-        
+
+        for (const item of items) await insertarDetalle(connection, saleId, item);
+
         await connection.commit();
-        res.status(201).json({ id: saleId, ...req.body });
+        res.status(201).json({ id: saleId, ...req.body, total, status });
     } catch (error) {
         if (connection) await connection.rollback();
         next(error);
@@ -369,23 +419,31 @@ app.post('/api/sales', async (req, res, next) => {
 
 app.post('/api/sales/:id/payments', async (req, res, next) => {
     const { id } = req.params;
-    const { amount, date, method } = req.body;
+    const { date, method } = req.body;
+    const amount = toNumber(req.body.amount);
+    if (amount <= 0) return res.status(400).json({ error: 'El abono debe ser mayor a cero' });
+
     let connection;
     try {
         connection = await db.getConnection();
         await connection.beginTransaction();
 
-        await connection.query(
-            'INSERT INTO pagos (venta_id, monto, fecha, metodo) VALUES (?, ?, ?, ?)',
-            [id, amount, date, method]
-        );
-
-        const [saleRows] = await connection.query('SELECT total FROM ventas WHERE id = ?', [id]);
-        const [paymentRows] = await connection.query('SELECT SUM(monto) as totalPaid FROM pagos WHERE venta_id = ?', [id]);
-        
-        if (paymentRows[0].totalPaid >= saleRows[0].total) {
-            await connection.query('UPDATE ventas SET estado = "paid" WHERE id = ?', [id]);
+        const [saleRows] = await connection.query('SELECT total FROM ventas WHERE id = ? FOR UPDATE', [id]);
+        if (!saleRows.length) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'Venta no encontrada' });
         }
+        const total = toNumber(saleRows[0].total);
+        const [paidRows] = await connection.query('SELECT COALESCE(SUM(monto), 0) as totalPaid FROM pagos WHERE venta_id = ?', [id]);
+        const saldo = total - toNumber(paidRows[0].totalPaid);
+
+        if (amount - saldo > 0.01) {
+            await connection.rollback();
+            return res.status(400).json({ error: `El abono supera el saldo pendiente ($${Math.round(saldo).toLocaleString('es-CO')})` });
+        }
+
+        await connection.query('INSERT INTO pagos (venta_id, monto, fecha, metodo) VALUES (?, ?, ?, ?)', [id, amount, date, method]);
+        await connection.query('UPDATE ventas SET estado = ? WHERE id = ?', [saldo - amount <= 0.01 ? 'paid' : 'pending', id]);
 
         await connection.commit();
         res.status(201).json({ message: 'Payment added' });
@@ -399,13 +457,23 @@ app.post('/api/sales/:id/payments', async (req, res, next) => {
 
 app.put('/api/sales/:id', async (req, res, next) => {
     const { id } = req.params;
-    const { items, total, date, customerId, customerName, phone, idDocument, city, address, status, method } = req.body;
+    const { date, customerId, customerName, phone, idDocument, city, address, method } = req.body;
+    const items = normalizarItems(req.body.items);
+    if (!items.length) return res.status(400).json({ error: 'La venta debe tener al menos un producto' });
+    const total = totalDeItems(items);
+
     let connection;
     try {
         connection = await db.getConnection();
         await connection.beginTransaction();
-        
-        let finalCustomerId = customerId;
+
+        const [actual] = await connection.query('SELECT estado FROM ventas WHERE id = ? FOR UPDATE', [id]);
+        if (!actual.length) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'Venta no encontrada' });
+        }
+
+        let finalCustomerId = customerId || null;
         if (!finalCustomerId && customerName) {
             const [clientResult] = await connection.query(
                 'INSERT INTO clientes (nombre, telefono, cedula, ciudad, direccion) VALUES (?, ?, ?, ?, ?)',
@@ -413,34 +481,27 @@ app.put('/api/sales/:id', async (req, res, next) => {
             );
             finalCustomerId = clientResult.insertId;
         }
-        
+
         const [oldItems] = await connection.query('SELECT inventario_id, cantidad FROM venta_detalles WHERE venta_id = ?', [id]);
         for (const item of oldItems) {
             await updateStock(connection, item.inventario_id, item.cantidad, 'add');
         }
-        
         await connection.query('DELETE FROM venta_detalles WHERE venta_id = ?', [id]);
-        
-        await connection.query('UPDATE ventas SET total = ?, fecha = ?, cliente_id = ?, estado = ?, metodo = ? WHERE id = ?', 
-            [total, date, finalCustomerId || null, status, method, id]);
-        
-        if (items && items.length > 0) {
-            for (const item of items) {
-                const targetId = (item.productId && item.productId !== '') ? parseInt(item.productId) : null;
-                const qty = parseInt(item.quantity) || 1;
-                const price = parseFloat(item.unitPrice) || 0;
-                const cost = parseFloat(item.costAtSale) || 0;
-                
-                await connection.query(
-                    'INSERT INTO venta_detalles (venta_id, inventario_id, cantidad, precio_unitario, costo_al_vender) VALUES (?, ?, ?, ?, ?)',
-                    [id, targetId, qty, price, cost]
-                );
-                await updateStock(connection, targetId, qty, 'subtract');
-            }
-        }
-        
+
+        // Editar productos o precios no debe cambiar un estado de pago ya real:
+        // se recalcula con los abonos registrados. Sin abonos se conserva el estado anterior.
+        const [pagos] = await connection.query('SELECT COUNT(*) as n, COALESCE(SUM(monto), 0) as totalPaid FROM pagos WHERE venta_id = ?', [id]);
+        const status = Number(pagos[0].n) > 0
+            ? (toNumber(pagos[0].totalPaid) >= total - 0.01 ? 'paid' : 'pending')
+            : actual[0].estado;
+
+        await connection.query('UPDATE ventas SET total = ?, fecha = ?, cliente_id = ?, estado = ?, metodo = ? WHERE id = ?',
+            [total, date, finalCustomerId, status, method, id]);
+
+        for (const item of items) await insertarDetalle(connection, id, item);
+
         await connection.commit();
-        res.json({ id, ...req.body });
+        res.json({ id, ...req.body, total, status });
     } catch (error) {
         if (connection) await connection.rollback();
         next(error);
@@ -609,21 +670,30 @@ app.delete('/api/expenses/:id', async (req, res, next) => {
 app.get('/api/cash-closings', async (req, res, next) => {
     try {
         const [rows] = await db.query(`
-            SELECT id, fecha as date, efectivo_inicial as initialCash, efectivo_final as finalCash, 
-                   diferencia as difference, total_ventas as salesTotal, total_compras as purchasesTotal, 
-                   total_gastos as expensesTotal, ganancia as profit, notas as notes, fecha_creacion as createdAt 
-            FROM cierres_caja ORDER BY fecha DESC
+            SELECT id, fecha as date, efectivo_inicial as initialCash, efectivo_final as finalCash,
+                   diferencia as difference, total_ventas as salesTotal, total_compras as purchasesTotal,
+                   total_gastos as expensesTotal, ganancia as profit, notas as notes, fecha_creacion as createdAt
+                   ${marcasCierreListas ? ', ultimo_pago_id as lastPaymentId, ultimo_gasto_id as lastExpenseId, ultima_compra_id as lastPurchaseId' : ''}
+            FROM cierres_caja ORDER BY fecha DESC, id DESC
         `);
         res.json(rows);
     } catch (error) { next(error); }
 });
 
 app.post('/api/cash-closings', async (req, res, next) => {
-    const { date, initialCash, finalCash, difference, salesTotal, purchasesTotal, expensesTotal, profit, notes } = req.body;
+    const { date, initialCash, finalCash, difference, salesTotal, purchasesTotal, expensesTotal, profit, notes,
+            lastPaymentId, lastExpenseId, lastPurchaseId } = req.body;
     try {
+        const campos = ['fecha', 'efectivo_inicial', 'efectivo_final', 'diferencia', 'total_ventas', 'total_compras', 'total_gastos', 'ganancia', 'notas'];
+        const valores = [date, initialCash, finalCash, difference, salesTotal, purchasesTotal, expensesTotal, profit, notes];
+        if (marcasCierreListas) {
+            // Hasta dónde llega este cierre: se guarda en el servidor para que todos los equipos lo compartan
+            campos.push('ultimo_pago_id', 'ultimo_gasto_id', 'ultima_compra_id');
+            valores.push(parseInt(lastPaymentId, 10) || 0, parseInt(lastExpenseId, 10) || 0, parseInt(lastPurchaseId, 10) || 0);
+        }
         const [result] = await db.query(
-            'INSERT INTO cierres_caja (fecha, efectivo_inicial, efectivo_final, diferencia, total_ventas, total_compras, total_gastos, ganancia, notas) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [date, initialCash, finalCash, difference, salesTotal, purchasesTotal, expensesTotal, profit, notes]
+            `INSERT INTO cierres_caja (${campos.join(', ')}) VALUES (${campos.map(() => '?').join(', ')})`,
+            valores
         );
         res.status(201).json({ id: result.insertId, ...req.body });
     } catch (error) { next(error); }
