@@ -1,17 +1,27 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Search, Edit2, Trash2, Filter, Download, Package, X, Check, ArrowUpDown, ClipboardList, Eye } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Filter, Download, Package, X, Check, ArrowUpDown, ClipboardList, Eye, History, SlidersHorizontal } from 'lucide-react';
+import { AjusteStockModal, MovimientosModal } from './StockModals';
+import { TIPOS_INVENTARIO, formatoCantidad } from '../utils/inventario';
 import DetailModal from './DetailModal';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { NumericFormat } from 'react-number-format';
 
-const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, exportData, notify, confirm }) => {
+const FORM_VACIO = { name: '', category: '', price: '', costPrice: '', stock: '0', type: 'terminado', minStock: '0', code: '', purchaseUnit: '', purchaseFactor: '1' };
+const LIQUIDOS = ['esencia', 'base', 'feromona'];
+
+// Stock bajo: usa el mínimo definido para el ítem; si no tiene, 1 unidad o menos
+const stockBajo = (p) => (Number(p.minStock) > 0 ? Number(p.stock) <= Number(p.minStock) : Number(p.stock) <= 1);
+
+const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, exportData, notify, confirm, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [selectedDetail, setSelectedDetail] = useState(null);
-  const [formData, setFormData] = useState({ name: '', category: '', price: '', costPrice: '', stock: '0' });
+  const [formData, setFormData] = useState(FORM_VACIO);
+  const [ajustando, setAjustando] = useState(null);
+  const [historial, setHistorial] = useState(null);
 
   const items = Array.isArray(inventory) ? inventory : [];
   const filteredInventory = items.filter(p => 
@@ -21,33 +31,41 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
 
   const handleEdit = (product) => {
     setEditingId(product.id);
-    setFormData({ ...product, price: String(product.price), costPrice: String(product.costPrice), stock: String(product.stock) });
+    setFormData({
+      ...FORM_VACIO, ...product,
+      price: String(product.price), costPrice: String(product.costPrice), stock: String(product.stock),
+      type: product.type || 'terminado', minStock: String(product.minStock ?? 0), code: product.code || '',
+      purchaseUnit: product.purchaseUnit || '', purchaseFactor: String(product.purchaseFactor ?? 1)
+    });
     setIsAdding(true);
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (editingId) {
-      updateProduct(editingId, formData);
+      // El stock no se edita aquí: se cambia con "Ajustar stock" para que quede el motivo
+      const sinStock = { ...formData };
+      delete sinStock.stock;
+      updateProduct(editingId, sinStock);
       setEditingId(null);
     } else {
       addProduct(formData);
     }
-    setFormData({ name: '', category: '', price: '', costPrice: '', stock: '0' });
+    setFormData(FORM_VACIO);
     setIsAdding(false);
   };
 
   const handleCancel = () => {
     setIsAdding(false);
     setEditingId(null);
-    setFormData({ name: '', category: '', price: '', costPrice: '', stock: '0' });
+    setFormData(FORM_VACIO);
   };
 
   const handleExportStockZero = () => {
-    const lowStockItems = items.filter(p => Number(p.stock) === 0 || Number(p.stock) === 1);
+    const lowStockItems = items.filter(stockBajo);
     
     if (lowStockItems.length === 0) {
-      notify?.('No hay productos con faltantes (Stock 0 o 1) para generar el reporte.', 'info');
+      notify?.('No hay productos bajo su stock mínimo para generar el reporte.', 'info');
       return;
     }
 
@@ -174,8 +192,36 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
                 <NumericFormat required value={formData.costPrice} onValueChange={(values) => setFormData({...formData, costPrice: values.value})} thousandSeparator="." decimalSeparator="," placeholder="0" style={{ width: '100%' }} />
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>STOCK INICIAL</label>
-                <NumericFormat required value={formData.stock} onValueChange={(values) => setFormData({...formData, stock: values.value})} thousandSeparator="." decimalSeparator="," style={{ width: '100%' }} />
+                <label htmlFor="inv-tipo" style={{ display: 'block', marginBottom: '0.6rem' }}>Tipo</label>
+                <select id="inv-tipo" value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })} style={{ width: '100%' }}>
+                  {Object.entries(TIPOS_INVENTARIO).map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="inv-stock" style={{ display: 'block', marginBottom: '0.6rem' }}>
+                  {editingId ? 'Stock actual' : 'Stock inicial'} ({LIQUIDOS.includes(formData.type) ? 'ml' : 'und'})
+                </label>
+                {editingId
+                  ? <input id="inv-stock" value={formatoCantidad(formData.stock, LIQUIDOS.includes(formData.type) ? 'ml' : 'und')} readOnly title="Usa «Ajustar stock» en la tabla" style={{ width: '100%', opacity: 0.6 }} />
+                  : <NumericFormat id="inv-stock" required value={formData.stock} onValueChange={(v) => setFormData({ ...formData, stock: v.value })} thousandSeparator="." decimalSeparator="," decimalScale={2} style={{ width: '100%' }} />}
+              </div>
+              <div>
+                <label htmlFor="inv-min" style={{ display: 'block', marginBottom: '0.6rem' }}>Stock mínimo</label>
+                <NumericFormat id="inv-min" value={formData.minStock} onValueChange={(v) => setFormData({ ...formData, minStock: v.value })} thousandSeparator="." decimalSeparator="," decimalScale={2} style={{ width: '100%' }} />
+              </div>
+              <div>
+                <label htmlFor="inv-codigo" style={{ display: 'block', marginBottom: '0.6rem' }}>Código (opcional)</label>
+                <input id="inv-codigo" type="text" value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value.toUpperCase() })} placeholder="ESN-YARA" style={{ width: '100%' }} />
+              </div>
+              <div>
+                <label htmlFor="inv-ucompra" style={{ display: 'block', marginBottom: '0.6rem' }}>Se compra por</label>
+                <input id="inv-ucompra" type="text" value={formData.purchaseUnit} onChange={e => setFormData({ ...formData, purchaseUnit: e.target.value })} placeholder="kg, litro, caja…" style={{ width: '100%', textTransform: 'none' }} />
+              </div>
+              <div>
+                <label htmlFor="inv-factor" style={{ display: 'block', marginBottom: '0.6rem' }}>
+                  Equivale a ({LIQUIDOS.includes(formData.type) ? 'ml' : 'und'})
+                </label>
+                <NumericFormat id="inv-factor" value={formData.purchaseFactor} onValueChange={(v) => setFormData({ ...formData, purchaseFactor: v.value })} thousandSeparator="." decimalSeparator="," decimalScale={4} style={{ width: '100%' }} />
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button type="submit" className="btn-primary" style={{ flex: 1, height: '45px', fontSize: '0.8rem' }}>
@@ -242,12 +288,15 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <span className="mobile-label">Categoría</span>
                       <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{product.category}</span>
+                      {product.type && product.type !== 'terminado' && (
+                        <div className="up" style={{ fontSize: '9px', color: 'var(--accent-primary)', marginTop: '0.25rem' }}>{TIPOS_INVENTARIO[product.type]}</div>
+                      )}
                     </td>
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <span className="mobile-label">Stock</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: product.stock < 2 ? 'var(--error)' : 'var(--success)' }} />
-                        <span style={{ fontWeight: 500, color: product.stock < 2 ? 'var(--error)' : 'var(--success)', fontSize: '0.9rem' }}>{product.stock}</span>
+                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: stockBajo(product) ? 'var(--error)' : 'var(--success)' }} />
+                        <span style={{ fontWeight: 500, color: stockBajo(product) ? 'var(--error)' : 'var(--success)', fontSize: '0.9rem' }}>{formatoCantidad(product.stock, product.unit)}</span>
                       </div>
                     </td>
                     <td style={{ padding: '1.25rem 2rem' }}>
@@ -264,11 +313,17 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
                         <button onClick={() => setSelectedDetail(product)} className="btn-icon">
                           <Eye size={16} />
                         </button>
-                        <button onClick={() => handleEdit(product)} className="btn-icon">
+                        <button onClick={() => handleEdit(product)} className="btn-icon" title="Editar" aria-label="Editar">
                           <Edit2 size={16} />
                         </button>
+                        <button onClick={() => setAjustando(product)} className="btn-icon" title="Ajustar stock" aria-label="Ajustar stock">
+                          <SlidersHorizontal size={16} />
+                        </button>
+                        <button onClick={() => setHistorial(product)} className="btn-icon" title="Historial de movimientos" aria-label="Historial de movimientos">
+                          <History size={16} />
+                        </button>
                         <button 
-                          onClick={() => confirm(`¿Estás seguro de eliminar "${product.name}"? Esta acción no se puede deshacer.`, () => {
+                          onClick={() => confirm(`¿Eliminar "${product.name}"? Dejará de aparecer, pero su historial de ventas y movimientos se conserva.`, () => {
                             deleteProduct(product.id);
                           })}
                           className="btn-icon danger" title="Eliminar" aria-label="Eliminar"
@@ -295,6 +350,8 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
         {selectedDetail && (
           <DetailModal item={selectedDetail} type="inventory" onClose={() => setSelectedDetail(null)} />
         )}
+        {ajustando && <AjusteStockModal producto={ajustando} onClose={() => setAjustando(null)} onGuardado={onRefresh} notify={notify} />}
+        {historial && <MovimientosModal producto={historial} onClose={() => setHistorial(null)} />}
       </AnimatePresence>
     </div>
   );

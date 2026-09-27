@@ -135,7 +135,7 @@ function App() {
     addExpense, updateExpense, deleteExpense,
     suppliers, addSupplier, updateSupplier, deleteSupplier, getMostFrequentSupplierId,
     updateCustomer, deleteCustomer,
-    exportData
+    exportData, fetchData
   } = useInventory(notify, auth.isAuthenticated); // Injecting notification system
 
   const renderContent = () => {
@@ -152,6 +152,7 @@ function App() {
           updateProduct={updateProduct}
           deleteProduct={deleteProduct} 
           exportData={exportData}
+          onRefresh={fetchData}
         />;
       case 'sales':
         return <Transactions 

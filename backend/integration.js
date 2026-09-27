@@ -9,6 +9,9 @@
 // ============================================================
 import express from 'express';
 import crypto from 'crypto';
+import { esquema } from './estado.js';
+import { moverStock } from './inventario.js';
+import { insertarPago } from './catalogos.js';
 
 const MAX_SKEW_MS = 60 * 1000;
 const NONCE_TTL_MS = 2 * MAX_SKEW_MS;
@@ -55,28 +58,6 @@ setInterval(() => {
     for (const [n, exp] of nonces) if (exp < now) nonces.delete(n);
 }, NONCE_TTL_MS).unref();
 
-// Columnas que la integración necesita. MySQL 8 no soporta ADD COLUMN IF NOT EXISTS,
-// por eso se consulta information_schema antes de alterar.
-const columnaExiste = async (db, tabla, columna) => {
-    const [rows] = await db.query(
-        'SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
-        [tabla, columna]
-    );
-    return rows.length > 0;
-};
-
-export const asegurarEsquemaIntegracion = async (db) => {
-    if (!(await columnaExiste(db, 'ventas', 'origen'))) {
-        await db.query("ALTER TABLE ventas ADD COLUMN origen VARCHAR(20) NOT NULL DEFAULT 'pos'");
-    }
-    if (!(await columnaExiste(db, 'ventas', 'referencia_externa'))) {
-        await db.query('ALTER TABLE ventas ADD COLUMN referencia_externa VARCHAR(100) NULL, ADD UNIQUE INDEX uq_ventas_referencia_externa (referencia_externa)');
-    }
-    if (!(await columnaExiste(db, 'venta_detalles', 'descripcion'))) {
-        await db.query('ALTER TABLE venta_detalles ADD COLUMN descripcion VARCHAR(255) NULL');
-    }
-};
-
 const texto = (v, max) => (v == null || v === '' ? null : String(v).trim().substring(0, max));
 
 const crearRouter = (db) => {
@@ -92,7 +73,7 @@ const crearRouter = (db) => {
     // Inventario público para la web: sin costos ni datos internos
     router.get('/v1/inventory', async (req, res, next) => {
         try {
-            const [rows] = await db.query('SELECT id, nombre AS name, precio AS price, stock FROM inventario');
+            const [rows] = await db.query(`SELECT id, nombre AS name, precio AS price, stock FROM inventario ${esquema.inventarioTipos ? 'WHERE activo = 1' : ''}`);
             res.json(rows.map(r => ({ id: r.id, name: r.name, price: Number(r.price) || 0, stock: Number(r.stock) || 0 })));
         } catch (error) { next(error); }
     });
@@ -182,19 +163,21 @@ const crearRouter = (db) => {
                 throw e;
             }
 
-            await connection.query('INSERT INTO pagos (venta_id, monto, fecha, metodo) VALUES (?, ?, ?, ?)', [ventaId, total, fecha, metodo]);
+            await insertarPago(connection, { ventaId, monto: total, fecha, metodo });
 
             const sinStock = [];
             for (const l of lineas) {
                 let costo = 0;
                 let inventarioId = null;
                 if (l.inventoryId) {
-                    const [inv] = await connection.query('SELECT id, stock, precio_costo FROM inventario WHERE id = ? FOR UPDATE', [l.inventoryId]);
+                    const [inv] = await connection.query('SELECT id FROM inventario WHERE id = ?', [l.inventoryId]);
                     if (inv.length) {
                         inventarioId = inv[0].id;
-                        costo = parseFloat(inv[0].precio_costo) || 0;
-                        if ((Number(inv[0].stock) || 0) < l.quantity) sinStock.push(inventarioId);
-                        await connection.query('UPDATE inventario SET stock = stock - ? WHERE id = ?', [l.quantity, inventarioId]);
+                        // El cliente ya pagó: se registra aunque falte stock, con alerta (regla D-07)
+                        const r = await moverStock(connection, { inventarioId, cantidad: -l.quantity, tipo: 'venta', origenTipo: 'venta', origenId: ventaId,
+                            motivo: `Pedido web ${ref}`, permitirNegativo: true });
+                        costo = r.costo;
+                        if (r.stock < 0) sinStock.push(inventarioId);
                     }
                 }
                 await connection.query(
@@ -229,7 +212,10 @@ const crearRouter = (db) => {
             const ventaId = ventas[0].id;
             const [detalles] = await connection.query('SELECT inventario_id, cantidad FROM venta_detalles WHERE venta_id = ?', [ventaId]);
             for (const d of detalles) {
-                if (d.inventario_id) await connection.query('UPDATE inventario SET stock = stock + ? WHERE id = ?', [d.cantidad, d.inventario_id]);
+                if (d.inventario_id) {
+                    await moverStock(connection, { inventarioId: d.inventario_id, cantidad: Number(d.cantidad), tipo: 'anulacion_venta',
+                        origenTipo: 'venta', origenId: ventaId, motivo: `Reembolso del pedido web ${ref}` });
+                }
             }
             await connection.query('DELETE FROM venta_detalles WHERE venta_id = ?', [ventaId]);
             await connection.query('DELETE FROM pagos WHERE venta_id = ?', [ventaId]);

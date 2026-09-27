@@ -5,7 +5,11 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import db from './db.js';
-import { asegurarEsquemaIntegracion, iniciarServidorIntegracion } from './integration.js';
+import { iniciarServidorIntegracion } from './integration.js';
+import { ejecutarMigraciones } from './migrator.js';
+import { esquema, actualizarEsquema } from './estado.js';
+import { moverStock, auditarStock } from './inventario.js';
+import { insertarPago, categoriaGastoId } from './catalogos.js';
 
 dotenv.config();
 
@@ -113,85 +117,22 @@ app.use('/api/sales', authenticateToken);
 app.use('/api/purchases', authenticateToken);
 app.use('/api/expenses', authenticateToken);
 app.use('/api/cash-closings', authenticateToken);
+app.use('/api/inventory', authenticateToken);
+app.use('/api/payment-methods', authenticateToken);
+app.use('/api/expense-categories', authenticateToken);
 
-// Test DB Connection
-let esquemaIntegracionListo = false;
-let marcasCierreListas = false;
+// Conexión y migraciones versionadas del esquema (ver backend/migrations)
 try {
     await db.query('SELECT 1');
     console.log('Successfully connected to MySQL database');
-    
-    // Ensure 'notas' column is large enough to hold all daily movements
-    try {
-        await db.query('ALTER TABLE cierres_caja MODIFY COLUMN notas MEDIUMTEXT;');
-    } catch (e) {
-        console.log('Note: Could not alter cierres_caja table (might not exist yet).');
-    }
 
-    try {
-        const [marcas] = await db.query("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cierres_caja' AND COLUMN_NAME = 'ultimo_pago_id'");
-        if (!marcas.length) {
-            await db.query('ALTER TABLE cierres_caja ADD COLUMN ultimo_pago_id INT NULL, ADD COLUMN ultimo_gasto_id INT NULL, ADD COLUMN ultima_compra_id INT NULL');
-        }
-        marcasCierreListas = true;
-    } catch (e) {
-        console.error('No se pudieron preparar las marcas de cierre de caja:', e.message);
-    }
-
-    try {
-        await asegurarEsquemaIntegracion(db);
-        esquemaIntegracionListo = true;
-    } catch (e) {
-        console.error('[INTEGRACION] No se pudo preparar el esquema:', e.message);
-    }
+    const migraciones = await ejecutarMigraciones(db);
+    // Si una migración falla, el servidor arranca igual con esas funciones deshabilitadas
+    actualizarEsquema(migraciones.aplicadas);
 } catch (error) {
     console.error('CRITICAL: Could not connect to MySQL. Application will start but API calls will fail.');
     console.error(error.message);
 }
-
-// Utility: Update Stock
-const updateStock = async (connection, inventoryId, quantity, operation = 'subtract') => {
-    if (!inventoryId) return;
-    const operator = operation === 'subtract' ? '-' : '+';
-    await connection.query(`UPDATE inventario SET stock = stock ${operator} ? WHERE id = ?`, [quantity, inventoryId]);
-};
-
-// Utility: Update Stock and Cost
-const updateStockAndCost = async (connection, inventoryId, quantity, purchaseUnitPrice, operation = 'add') => {
-    if (!inventoryId) return;
-    
-    // Fetch current stock and cost
-    const [rows] = await connection.query('SELECT stock, precio_costo FROM inventario WHERE id = ?', [inventoryId]);
-    if (rows.length === 0) return;
-    
-    let currentStock = parseInt(rows[0].stock) || 0;
-    let currentCost = parseFloat(rows[0].precio_costo) || 0;
-    quantity = parseInt(quantity);
-    purchaseUnitPrice = parseFloat(purchaseUnitPrice);
-    
-    let newStock, newCost;
-    
-    if (operation === 'add') {
-        newStock = currentStock + quantity;
-        if (newStock > 0) {
-            newCost = ((currentStock * currentCost) + (quantity * purchaseUnitPrice)) / newStock;
-        } else {
-            newCost = purchaseUnitPrice;
-        }
-    } else if (operation === 'subtract') {
-        newStock = currentStock - quantity;
-        if (newStock > 0) {
-            // Revert weighted average
-            let prevTotalCost = (currentStock * currentCost) - (quantity * purchaseUnitPrice);
-            newCost = prevTotalCost / newStock;
-            if (newCost < 0) newCost = currentCost; // Safety fallback
-        } else {
-            newCost = currentCost; // Leave cost as is if stock is 0
-        }
-    }
-
-    await connection.query('UPDATE inventario SET stock = ?, precio_costo = ? WHERE id = ?', [newStock, newCost, inventoryId]);
-};
 
 // --- PROVEEDORES (Suppliers) ---
 app.get('/api/suppliers', async (req, res, next) => {
@@ -231,38 +172,173 @@ app.delete('/api/suppliers/:id', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
-// --- PRODUCTOS (Products) ---
+// --- PRODUCTOS / INVENTARIO ---
+const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+const TIPOS_INV = ['terminado', 'esencia', 'base', 'feromona', 'envase', 'accesorio'];
+
+const productoDesdeFila = (r) => ({
+    id: r.id, name: r.name, category: r.category,
+    price: Number(r.price) || 0, costPrice: Number(r.costPrice) || 0, stock: Number(r.stock) || 0,
+    createdAt: r.createdAt,
+    ...(esquema.inventarioTipos ? {
+        code: r.code, type: r.type, unit: r.unit, minStock: Number(r.minStock) || 0,
+        purchaseUnit: r.purchaseUnit, purchaseFactor: Number(r.purchaseFactor) || 1
+    } : {})
+});
+
+const COLS_PRODUCTO = () => `id, nombre as name, categoria as category, precio as price, precio_costo as costPrice, stock, fecha_creacion as createdAt
+    ${esquema.inventarioTipos ? ', codigo as code, tipo as type, unidad as unit, stock_minimo as minStock, unidad_compra as purchaseUnit, factor_compra as purchaseFactor' : ''}`;
+
 app.get('/api/products', async (req, res, next) => {
     try {
-        const [rows] = await db.query('SELECT id, nombre as name, categoria as category, precio as price, precio_costo as costPrice, stock, fecha_creacion as createdAt FROM inventario ORDER BY nombre ASC');
-        res.json(rows);
+        const [rows] = await db.query(`SELECT ${COLS_PRODUCTO()} FROM inventario ${esquema.inventarioTipos ? 'WHERE activo = 1' : ''} ORDER BY nombre ASC`);
+        res.json(rows.map(productoDesdeFila));
     } catch (error) { next(error); }
 });
 
+const datosInventario = (body) => {
+    const tipo = TIPOS_INV.includes(body.type) ? body.type : 'terminado';
+    const unidad = body.unit === 'ml' ? 'ml' : (['esencia', 'base', 'feromona'].includes(tipo) ? 'ml' : 'und');
+    return {
+        codigo: body.code ? String(body.code).trim().substring(0, 40) : null,
+        tipo, unidad,
+        stockMinimo: Math.max(0, num(body.minStock) || 0),
+        unidadCompra: body.purchaseUnit ? String(body.purchaseUnit).trim().substring(0, 20) : null,
+        factorCompra: num(body.purchaseFactor) > 0 ? num(body.purchaseFactor) : 1
+    };
+};
+
 app.post('/api/products', async (req, res, next) => {
-    const { name, category, price, costPrice, stock } = req.body;
+    const { name, category, price, costPrice } = req.body;
+    const stockInicial = num(req.body.stock) || 0;
+    if (!name || !String(name).trim()) return res.status(400).json({ error: 'El nombre es obligatorio' });
+    let connection;
     try {
-        const [result] = await db.query('INSERT INTO inventario (nombre, categoria, precio, precio_costo, stock) VALUES (?, ?, ?, ?, ?)', [name, category, price, costPrice, stock]);
+        connection = await db.getConnection();
+        await connection.beginTransaction();
+        let result;
+        if (esquema.inventarioTipos) {
+            const d = datosInventario(req.body);
+            [result] = await connection.query(
+                'INSERT INTO inventario (nombre, categoria, precio, precio_costo, stock, codigo, tipo, unidad, stock_minimo, unidad_compra, factor_compra) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)',
+                [name, category, num(price) || 0, num(costPrice) || 0, d.codigo, d.tipo, d.unidad, d.stockMinimo, d.unidadCompra, d.factorCompra]
+            );
+        } else {
+            [result] = await connection.query('INSERT INTO inventario (nombre, categoria, precio, precio_costo, stock) VALUES (?, ?, ?, ?, 0)',
+                [name, category, num(price) || 0, num(costPrice) || 0]);
+        }
+        if (stockInicial > 0) {
+            await moverStock(connection, { inventarioId: result.insertId, cantidad: stockInicial, tipo: 'inicial', costoUnitario: num(costPrice) || 0,
+                origenTipo: 'producto', origenId: result.insertId, motivo: 'Stock inicial al crear el producto', usuarioId: req.user?.id });
+        }
+        await connection.commit();
         res.status(201).json({ id: result.insertId, ...req.body });
-    } catch (error) { next(error); }
+    } catch (error) {
+        if (connection) await connection.rollback();
+        next(error);
+    } finally {
+        if (connection) connection.release();
+    }
 });
 
 app.put('/api/products/:id', async (req, res, next) => {
     const { id } = req.params;
-    const { name, category, price, costPrice, stock } = req.body;
+    const { name, category, price, costPrice } = req.body;
+    let connection;
     try {
-        await db.query(
-            'UPDATE inventario SET nombre = ?, categoria = ?, precio = ?, precio_costo = ?, stock = ? WHERE id = ?',
-            [name, category, price, costPrice, stock, id]
-        );
+        connection = await db.getConnection();
+        await connection.beginTransaction();
+        const [actual] = await connection.query('SELECT stock FROM inventario WHERE id = ? FOR UPDATE', [id]);
+        if (!actual.length) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'Producto no encontrado' });
+        }
+        if (esquema.inventarioTipos) {
+            const d = datosInventario(req.body);
+            await connection.query(
+                'UPDATE inventario SET nombre = ?, categoria = ?, precio = ?, precio_costo = ?, codigo = ?, tipo = ?, unidad = ?, stock_minimo = ?, unidad_compra = ?, factor_compra = ? WHERE id = ?',
+                [name, category, num(price) || 0, num(costPrice) || 0, d.codigo, d.tipo, d.unidad, d.stockMinimo, d.unidadCompra, d.factorCompra, id]
+            );
+        } else {
+            await connection.query('UPDATE inventario SET nombre = ?, categoria = ?, precio = ?, precio_costo = ? WHERE id = ?',
+                [name, category, num(price) || 0, num(costPrice) || 0, id]);
+        }
+        // Un cambio de stock desde el formulario queda como ajuste en el libro (regla I-05)
+        const nuevo = num(req.body.stock);
+        const diferencia = nuevo === null ? 0 : nuevo - (Number(actual[0].stock) || 0);
+        if (diferencia) {
+            await moverStock(connection, { inventarioId: Number(id), cantidad: diferencia, tipo: 'ajuste', origenTipo: 'ajuste',
+                motivo: req.body.adjustmentReason || 'Edición manual del stock', usuarioId: req.user?.id });
+        }
+        await connection.commit();
         res.json({ id, ...req.body });
+    } catch (error) {
+        if (connection) await connection.rollback();
+        next(error);
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Nada se borra si tiene historia: el producto se desactiva y deja de aparecer
+app.delete('/api/products/:id', async (req, res, next) => {
+    try {
+        if (esquema.inventarioTipos) {
+            await db.query('UPDATE inventario SET activo = 0 WHERE id = ?', [req.params.id]);
+        } else {
+            await db.query('DELETE FROM inventario WHERE id = ?', [req.params.id]);
+        }
+        res.json({ message: 'Product deleted' });
     } catch (error) { next(error); }
 });
 
-app.delete('/api/products/:id', async (req, res, next) => {
+// Historial de movimientos de un ítem (kárdex)
+app.get('/api/products/:id/movements', async (req, res, next) => {
+    if (!esquema.libro) return res.json([]);
     try {
-        await db.query('DELETE FROM inventario WHERE id = ?', [req.params.id]);
-        res.json({ message: 'Product deleted' });
+        const [rows] = await db.query(`
+            SELECT m.id, m.tipo as type, m.cantidad as quantity, m.stock_resultante as balance, m.costo_unitario as unitCost,
+                   m.origen_tipo as sourceType, m.origen_id as sourceId, m.motivo as reason, m.creado_en as createdAt, u.username as user
+            FROM movimientos_inventario m LEFT JOIN usuarios u ON u.id = m.usuario_id
+            WHERE m.inventario_id = ? ORDER BY m.id DESC LIMIT 500`, [req.params.id]);
+        res.json(rows.map(r => ({ ...r, quantity: Number(r.quantity), balance: Number(r.balance), unitCost: r.unitCost === null ? null : Number(r.unitCost) })));
+    } catch (error) { next(error); }
+});
+
+// Ajuste de inventario con motivo obligatorio (conteo físico, rotura, vencimiento…)
+app.post('/api/products/:id/adjustments', async (req, res, next) => {
+    const motivo = String(req.body.reason || '').trim();
+    if (motivo.length < 3) return res.status(400).json({ error: 'El motivo del ajuste es obligatorio' });
+    let connection;
+    try {
+        connection = await db.getConnection();
+        await connection.beginTransaction();
+        const [actual] = await connection.query('SELECT stock FROM inventario WHERE id = ? FOR UPDATE', [req.params.id]);
+        if (!actual.length) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'Producto no encontrado' });
+        }
+        const cantidad = num(req.body.newStock) !== null ? num(req.body.newStock) - Number(actual[0].stock) : num(req.body.quantity);
+        if (!cantidad) {
+            await connection.rollback();
+            return res.status(400).json({ error: 'El ajuste no cambia el stock' });
+        }
+        const r = await moverStock(connection, { inventarioId: Number(req.params.id), cantidad, tipo: 'ajuste', origenTipo: 'ajuste', motivo, usuarioId: req.user?.id });
+        await connection.commit();
+        res.status(201).json({ stock: r.stock });
+    } catch (error) {
+        if (connection) await connection.rollback();
+        next(error);
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+// Verificación: stock que no cuadra con su libro
+app.get('/api/inventory/audit', async (req, res, next) => {
+    if (!esquema.libro) return res.json({ disponible: false, diferencias: [] });
+    try {
+        res.json({ disponible: true, diferencias: await auditarStock(db) });
     } catch (error) { next(error); }
 });
 
@@ -324,19 +400,36 @@ const normalizarItems = (items) => (Array.isArray(items) ? items : []).map(item 
 
 const totalDeItems = (items) => items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
 
-const insertarDetalle = async (connection, saleId, item) => {
-    if (esquemaIntegracionListo) {
+// Descuenta el stock y registra la línea con el costo real del momento (regla I-07)
+const insertarDetalle = async (connection, saleId, item, usuarioId) => {
+    let costo = 0;
+    if (item.productId) {
+        const r = await moverStock(connection, { inventarioId: item.productId, cantidad: -item.quantity, tipo: 'venta',
+            origenTipo: 'venta', origenId: saleId, usuarioId });
+        costo = r ? r.costo : 0;
+    }
+    if (esquema.integracion) {
         await connection.query(
             'INSERT INTO venta_detalles (venta_id, inventario_id, cantidad, precio_unitario, costo_al_vender, descripcion) VALUES (?, ?, ?, ?, ?, ?)',
-            [saleId, item.productId, item.quantity, item.unitPrice, item.costAtSale, item.productId ? null : item.description]
+            [saleId, item.productId, item.quantity, item.unitPrice, costo, item.productId ? null : item.description]
         );
     } else {
         await connection.query(
             'INSERT INTO venta_detalles (venta_id, inventario_id, cantidad, precio_unitario, costo_al_vender) VALUES (?, ?, ?, ?, ?)',
-            [saleId, item.productId, item.quantity, item.unitPrice, item.costAtSale]
+            [saleId, item.productId, item.quantity, item.unitPrice, costo]
         );
     }
-    await updateStock(connection, item.productId, item.quantity, 'subtract');
+};
+
+// Devuelve al inventario las líneas de una venta (edición o anulación)
+const devolverDetalles = async (connection, saleId, motivo, usuarioId) => {
+    const [oldItems] = await connection.query('SELECT inventario_id, cantidad FROM venta_detalles WHERE venta_id = ?', [saleId]);
+    for (const item of oldItems) {
+        if (item.inventario_id) {
+            await moverStock(connection, { inventarioId: item.inventario_id, cantidad: Number(item.cantidad), tipo: 'anulacion_venta',
+                origenTipo: 'venta', origenId: Number(saleId), motivo, usuarioId });
+        }
+    }
 };
 
 app.get('/api/sales', async (req, res, next) => {
@@ -352,8 +445,10 @@ app.get('/api/sales', async (req, res, next) => {
         if (!sales.length) return res.json([]);
 
         // Dos consultas en total (antes eran 2 por cada venta)
-        const [payments] = await db.query('SELECT id, venta_id as saleId, monto as amount, fecha as date, metodo as method FROM pagos ORDER BY id ASC');
-        const [items] = await db.query(`SELECT vd.id, vd.venta_id as saleId, vd.inventario_id as productId, vd.cantidad as quantity, vd.precio_unitario as unitPrice, vd.costo_al_vender as costAtSale, ${esquemaIntegracionListo ? 'COALESCE(p.nombre, vd.descripcion)' : 'p.nombre'} as productName FROM venta_detalles vd LEFT JOIN inventario p ON vd.inventario_id = p.id ORDER BY vd.id ASC`);
+        const [payments] = await db.query(esquema.metodosPago
+            ? 'SELECT p.id, p.venta_id as saleId, p.monto as amount, p.fecha as date, COALESCE(m.nombre, p.metodo) as method, COALESCE(m.es_efectivo, 1) as isCash FROM pagos p LEFT JOIN metodos_pago m ON m.id = p.metodo_pago_id ORDER BY p.id ASC'
+            : 'SELECT id, venta_id as saleId, monto as amount, fecha as date, metodo as method, 1 as isCash FROM pagos ORDER BY id ASC');
+        const [items] = await db.query(`SELECT vd.id, vd.venta_id as saleId, vd.inventario_id as productId, vd.cantidad as quantity, vd.precio_unitario as unitPrice, vd.costo_al_vender as costAtSale, ${esquema.integracion ? 'COALESCE(p.nombre, vd.descripcion)' : 'p.nombre'} as productName FROM venta_detalles vd LEFT JOIN inventario p ON vd.inventario_id = p.id ORDER BY vd.id ASC`);
 
         const agrupar = (rows) => rows.reduce((map, r) => {
             if (!map.has(r.saleId)) map.set(r.saleId, []);
@@ -402,10 +497,10 @@ app.post('/api/sales', async (req, res, next) => {
         const saleId = saleResult.insertId;
 
         if (initialPayment > 0) {
-            await connection.query('INSERT INTO pagos (venta_id, monto, fecha, metodo) VALUES (?, ?, ?, ?)', [saleId, initialPayment, date, method]);
+            await insertarPago(connection, { ventaId: saleId, monto: initialPayment, fecha: date, metodo: method });
         }
 
-        for (const item of items) await insertarDetalle(connection, saleId, item);
+        for (const item of items) await insertarDetalle(connection, saleId, item, req.user?.id);
 
         await connection.commit();
         res.status(201).json({ id: saleId, ...req.body, total, status });
@@ -442,7 +537,7 @@ app.post('/api/sales/:id/payments', async (req, res, next) => {
             return res.status(400).json({ error: `El abono supera el saldo pendiente ($${Math.round(saldo).toLocaleString('es-CO')})` });
         }
 
-        await connection.query('INSERT INTO pagos (venta_id, monto, fecha, metodo) VALUES (?, ?, ?, ?)', [id, amount, date, method]);
+        await insertarPago(connection, { ventaId: id, monto: amount, fecha: date, metodo: method });
         await connection.query('UPDATE ventas SET estado = ? WHERE id = ?', [saldo - amount <= 0.01 ? 'paid' : 'pending', id]);
 
         await connection.commit();
@@ -482,10 +577,7 @@ app.put('/api/sales/:id', async (req, res, next) => {
             finalCustomerId = clientResult.insertId;
         }
 
-        const [oldItems] = await connection.query('SELECT inventario_id, cantidad FROM venta_detalles WHERE venta_id = ?', [id]);
-        for (const item of oldItems) {
-            await updateStock(connection, item.inventario_id, item.cantidad, 'add');
-        }
+        await devolverDetalles(connection, id, 'Edición de la venta', req.user?.id);
         await connection.query('DELETE FROM venta_detalles WHERE venta_id = ?', [id]);
 
         // Editar productos o precios no debe cambiar un estado de pago ya real:
@@ -498,7 +590,7 @@ app.put('/api/sales/:id', async (req, res, next) => {
         await connection.query('UPDATE ventas SET total = ?, fecha = ?, cliente_id = ?, estado = ?, metodo = ? WHERE id = ?',
             [total, date, finalCustomerId, status, method, id]);
 
-        for (const item of items) await insertarDetalle(connection, id, item);
+        for (const item of items) await insertarDetalle(connection, id, item, req.user?.id);
 
         await connection.commit();
         res.json({ id, ...req.body, total, status });
@@ -517,11 +609,7 @@ app.delete('/api/sales/:id', async (req, res, next) => {
         connection = await db.getConnection();
         await connection.beginTransaction();
         
-        const [oldItems] = await connection.query('SELECT inventario_id, cantidad FROM venta_detalles WHERE venta_id = ?', [id]);
-        for (const item of oldItems) {
-            await updateStock(connection, item.inventario_id, item.cantidad, 'add');
-        }
-        
+        await devolverDetalles(connection, id, 'Venta eliminada', req.user?.id);
         await connection.query('DELETE FROM venta_detalles WHERE venta_id = ?', [id]);
         await connection.query('DELETE FROM pagos WHERE venta_id = ?', [id]);
         await connection.query('DELETE FROM ventas WHERE id = ?', [id]);
@@ -543,25 +631,45 @@ app.get('/api/purchases', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
+const datosCompra = (body) => ({
+    invId: body.productId ? parseInt(body.productId, 10) : null,
+    suppId: body.supplierId ? parseInt(body.supplierId, 10) : null,
+    cantidad: Math.max(0, parseFloat(body.quantity) || 0),
+    precioUnitario: Math.max(0, parseFloat(body.unitPrice) || 0),
+    monto: parseFloat(body.amount || body.total || 0) || 0,
+    fecha: body.date
+});
+
+// Entrada de una compra: suma stock y recalcula el costo promedio (reglas I-02, I-03)
+const entradaCompra = (connection, compraId, c, usuarioId) => moverStock(connection, {
+    inventarioId: c.invId, cantidad: c.cantidad, tipo: 'compra', costoUnitario: c.precioUnitario, recalcularCosto: true,
+    origenTipo: 'compra', origenId: compraId, usuarioId
+});
+
+// Reversa de una compra (edición o eliminación). Si esas unidades ya se vendieron, no se permite.
+const reversaCompra = async (connection, compraId, motivo, usuarioId) => {
+    const [rows] = await connection.query('SELECT inventario_id, cantidad, precio_unitario FROM compras WHERE id = ?', [compraId]);
+    if (rows.length && rows[0].inventario_id) {
+        await moverStock(connection, {
+            inventarioId: rows[0].inventario_id, cantidad: -Number(rows[0].cantidad), tipo: 'anulacion_compra',
+            costoUnitario: Number(rows[0].precio_unitario), recalcularCosto: true, origenTipo: 'compra', origenId: Number(compraId), motivo, usuarioId
+        });
+    }
+    return rows.length > 0;
+};
+
 app.post('/api/purchases', async (req, res, next) => {
-    const { productId, supplierId, quantity, amount, total, unitPrice, date } = req.body;
-    const finalAmount = parseFloat(amount || total || 0);
-    const finalQty = parseInt(quantity || 0);
-    const finalUnitPrice = parseFloat(unitPrice || 0);
+    const c = datosCompra(req.body);
+    if (!c.invId || !c.cantidad) return res.status(400).json({ error: 'Producto y cantidad son obligatorios' });
     let connection;
     try {
         connection = await db.getConnection();
         await connection.beginTransaction();
-        const invId = (productId && productId !== '') ? parseInt(productId) : null;
-        const suppId = (supplierId && supplierId !== '') ? parseInt(supplierId) : null;
-        
         const [result] = await connection.query(
             'INSERT INTO compras (inventario_id, proveedor_id, cantidad, monto, precio_unitario, fecha) VALUES (?, ?, ?, ?, ?, ?)',
-            [invId, suppId, finalQty, finalAmount, finalUnitPrice, date]
+            [c.invId, c.suppId, c.cantidad, c.monto, c.precioUnitario, c.fecha]
         );
-        
-        await updateStockAndCost(connection, invId, finalQty, finalUnitPrice, 'add');
-        
+        await entradaCompra(connection, result.insertId, c, req.user?.id);
         await connection.commit();
         res.status(201).json({ id: result.insertId, ...req.body });
     } catch (error) {
@@ -574,27 +682,19 @@ app.post('/api/purchases', async (req, res, next) => {
 
 app.put('/api/purchases/:id', async (req, res, next) => {
     const { id } = req.params;
-    const { productId, supplierId, quantity, amount, total, unitPrice, date } = req.body;
-    const finalAmount = parseFloat(amount || total || 0);
-    const finalQty = parseInt(quantity || 0);
-    const finalUnitPrice = parseFloat(unitPrice || 0);
+    const c = datosCompra(req.body);
+    if (!c.invId || !c.cantidad) return res.status(400).json({ error: 'Producto y cantidad son obligatorios' });
     let connection;
     try {
         connection = await db.getConnection();
         await connection.beginTransaction();
-        
-        const [rows] = await connection.query('SELECT inventario_id, cantidad, precio_unitario FROM compras WHERE id = ?', [id]);
-        if (rows.length > 0) {
-            await updateStockAndCost(connection, rows[0].inventario_id, rows[0].cantidad, rows[0].precio_unitario, 'subtract');
+        if (!(await reversaCompra(connection, id, 'Edición de la compra', req.user?.id))) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'Compra no encontrada' });
         }
-        
-        const invId = (productId && productId !== '') ? parseInt(productId) : null;
-        const suppId = (supplierId && supplierId !== '') ? parseInt(supplierId) : null;
-        
-        await connection.query('UPDATE compras SET inventario_id = ?, proveedor_id = ?, cantidad = ?, monto = ?, precio_unitario = ?, fecha = ? WHERE id = ?', [invId, suppId, finalQty, finalAmount, finalUnitPrice, date, id]);
-        
-        await updateStockAndCost(connection, invId, finalQty, finalUnitPrice, 'add');
-        
+        await connection.query('UPDATE compras SET inventario_id = ?, proveedor_id = ?, cantidad = ?, monto = ?, precio_unitario = ?, fecha = ? WHERE id = ?',
+            [c.invId, c.suppId, c.cantidad, c.monto, c.precioUnitario, c.fecha, id]);
+        await entradaCompra(connection, Number(id), c, req.user?.id);
         await connection.commit();
         res.json({ id, ...req.body });
     } catch (error) {
@@ -611,12 +711,7 @@ app.delete('/api/purchases/:id', async (req, res, next) => {
     try {
         connection = await db.getConnection();
         await connection.beginTransaction();
-        
-        const [rows] = await connection.query('SELECT inventario_id, cantidad, precio_unitario FROM compras WHERE id = ?', [id]);
-        if (rows.length > 0) {
-            await updateStockAndCost(connection, rows[0].inventario_id, rows[0].cantidad, rows[0].precio_unitario, 'subtract');
-        }
-        
+        await reversaCompra(connection, id, 'Compra eliminada', req.user?.id);
         await connection.query('DELETE FROM compras WHERE id = ?', [id]);
         await connection.commit();
         res.json({ message: 'Purchase deleted and stock adjusted' });
@@ -631,7 +726,9 @@ app.delete('/api/purchases/:id', async (req, res, next) => {
 // --- GASTOS (Expenses) ---
 app.get('/api/expenses', async (req, res, next) => {
     try {
-        const [rows] = await db.query('SELECT id, descripcion as description, monto as amount, categoria as category, fecha as date FROM gastos ORDER BY fecha DESC');
+        const [rows] = await db.query(esquema.categoriasGasto
+            ? 'SELECT g.id, g.descripcion as description, g.monto as amount, COALESCE(c.nombre, g.categoria) as category, g.fecha as date FROM gastos g LEFT JOIN categorias_gasto c ON c.id = g.categoria_id ORDER BY g.fecha DESC'
+            : 'SELECT id, descripcion as description, monto as amount, categoria as category, fecha as date FROM gastos ORDER BY fecha DESC');
         res.json(rows);
     } catch (error) { next(error); }
 });
@@ -639,10 +736,10 @@ app.get('/api/expenses', async (req, res, next) => {
 app.post('/api/expenses', async (req, res, next) => {
     const { description, amount, category, date } = req.body;
     try {
-        const [result] = await db.query(
-            'INSERT INTO gastos (descripcion, monto, categoria, fecha) VALUES (?, ?, ?, ?)',
-            [description, amount, category, date]
-        );
+        const categoriaId = await categoriaGastoId(db, category);
+        const [result] = esquema.categoriasGasto
+            ? await db.query('INSERT INTO gastos (descripcion, monto, categoria, categoria_id, fecha) VALUES (?, ?, ?, ?, ?)', [description, amount, category || 'Otros', categoriaId, date])
+            : await db.query('INSERT INTO gastos (descripcion, monto, categoria, fecha) VALUES (?, ?, ?, ?)', [description, amount, category, date]);
         res.status(201).json({ id: result.insertId, ...req.body });
     } catch (error) { next(error); }
 });
@@ -651,10 +748,12 @@ app.put('/api/expenses/:id', async (req, res, next) => {
     const { id } = req.params;
     const { description, amount, category, date } = req.body;
     try {
-        await db.query(
-            'UPDATE gastos SET descripcion = ?, monto = ?, categoria = ?, fecha = ? WHERE id = ?',
-            [description, amount, category, date, id]
-        );
+        const categoriaId = await categoriaGastoId(db, category);
+        if (esquema.categoriasGasto) {
+            await db.query('UPDATE gastos SET descripcion = ?, monto = ?, categoria = ?, categoria_id = ?, fecha = ? WHERE id = ?', [description, amount, category || 'Otros', categoriaId, date, id]);
+        } else {
+            await db.query('UPDATE gastos SET descripcion = ?, monto = ?, categoria = ?, fecha = ? WHERE id = ?', [description, amount, category, date, id]);
+        }
         res.json({ id, ...req.body });
     } catch (error) { next(error); }
 });
@@ -666,6 +765,23 @@ app.delete('/api/expenses/:id', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
+// Listas cerradas para los formularios
+app.get('/api/payment-methods', async (req, res, next) => {
+    try {
+        if (!esquema.metodosPago) return res.json([{ id: null, name: 'Efectivo', isCash: 1 }, { id: null, name: 'Transferencia', isCash: 0 }]);
+        const [rows] = await db.query('SELECT id, nombre as name, es_efectivo as isCash FROM metodos_pago WHERE activo = 1 ORDER BY orden, nombre');
+        res.json(rows);
+    } catch (error) { next(error); }
+});
+
+app.get('/api/expense-categories', async (req, res, next) => {
+    try {
+        if (!esquema.categoriasGasto) return res.json([]);
+        const [rows] = await db.query('SELECT id, nombre as name FROM categorias_gasto WHERE activo = 1 ORDER BY nombre');
+        res.json(rows);
+    } catch (error) { next(error); }
+});
+
 // --- CIERRES DE CAJA (Cash Closings) ---
 app.get('/api/cash-closings', async (req, res, next) => {
     try {
@@ -673,7 +789,7 @@ app.get('/api/cash-closings', async (req, res, next) => {
             SELECT id, fecha as date, efectivo_inicial as initialCash, efectivo_final as finalCash,
                    diferencia as difference, total_ventas as salesTotal, total_compras as purchasesTotal,
                    total_gastos as expensesTotal, ganancia as profit, notas as notes, fecha_creacion as createdAt
-                   ${marcasCierreListas ? ', ultimo_pago_id as lastPaymentId, ultimo_gasto_id as lastExpenseId, ultima_compra_id as lastPurchaseId' : ''}
+                   ${esquema.marcasCierre ? ', ultimo_pago_id as lastPaymentId, ultimo_gasto_id as lastExpenseId, ultima_compra_id as lastPurchaseId' : ''}
             FROM cierres_caja ORDER BY fecha DESC, id DESC
         `);
         res.json(rows);
@@ -686,7 +802,7 @@ app.post('/api/cash-closings', async (req, res, next) => {
     try {
         const campos = ['fecha', 'efectivo_inicial', 'efectivo_final', 'diferencia', 'total_ventas', 'total_compras', 'total_gastos', 'ganancia', 'notas'];
         const valores = [date, initialCash, finalCash, difference, salesTotal, purchasesTotal, expensesTotal, profit, notes];
-        if (marcasCierreListas) {
+        if (esquema.marcasCierre) {
             // Hasta dónde llega este cierre: se guarda en el servidor para que todos los equipos lo compartan
             campos.push('ultimo_pago_id', 'ultimo_gasto_id', 'ultima_compra_id');
             valores.push(parseInt(lastPaymentId, 10) || 0, parseInt(lastExpenseId, 10) || 0, parseInt(lastPurchaseId, 10) || 0);
@@ -708,6 +824,9 @@ app.delete('/api/cash-closings/:id', async (req, res, next) => {
 
 // --- Global Error Handler ---
 app.use((err, req, res, next) => {
+    // Errores de negocio (stock insuficiente, datos inválidos) se explican al usuario
+    if (err.status && err.status < 500) return res.status(err.status).json({ error: err.message });
+    if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Ya existe un registro con ese dato único (código o cédula)' });
     console.error('API Error:', err.message);
     res.status(500).json({ error: 'Internal Server Error' });
 });

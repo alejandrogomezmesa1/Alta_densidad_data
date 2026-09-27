@@ -80,8 +80,11 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
     });
     const totalPurchases = activePurchases.reduce((acc, p) => acc + (parseFloat(p.total) || parseFloat(p.amount) || 0), 0);
     
-    // CASH IN: All payments made today, even from old sales
+    // Ingresos de la sesión: el efectivo va a la caja física; transferencias, Nequi o
+    // Mercado Pago se reportan aparte (no están en el cajón). Pagos sin método = efectivo.
     let cashSales = 0;
+    let otherSales = 0;
+    const esEfectivo = (p) => p.isCash === undefined || p.isCash === null || Number(p.isCash) === 1;
     let totalProfitFromSales = 0;
     const movements = [];
     let currentMaxPaymentId = closedIds.payment;
@@ -95,7 +98,10 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
       });
       if (paymentsThisSession.length > 0) {
         const paidThisSession = paymentsThisSession.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
-        cashSales += paidThisSession;
+        paymentsThisSession.forEach(p => {
+          if (esEfectivo(p)) cashSales += parseFloat(p.amount) || 0;
+          else otherSales += parseFloat(p.amount) || 0;
+        });
         
         paymentsThisSession.forEach(p => {
             if (p.id > currentMaxPaymentId) currentMaxPaymentId = p.id;
@@ -169,6 +175,7 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
     return {
       salesCount: movements.length,
       cashIn: cashSales,
+      otherIn: otherSales,
       cashOut: totalExpenses + totalPurchases,
       expensesTotal: totalExpenses,
       purchasesTotal: totalPurchases,
@@ -184,7 +191,7 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
   }, [sales, expenses, purchases, today, closedIds]);
 
   const handleCloseDay = () => {
-    if (dailyStats.salesCount === 0 && dailyStats.cashIn === 0 && dailyStats.cashOut === 0) {
+    if (dailyStats.salesCount === 0 && dailyStats.cashIn === 0 && dailyStats.otherIn === 0 && dailyStats.cashOut === 0) {
       notify('No hay movimientos nuevos para cerrar.', 'info');
       return;
     }
@@ -195,7 +202,7 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
         initialCash: 0,
         finalCash: dailyStats.net,
         difference: 0,
-        salesTotal: dailyStats.cashIn,
+        salesTotal: dailyStats.cashIn + dailyStats.otherIn,
         purchasesTotal: dailyStats.purchasesTotal,
         expensesTotal: dailyStats.expensesTotal,
         profit: dailyStats.profit,
@@ -257,9 +264,17 @@ const CashRegister = ({ sales, purchases, expenses, notify, confirm }) => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
                   <ArrowUpCircle size={16} color="var(--success)" />
-                  Ingresos Efectivo (Ventas/Abonos)
+                  Ingresos en efectivo (ventas y abonos)
                 </div>
                 <div style={{ fontWeight: 500, color: 'var(--success)' }}>+${dailyStats.cashIn.toLocaleString('es-CO')}</div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                  <ArrowUpCircle size={16} color="var(--info)" />
+                  Otros medios (transferencia, Nequi, web)
+                </div>
+                <div style={{ fontWeight: 500, color: 'var(--info)' }}>+${dailyStats.otherIn.toLocaleString('es-CO')}</div>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

@@ -36,3 +36,7 @@ lerna-debug.log*
 
 # Local history
 .history
+
+# Respaldos de base de datos (contienen datos personales)
+respaldo_*.sql
+*.sql.gz

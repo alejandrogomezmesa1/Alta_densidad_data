@@ -6,6 +6,7 @@ import { NumericFormat } from 'react-number-format';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { paidAmount, balanceOf } from '../utils/sales';
+import { api } from '../services/api';
 
 const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, onUpdate, onAddPayment, notify, confirm, suppliers = [], mostFrequentSupplierId }) => {
   const [isAdding, setIsAdding] = useState(false);
@@ -14,6 +15,14 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
   const [selectedSale, setSelectedSale] = useState(null);
   const [selectedDetail, setSelectedDetail] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('Efectivo');
+  // Listas cerradas del servidor (métodos de pago, categorías de gasto)
+  const [metodos, setMetodos] = useState([{ name: 'Efectivo' }, { name: 'Transferencia' }]);
+  const [categorias, setCategorias] = useState([]);
+  useEffect(() => {
+    if (type === 'sales') api.get('/payment-methods').then(l => Array.isArray(l) && l.length && setMetodos(l)).catch(() => {});
+    if (type === 'expenses') api.get('/expense-categories').then(l => Array.isArray(l) && setCategorias(l)).catch(() => {});
+  }, [type]);
   const [dateFilter, setDateFilter] = useState('all');
   const [selectedMonth, setSelectedMonth] = useState('');
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
@@ -256,6 +265,7 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
       setFormData({
         amount: String(item.total || item.amount || '0'),
         description: item.description || '',
+        category: item.category || '',
         customerId: item.customerId || '',
         customerName: item.customerName || '',
         phone: item.phone || '',
@@ -286,7 +296,8 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
       notify?.(`El abono supera el saldo pendiente ($${Math.round(saldo).toLocaleString('es-CO')}).`, 'warning');
       return;
     }
-    onAddPayment(selectedSale.id, { amount, date: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }), method: 'Efectivo' });
+    onAddPayment(selectedSale.id, { amount, date: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }), method: paymentMethod });
+    setPaymentMethod('Efectivo');
     setSelectedSale(null);
     setPaymentAmount('');
   };
@@ -496,6 +507,15 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                     <input required type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} style={{ width: '100%' }} />
                   </div>
                 )}
+                {type === 'expenses' && categorias.length > 0 && (
+                  <div>
+                    <label htmlFor="gasto-categoria" style={{ display: 'block', marginBottom: '0.6rem' }}>Categoría</label>
+                    <select id="gasto-categoria" required value={formData.category || ''} onChange={e => setFormData({ ...formData, category: e.target.value })} style={{ width: '100%', height: '45px' }}>
+                      <option value="" disabled>Selecciona…</option>
+                      {categorias.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>FECHA</label>
                   <input required type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} style={{ width: '100%' }} />
@@ -504,8 +524,7 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                   <div>
                     <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>MÉTODO DE PAGO</label>
                     <select required value={formData.method} onChange={e => setFormData({...formData, method: e.target.value})} style={{ width: '100%', height: '45px' }}>
-                      <option value="Efectivo">Efectivo</option>
-                      <option value="Transferencia">Transferencia</option>
+                      {metodos.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
                     </select>
                   </div>
                 )}
@@ -756,12 +775,18 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--accent-primary)', fontWeight: 500 }}>SALDO PENDIENTE:</span>
                   <span style={{ fontWeight: 500, color: 'var(--accent-primary)', fontSize: '1.25rem' }}>
-                    ${Math.round(selectedSale.total - (selectedSale.payments || []).reduce((acc, p) => acc + parseFloat(p.amount), 0)).toLocaleString('es-CO')}
+                    ${Math.round(balanceOf(selectedSale)).toLocaleString('es-CO')}
                   </span>
                 </div>
               </div>
 
               <form onSubmit={handleAddPayment}>
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <label htmlFor="abono-metodo" style={{ display: 'block', marginBottom: '0.6rem' }}>Método de pago</label>
+                  <select id="abono-metodo" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} style={{ width: '100%', height: '45px' }}>
+                    {metodos.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+                  </select>
+                </div>
                 <div style={{ marginBottom: '2rem' }}>
                   <label style={{ display: 'block', marginBottom: '0.75rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Monto del Abono (COP)</label>
                   <div style={{ position: 'relative' }}>
