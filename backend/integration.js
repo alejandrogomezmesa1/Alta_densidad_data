@@ -73,8 +73,13 @@ const crearRouter = (db) => {
     // Inventario público para la web: sin costos ni datos internos
     router.get('/v1/inventory', async (req, res, next) => {
         try {
-            const [rows] = await db.query(`SELECT id, nombre AS name, precio AS price, stock FROM inventario ${esquema.inventarioTipos ? 'WHERE activo = 1' : ''}`);
-            res.json(rows.map(r => ({ id: r.id, name: r.name, price: Number(r.price) || 0, stock: Number(r.stock) || 0 })));
+            const [rows] = await db.query(`SELECT id, nombre AS name, precio AS price, precio_costo AS cost, stock FROM inventario ${esquema.inventarioTipos ? 'WHERE activo = 1' : ''}`);
+            // El costo no sale de DATA: solo se avisa si el precio no lo cubre (la web bloquea la venta)
+            res.json(rows.map(r => {
+                const price = Number(r.price) || 0;
+                const cost = Number(r.cost) || 0;
+                return { id: r.id, name: r.name, price, stock: Number(r.stock) || 0, priceReview: cost > 0 && price <= cost };
+            }));
         } catch (error) { next(error); }
     });
 
