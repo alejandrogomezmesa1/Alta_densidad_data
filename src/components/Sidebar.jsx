@@ -11,8 +11,13 @@ import {
   Wallet,
   ShieldCheck,
   Clock,
+  Store,
+  ArrowUpRight,
   X
 } from 'lucide-react';
+
+// Panel de administración de la tienda web (mismo sistema, otro sitio)
+const PANEL_TIENDA = import.meta.env.VITE_PAGE_ADMIN_URL || 'https://alta-densidad-page.vercel.app/admin';
 
 const MENU = [
   { title: 'Resumen', items: [
@@ -83,6 +88,14 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout, usernam
               ))}
             </div>
           ))}
+          <div className="side-group">
+            <span className="side-group-title">Ecosistema</span>
+            <a className="side-item side-link" href={PANEL_TIENDA} title="Ir al panel de la tienda web">
+              <Store size={17} strokeWidth={1.6} />
+              <span>Tienda web</span>
+              <ArrowUpRight size={14} strokeWidth={1.6} className="side-ext" aria-hidden="true" />
+            </a>
+          </div>
         </nav>
 
         <div className="side-foot">

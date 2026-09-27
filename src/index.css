@@ -446,6 +446,15 @@ tbody tr:hover {
   background: var(--c-accent);
 }
 
+a.side-item {
+  text-decoration: none;
+}
+
+.side-item .side-ext {
+  margin-left: auto;
+  opacity: 0.55;
+}
+
 .side-item.active svg {
   color: var(--c-accent);
 }
