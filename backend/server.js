@@ -191,7 +191,22 @@ const COLS_PRODUCTO = () => `id, nombre as name, categoria as category, precio a
 
 app.get('/api/products', async (req, res, next) => {
     try {
-        const [rows] = await db.query(`SELECT ${COLS_PRODUCTO()} FROM inventario ${esquema.inventarioTipos ? 'WHERE activo = 1' : ''} ORDER BY nombre ASC`);
+        const { category, type } = req.query;
+        const condiciones = [];
+        const params = [];
+        if (esquema.inventarioTipos) {
+            condiciones.push('activo = 1');
+        }
+        if (category && category !== 'all') {
+            condiciones.push('categoria = ?');
+            params.push(String(category).trim());
+        }
+        if (type && type !== 'all' && TIPOS_INV.includes(type)) {
+            condiciones.push('tipo = ?');
+            params.push(type);
+        }
+        const where = condiciones.length > 0 ? `WHERE ${condiciones.join(' AND ')}` : '';
+        const [rows] = await db.query(`SELECT ${COLS_PRODUCTO()} FROM inventario ${where} ORDER BY nombre ASC`, params);
         res.json(rows.map(productoDesdeFila));
     } catch (error) { next(error); }
 });

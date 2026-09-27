@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Search, Edit2, Trash2, Filter, Download, Package, X, Check, ArrowUpDown, ClipboardList, Eye, History, SlidersHorizontal } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Filter, Download, Package, X, Check, ArrowUpDown, ClipboardList, Eye, History, SlidersHorizontal, RotateCcw } from 'lucide-react';
 import { AjusteStockModal, MovimientosModal } from './StockModals';
 import { TIPOS_INVENTARIO, formatoCantidad } from '../utils/inventario';
 import DetailModal from './DetailModal';
@@ -16,6 +16,10 @@ const stockBajo = (p) => (Number(p.minStock) > 0 ? Number(p.stock) <= Number(p.m
 
 const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, exportData, notify, confirm, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [stockFilter, setStockFilter] = useState('all'); // 'all' | 'in_stock' | 'low' | 'out'
+  const [sortBy, setSortBy] = useState('recent'); // 'recent' | 'name_asc' | 'name_desc' | 'stock_asc' | 'stock_desc'
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [selectedDetail, setSelectedDetail] = useState(null);
@@ -24,10 +28,68 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
   const [historial, setHistorial] = useState(null);
 
   const items = Array.isArray(inventory) ? inventory : [];
-  const filteredInventory = items.filter(p => 
-    (String(p?.name || '')).toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (String(p?.category || '')).toLowerCase().includes(searchTerm.toLowerCase())
-  ).sort((a, b) => b.id - a.id);
+
+  // Categorías únicas detectadas dinámicamente desde los productos
+  const categoriasDisponibles = useMemo(() => {
+    const cats = new Set();
+    items.forEach(p => {
+      const c = (p?.category || '').trim();
+      if (c) cats.add(c);
+    });
+    return Array.from(cats).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+  }, [items]);
+
+  const hayFiltrosActivos = searchTerm.trim() !== '' || categoryFilter !== 'all' || typeFilter !== 'all' || stockFilter !== 'all' || sortBy !== 'recent';
+
+  const limpiarFiltros = () => {
+    setSearchTerm('');
+    setCategoryFilter('all');
+    setTypeFilter('all');
+    setStockFilter('all');
+    setSortBy('recent');
+  };
+
+  const filteredInventory = useMemo(() => {
+    return items.filter(p => {
+      // 1. Búsqueda por texto (nombre, categoría o código)
+      if (searchTerm.trim()) {
+        const q = searchTerm.toLowerCase();
+        const matchName = String(p?.name || '').toLowerCase().includes(q);
+        const matchCat = String(p?.category || '').toLowerCase().includes(q);
+        const matchCode = String(p?.code || '').toLowerCase().includes(q);
+        if (!matchName && !matchCat && !matchCode) return false;
+      }
+
+      // 2. Filtro por categoría exacta
+      if (categoryFilter !== 'all') {
+        if ((p?.category || '').trim().toLowerCase() !== categoryFilter.toLowerCase()) return false;
+      }
+
+      // 3. Filtro por tipo de producto (terminado, esencia, base, etc.)
+      if (typeFilter !== 'all') {
+        if ((p?.type || 'terminado') !== typeFilter) return false;
+      }
+
+      // 4. Filtro por estado de stock
+      if (stockFilter === 'low') {
+        if (!stockBajo(p)) return false;
+      } else if (stockFilter === 'out') {
+        if (Number(p?.stock) > 0) return false;
+      } else if (stockFilter === 'in_stock') {
+        if (Number(p?.stock) <= 0) return false;
+      }
+
+      return true;
+    }).sort((a, b) => {
+      if (sortBy === 'name_asc') return (a.name || '').localeCompare(b.name || '');
+      if (sortBy === 'name_desc') return (b.name || '').localeCompare(a.name || '');
+      if (sortBy === 'stock_asc') return Number(a.stock) - Number(b.stock);
+      if (sortBy === 'stock_desc') return Number(b.stock) - Number(a.stock);
+      if (sortBy === 'price_desc') return Number(b.price) - Number(a.price);
+      if (sortBy === 'price_asc') return Number(a.price) - Number(b.price);
+      return b.id - a.id;
+    });
+  }, [items, searchTerm, categoryFilter, typeFilter, stockFilter, sortBy]);
 
   const handleEdit = (product) => {
     setEditingId(product.id);
@@ -234,21 +296,108 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
       </AnimatePresence>
 
       <div className="premium-card" style={{ padding: 0 }}>
-        <div className="search-filter-bar">
-          <div style={{ position: 'relative', flex: 1 }}>
-            <Search style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={18} />
+        <div className="search-filter-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
+          {/* Campo de búsqueda */}
+          <div style={{ position: 'relative', flex: '1 1 200px', minWidth: '180px' }}>
+            <Search style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={16} />
             <input 
               type="text" 
-              placeholder="Buscar por nombre, categoría..."
+              placeholder="Buscar por nombre, código..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              style={{ width: '100%', paddingLeft: '3rem', borderRadius: 0 }}
+              style={{ width: '100%', paddingLeft: '2.6rem', paddingRight: searchTerm ? '2.2rem' : '1rem', borderRadius: 0 }}
             />
+            {searchTerm && (
+              <button 
+                type="button" 
+                onClick={() => setSearchTerm('')} 
+                style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+                title="Limpiar búsqueda"
+              >
+                <X size={15} />
+              </button>
+            )}
           </div>
-          <button className="glass" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1.2rem', borderRadius: 0, color: 'var(--text-secondary)', fontWeight: 500, border: 'none', cursor: 'pointer' }}>
-            <Filter size={16} />
-            Filtrar
-          </button>
+
+          {/* Selector de Categoría */}
+          <div style={{ flex: '0 1 180px', minWidth: '140px' }}>
+            <select
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+              style={{ width: '100%', borderRadius: 0 }}
+              title="Filtrar por categoría"
+            >
+              <option value="all">Todas las categorías ({categoriasDisponibles.length})</option>
+              {categoriasDisponibles.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Selector de Tipo de Producto */}
+          <div style={{ flex: '0 1 150px', minWidth: '125px' }}>
+            <select
+              value={typeFilter}
+              onChange={e => setTypeFilter(e.target.value)}
+              style={{ width: '100%', borderRadius: 0 }}
+              title="Filtrar por tipo"
+            >
+              <option value="all">Todos los tipos</option>
+              {Object.entries(TIPOS_INVENTARIO).map(([v, t]) => (
+                <option key={v} value={v}>{t}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Selector de Estado de Stock */}
+          <div style={{ flex: '0 1 150px', minWidth: '125px' }}>
+            <select
+              value={stockFilter}
+              onChange={e => setStockFilter(e.target.value)}
+              style={{ width: '100%', borderRadius: 0 }}
+              title="Filtrar por stock"
+            >
+              <option value="all">Todo el stock</option>
+              <option value="in_stock">Con stock</option>
+              <option value="low">Stock bajo / mín</option>
+              <option value="out">Agotados (0)</option>
+            </select>
+          </div>
+
+          {/* Selector de Ordenamiento */}
+          <div style={{ flex: '0 1 150px', minWidth: '125px' }}>
+            <select
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value)}
+              style={{ width: '100%', borderRadius: 0 }}
+              title="Ordenar por"
+            >
+              <option value="recent">Más recientes</option>
+              <option value="name_asc">Nombre (A-Z)</option>
+              <option value="name_desc">Nombre (Z-A)</option>
+              <option value="stock_desc">Mayor stock</option>
+              <option value="stock_asc">Menor stock</option>
+              <option value="price_desc">Mayor precio</option>
+              <option value="price_asc">Menor precio</option>
+            </select>
+          </div>
+
+          {/* Botón de limpiar filtros cuando hay alguno activo */}
+          {hayFiltrosActivos && (
+            <button
+              onClick={limpiarFiltros}
+              className="glass"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.65rem 0.9rem', borderRadius: 0, color: 'var(--accent-primary)', fontWeight: 500, border: '1px solid rgba(226, 176, 76, 0.4)', cursor: 'pointer', fontSize: '0.8rem' }}
+              title="Restablecer todos los filtros"
+            >
+              <RotateCcw size={14} />
+              <span>Limpiar</span>
+            </button>
+          )}
+
+          <div style={{ marginLeft: 'auto', fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+            <strong style={{ color: 'var(--text-primary)' }}>{filteredInventory.length}</strong> de {items.length} productos
+          </div>
         </div>
 
         <div className="table-responsive-wrapper">
@@ -338,9 +487,22 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
             </tbody>
           </table>
           {filteredInventory.length === 0 && (
-            <div style={{ padding: '5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-              <Package size={48} style={{ opacity: 0.1, marginBottom: '1rem' }} />
-              <p>No hay productos registrados.</p>
+            <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <Package size={48} style={{ opacity: 0.15, marginBottom: '1rem', strokeWidth: 1.5 }} />
+              <p style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>
+                {items.length === 0 
+                  ? 'No hay productos registrados en el inventario.' 
+                  : 'No se encontraron productos que coincidan con los filtros seleccionados.'}
+              </p>
+              {hayFiltrosActivos && items.length > 0 && (
+                <button 
+                  onClick={limpiarFiltros} 
+                  className="btn-primary" 
+                  style={{ marginTop: '1.25rem', padding: '0.6rem 1.4rem', fontSize: '0.85rem' }}
+                >
+                  Restablecer todos los filtros
+                </button>
+              )}
             </div>
           )}
         </div>
