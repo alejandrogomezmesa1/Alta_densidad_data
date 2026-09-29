@@ -73,12 +73,18 @@ const crearRouter = (db) => {
     // Inventario público para la web: sin costos ni datos internos
     router.get('/v1/inventory', async (req, res, next) => {
         try {
-            const [rows] = await db.query(`SELECT id, nombre AS name, precio AS price, precio_costo AS cost, stock FROM inventario ${esquema.inventarioTipos ? 'WHERE activo = 1' : ''}`);
-            // El costo no sale de DATA: solo se avisa si el precio no lo cubre (la web bloquea la venta)
+            const [rows] = await db.query(esquema.inventarioTipos
+                ? 'SELECT id, nombre AS name, categoria, precio AS price, precio_costo AS cost, stock, tipo, unidad FROM inventario WHERE activo = 1'
+                : 'SELECT id, nombre AS name, categoria, precio AS price, precio_costo AS cost, stock FROM inventario');
+            // El costo no sale de DATA: solo se avisa si el precio no lo cubre (la web bloquea la venta).
+            // tipo y unidad le dicen a la web qué es cada ítem (esencia, feromona, envase…) y si se vende por ml.
             res.json(rows.map(r => {
                 const price = Number(r.price) || 0;
                 const cost = Number(r.cost) || 0;
-                return { id: r.id, name: r.name, price, stock: Number(r.stock) || 0, priceReview: cost > 0 && price <= cost };
+                return {
+                    id: r.id, name: r.name, category: r.categoria || null, price, stock: Number(r.stock) || 0,
+                    type: r.tipo || 'terminado', unit: r.unidad || 'und', priceReview: cost > 0 && price <= cost
+                };
             }));
         } catch (error) { next(error); }
     });
