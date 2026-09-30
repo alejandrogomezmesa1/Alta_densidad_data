@@ -7,7 +7,8 @@ export const esquema = {
     libro: false,            // 006: movimientos de inventario
     metodosPago: false,      // 007
     categoriasGasto: false,  // 008
-    kits: false              // 010: kits compuestos
+    kits: false,             // 010: kits compuestos
+    configuraciones: false   // 011: módulo Configuraciones
 };
 
 export const actualizarEsquema = (aplicadas) => {
@@ -18,4 +19,5 @@ export const actualizarEsquema = (aplicadas) => {
     esquema.metodosPago = aplicadas.has('007');
     esquema.categoriasGasto = aplicadas.has('008');
     esquema.kits = aplicadas.has('010');
+    esquema.configuraciones = aplicadas.has('011');
 };

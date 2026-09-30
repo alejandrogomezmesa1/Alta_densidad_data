@@ -8,6 +8,7 @@ import db from './db.js';
 import { iniciarServidorIntegracion } from './integration.js';
 import { ejecutarMigraciones } from './migrator.js';
 import { esquema, actualizarEsquema } from './estado.js';
+import { leerConfiguraciones, guardarConfiguraciones, definicionesPublicas } from './configuraciones.js';
 import { moverStock, moverVenta, auditarStock, componentesDe, resumenKits } from './inventario.js';
 import { insertarPago, categoriaGastoId } from './catalogos.js';
 
@@ -109,17 +110,11 @@ app.post('/api/auth/login', loginLimiter, async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
-// --- PROTECT ALL FOLLOWING ROUTES ---
-app.use('/api/suppliers', authenticateToken);
-app.use('/api/products', authenticateToken);
-app.use('/api/customers', authenticateToken);
-app.use('/api/sales', authenticateToken);
-app.use('/api/purchases', authenticateToken);
-app.use('/api/expenses', authenticateToken);
-app.use('/api/cash-closings', authenticateToken);
-app.use('/api/inventory', authenticateToken);
-app.use('/api/payment-methods', authenticateToken);
-app.use('/api/expense-categories', authenticateToken);
+// --- TODO /api EXIGE SESIÓN ---
+// Salvo el login, ninguna ruta de la API es pública: una ruta nueva queda protegida sin tener
+// que agregarla a una lista (así quedaron abiertas /api/kits y /api/settings hasta el 30-09).
+const RUTAS_PUBLICAS = ['/auth/login'];
+app.use('/api', (req, res, next) => (RUTAS_PUBLICAS.includes(req.path) ? next() : authenticateToken(req, res, next)));
 
 // Conexión y migraciones versionadas del esquema (ver backend/migrations)
 try {
@@ -365,6 +360,20 @@ app.get('/api/inventory/audit', async (req, res, next) => {
     if (!esquema.libro) return res.json({ disponible: false, diferencias: [] });
     try {
         res.json({ disponible: true, diferencias: await auditarStock(db) });
+    } catch (error) { next(error); }
+});
+
+// --- CONFIGURACIONES (módulo del panel) ---
+app.get('/api/settings', async (req, res, next) => {
+    try {
+        res.json({ definiciones: definicionesPublicas(), valores: await leerConfiguraciones(db) });
+    } catch (error) { next(error); }
+});
+
+app.put('/api/settings', async (req, res, next) => {
+    try {
+        const valores = await guardarConfiguraciones(db, req.body?.valores, { usuarioId: req.user?.id });
+        res.json({ definiciones: definicionesPublicas(), valores });
     } catch (error) { next(error); }
 });
 

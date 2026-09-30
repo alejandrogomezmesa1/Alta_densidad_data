@@ -14,6 +14,7 @@ import {
   Store,
   ArrowUpRight,
   Gift,
+  Settings,
   X
 } from 'lucide-react';
 
@@ -38,6 +39,9 @@ const MENU = [
     { id: 'clients', icon: Users, label: 'Clientes' },
     { id: 'collections', icon: Clock, label: 'Cartera' },
     { id: 'suppliers', icon: ShieldCheck, label: 'Proveedores' },
+  ]},
+  { title: 'Sistema', items: [
+    { id: 'settings', icon: Settings, label: 'Configuraciones' },
   ]},
 ];
 

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Search, Edit2, Trash2, Filter, Download, Package, X, Check, ArrowUpDown, ClipboardList, Eye, History, SlidersHorizontal, RotateCcw } from 'lucide-react';
 import { AjusteStockModal, MovimientosModal } from './StockModals';
-import { TIPOS_INVENTARIO, formatoCantidad } from '../utils/inventario';
+import { TIPOS_INVENTARIO, formatoCantidad, nivelStock, NIVELES_STOCK } from '../utils/inventario';
 import DetailModal from './DetailModal';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -11,10 +11,10 @@ import { NumericFormat } from 'react-number-format';
 const FORM_VACIO = { name: '', category: '', price: '', costPrice: '', stock: '0', type: 'terminado', minStock: '0', code: '', purchaseUnit: '', purchaseFactor: '1' };
 const LIQUIDOS = ['esencia', 'base', 'feromona'];
 
-// Stock bajo: usa el mínimo definido para el ítem; si no tiene, 1 unidad o menos
-const stockBajo = (p) => (Number(p.minStock) > 0 ? Number(p.stock) <= Number(p.minStock) : Number(p.stock) <= 1);
-
-const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, exportData, notify, confirm, onRefresh }) => {
+const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, exportData, notify, confirm, onRefresh, config }) => {
+  // Semáforo de stock con los límites de Configuraciones (o el stock mínimo del ítem)
+  const nivel = (p) => nivelStock(p, config);
+  const stockBajo = (p) => nivel(p) !== 'disponible';
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -72,7 +72,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
 
       // 4. Filtro por estado de stock
       if (stockFilter === 'low') {
-        if (!stockBajo(p)) return false;
+        if (nivel(p) !== 'advertencia') return false;
       } else if (stockFilter === 'out') {
         if (Number(p?.stock) > 0) return false;
       } else if (stockFilter === 'in_stock') {
@@ -127,7 +127,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
     const lowStockItems = items.filter(stockBajo);
     
     if (lowStockItems.length === 0) {
-      notify?.('No hay productos bajo su stock mínimo para generar el reporte.', 'info');
+      notify?.('No hay productos agotados ni en advertencia para generar el reporte.', 'info');
       return;
     }
 
@@ -142,7 +142,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
 
     doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
-    doc.text(`REPORTE DE FALTANTES (STOCK 0 y 1)`, pageWidth / 2, 28, { align: 'center' });
+    doc.text(`REPORTE DE FALTANTES (AGOTADOS Y EN ADVERTENCIA)`, pageWidth / 2, 28, { align: 'center' });
     doc.text(`${new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}`, pageWidth / 2, 33, { align: 'center' });
 
     // Table
@@ -207,7 +207,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
             style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.8rem 1.2rem', borderRadius: 0, color: 'var(--error)', border: '1px solid rgba(194, 65, 59,0.2)', cursor: 'pointer', fontWeight: 500 }}
           >
             <ClipboardList size={20} />
-            <span style={{ fontSize: '0.85rem' }}>Reporte Faltantes (0-1)</span>
+            <span style={{ fontSize: '0.85rem' }}>Reporte Faltantes</span>
           </button>
           <button onClick={exportData} className="glass" style={{ padding: '0.8rem', borderRadius: 0, color: 'var(--text-secondary)', border: 'none', cursor: 'pointer' }}>
             <Download size={20} />
@@ -359,7 +359,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
             >
               <option value="all">Todo el stock</option>
               <option value="in_stock">Con stock</option>
-              <option value="low">Stock bajo / mín</option>
+              <option value="low">En advertencia (amarillo)</option>
               <option value="out">Agotados (0)</option>
             </select>
           </div>
@@ -444,8 +444,8 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <span className="mobile-label">Stock</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: stockBajo(product) ? 'var(--error)' : 'var(--success)' }} />
-                        <span style={{ fontWeight: 500, color: stockBajo(product) ? 'var(--error)' : 'var(--success)', fontSize: '0.9rem' }}>{formatoCantidad(product.stock, product.unit)}</span>
+                        <div title={NIVELES_STOCK[nivel(product)].etiqueta} style={{ width: '6px', height: '6px', borderRadius: '50%', background: NIVELES_STOCK[nivel(product)].color }} />
+                        <span style={{ fontWeight: 500, color: NIVELES_STOCK[nivel(product)].color, fontSize: '0.9rem', whiteSpace: 'nowrap' }}>{formatoCantidad(product.stock, product.unit)}</span>
                       </div>
                     </td>
                     <td style={{ padding: '1.25rem 2rem' }}>

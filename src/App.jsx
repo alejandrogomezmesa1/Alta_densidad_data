@@ -3,6 +3,8 @@ import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import Inventory from './components/Inventory';
 import Kits from './components/Kits';
+import Configuraciones from './components/Configuraciones';
+import { CONFIG_DEFECTO } from './utils/inventario';
 import Transactions from './components/Transactions';
 import CashRegister from './components/CashRegister';
 import Collections from './components/Collections';
@@ -139,8 +141,15 @@ function App() {
     exportData, fetchData
   } = useInventory(notify, auth.isAuthenticated); // Injecting notification system
 
+  // Configuraciones del sistema (semáforo de stock…); se recargan al iniciar sesión
+  const [config, setConfig] = useState(CONFIG_DEFECTO);
+  useEffect(() => {
+    if (!auth.isAuthenticated) return;
+    api.get('/settings').then((r) => setConfig({ ...CONFIG_DEFECTO, ...r.valores })).catch(() => {});
+  }, [auth.isAuthenticated]);
+
   const renderContent = () => {
-    const commonProps = { notify, confirm: requestConfirm };
+    const commonProps = { notify, confirm: requestConfirm, config };
     
     switch(activeTab) {
       case 'dashboard':
@@ -155,6 +164,8 @@ function App() {
           exportData={exportData}
           onRefresh={fetchData}
         />;
+      case 'settings':
+        return <Configuraciones {...commonProps} onGuardado={(v) => setConfig({ ...CONFIG_DEFECTO, ...v })} />;
       case 'kits':
         return <Kits {...commonProps} inventory={inventory} onRefresh={fetchData} />;
       case 'sales':

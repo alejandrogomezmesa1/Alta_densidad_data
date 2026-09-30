@@ -10,6 +10,7 @@ import {
   PieChart, Pie, Cell, Legend, BarChart, Bar
 } from 'recharts';
 import { getPayments, balanceOf, saleProductNames } from '../utils/sales';
+import { nivelStock, formatoCantidad } from '../utils/inventario';
 
 const StatCard = ({ title, value, icon: Icon, color, percentage, subValue, trend, delay = 0, onClick }) => (
   <motion.div 
@@ -76,7 +77,7 @@ const DetailModal = ({ isOpen, onClose, title, data, type }) => {
   );
 };
 
-const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
+const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab, config }) => {
   const [period, setPeriod] = useState('month');
 
   const salesList = Array.isArray(sales) ? sales : [];
@@ -180,8 +181,9 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
 
     const netProfit = totalProfitPeriod - totalExpenses;
     
-    const lowStockCount = inventoryList.filter(p => p.stock === 1).length;
-    const outOfStockCount = inventoryList.filter(p => p.stock <= 0).length;
+    // Semáforo de stock con los límites de Configuraciones
+    const lowStockCount = inventoryList.filter(p => nivelStock(p, config) === 'advertencia').length;
+    const outOfStockCount = inventoryList.filter(p => nivelStock(p, config) === 'agotado').length;
     const inventoryValue = inventoryList.reduce((acc, p) => acc + (p.stock * p.costPrice), 0);
     const potentialRevenue = inventoryList.reduce((acc, p) => acc + (p.stock * p.price), 0);
 
@@ -297,7 +299,7 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
       salesCount: currentSales.length,
       periodSalesItems, cashInItems, profitItems, accountsReceivableItems
     };
-  }, [salesList, expensesList, inventoryList, period]);
+  }, [salesList, expensesList, inventoryList, period, config]);
 
   const chartData = useMemo(() => {
     const data = [];
@@ -465,22 +467,20 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
             <span className="up" style={{ fontSize: '10px' }}>Alertas de inventario</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
-            {inventoryList.filter(p => p.stock <= 1).slice(0, 6).map(p => (
+            {inventoryList.filter(p => nivelStock(p, config) === 'agotado').slice(0, 6).map(p => (
               <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={p.id} className="glass" style={{ padding: '1rem 1.5rem', borderRadius: 0, borderLeft: '4px solid var(--error)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>{p.name}</div>
-                  <div style={{ fontSize: '0.7rem', color: p.stock === 0 ? 'var(--error)' : 'var(--warning)', fontWeight: 500 }}>
-                    {p.stock === 0 ? 'PRODUCTO AGOTADO' : 'ÚLTIMA UNIDAD'}
-                  </div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--error)', fontWeight: 500 }}>PRODUCTO AGOTADO</div>
                 </div>
                 <button onClick={() => setActiveTab('inventory')} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.7rem', fontWeight: 500, cursor: 'pointer' }}>REABASTECER</button>
               </motion.div>
             ))}
-            {inventoryList.filter(p => p.stock > 1 && p.stock < 5).slice(0, 3).map(p => (
+            {inventoryList.filter(p => nivelStock(p, config) === 'advertencia').slice(0, 6).map(p => (
               <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={p.id} className="glass" style={{ padding: '1rem 1.5rem', borderRadius: 0, borderLeft: '4px solid var(--warning)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>{p.name}</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--warning)', fontWeight: 500 }}>STOCK BAJO: {p.stock} UNIDADES</div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--warning)', fontWeight: 500 }}>EN ADVERTENCIA: {formatoCantidad(p.stock, p.unit)}{p.unit === 'ml' ? '' : ' UND'}</div>
                 </div>
                 <button onClick={() => setActiveTab('inventory')} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.7rem', fontWeight: 500, cursor: 'pointer' }}>REABASTECER</button>
               </motion.div>
@@ -600,11 +600,11 @@ const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab }) => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1.25rem', borderRadius: 0, border: '1px solid var(--glass-border)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Bajo Stock (&lt;5)</span>
-                <span style={{ fontWeight: 500, color: 'var(--error)' }}>{stats.lowStockCount}</span>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>En advertencia</span>
+                <span style={{ fontWeight: 500, color: 'var(--warning)' }}>{stats.lowStockCount}</span>
               </div>
               <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: 0, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${(stats.lowStockCount / (inventoryList.length || 1)) * 100}%`, background: 'var(--error)' }} />
+                <div style={{ height: '100%', width: `${(stats.lowStockCount / (inventoryList.length || 1)) * 100}%`, background: 'var(--warning)' }} />
               </div>
             </div>
             

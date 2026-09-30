@@ -5,13 +5,13 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Trash2, X, Gift, AlertTriangle, Save } from 'lucide-react';
 import { NumericFormat } from 'react-number-format';
 import { api } from '../services/api';
-import { formatoCantidad } from '../utils/inventario';
+import { formatoCantidad, nivelStock, NIVELES_STOCK } from '../utils/inventario';
 
 const pesos = (n) => `$${Math.round(Number(n) || 0).toLocaleString('es-CO')}`;
 const VACIO = { id: null, name: '', price: '', components: [] };
 const alcanza = (c) => Math.max(0, Math.floor(Number(c.stock) / Number(c.quantity) + 1e-9));
 
-const Kits = ({ inventory, notify, confirm, onRefresh }) => {
+const Kits = ({ inventory, notify, confirm, onRefresh, config }) => {
   const [kits, setKits] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [editor, setEditor] = useState(null);
@@ -230,7 +230,9 @@ const Kits = ({ inventory, notify, confirm, onRefresh }) => {
                 <footer>
                   <span>Precio <b>{pesos(k.price)}</b></span>
                   {k.components.length > 0 && <span>Costo <b>{pesos(k.costPrice)}</b></span>}
-                  {k.components.length > 0 && <span>Disponibles <b className={k.stock === 0 ? 'falta' : ''}>{k.stock}</b></span>}
+                  {k.components.length > 0 && (
+                    <span>Disponibles <b style={{ color: NIVELES_STOCK[nivelStock({ stock: k.stock, unit: 'und' }, config)].color }}>{k.stock}</b></span>
+                  )}
                   {k.priceReview && <span className="kit-alerta"><AlertTriangle size={14} /> Precio en revisión</span>}
                 </footer>
               </article>

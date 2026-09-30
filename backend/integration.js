@@ -11,6 +11,7 @@ import express from 'express';
 import crypto from 'crypto';
 import { esquema } from './estado.js';
 import { moverVenta, componentesDe, resumenKits } from './inventario.js';
+import { leerConfiguraciones, guardarConfiguraciones, definicionesPublicas } from './configuraciones.js';
 import { insertarPago } from './catalogos.js';
 
 const MAX_SKEW_MS = 60 * 1000;
@@ -74,7 +75,7 @@ const crearRouter = (db) => {
     router.get('/v1/inventory', async (req, res, next) => {
         try {
             const [rows] = await db.query(esquema.inventarioTipos
-                ? 'SELECT id, nombre AS name, categoria, precio AS price, precio_costo AS cost, stock, tipo, unidad FROM inventario WHERE activo = 1'
+                ? 'SELECT id, nombre AS name, categoria, precio AS price, precio_costo AS cost, stock, tipo, unidad, stock_minimo FROM inventario WHERE activo = 1'
                 : 'SELECT id, nombre AS name, categoria, precio AS price, precio_costo AS cost, stock FROM inventario');
             // El costo no sale de DATA: solo se avisa si el precio no lo cubre (la web bloquea la venta).
             // tipo y unidad le dicen a la web qué es cada ítem (esencia, feromona, envase…) y si se vende por ml.
@@ -86,9 +87,23 @@ const crearRouter = (db) => {
                 const cost = k ? k.costo : Number(r.cost) || 0;
                 return {
                     id: r.id, name: r.name, category: r.categoria || null, price, stock: k ? k.stock : Number(r.stock) || 0,
-                    type: r.tipo || 'terminado', unit: r.unidad || 'und', priceReview: cost > 0 && price <= cost
+                    type: r.tipo || 'terminado', unit: r.unidad || 'und', minStock: Number(r.stock_minimo) || 0, priceReview: cost > 0 && price <= cost
                 };
             }));
+        } catch (error) { next(error); }
+    });
+
+    // Configuraciones que la tienda puede ver y editar desde su panel (web: true en configuraciones.js)
+    router.get('/v1/settings', async (req, res, next) => {
+        try {
+            res.json({ definiciones: definicionesPublicas({ soloWeb: true }), valores: await leerConfiguraciones(db, { soloWeb: true }) });
+        } catch (error) { next(error); }
+    });
+
+    router.put('/v1/settings', async (req, res, next) => {
+        try {
+            const valores = await guardarConfiguraciones(db, req.body?.valores, { soloWeb: true });
+            res.json({ definiciones: definicionesPublicas({ soloWeb: true }), valores });
         } catch (error) { next(error); }
     });
 
@@ -278,6 +293,8 @@ export const iniciarServidorIntegracion = (db) => {
     app.use('/internal', crearRouter(db));
     app.use((req, res) => notFound(res));
     app.use((err, req, res, next) => {
+        // Errores de validación (p. ej. una configuración fuera de rango) sí se explican
+        if (err.status && err.status < 500) return res.status(err.status).json({ error: err.message });
         console.error('[INTEGRACION] Error:', err.message);
         res.status(500).json({ error: 'Internal error' });
     });
