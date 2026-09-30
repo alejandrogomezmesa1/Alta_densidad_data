@@ -366,6 +366,11 @@
    "id": 58,
    "nombre": "Khamrah Qawah",
    "stock": 1
+  },
+  {
+   "id": 45,
+   "nombre": "Kit Yaritas",
+   "stock": 1
   }
  ],
  "ceros": [
@@ -1693,8 +1698,7 @@
   }
  ],
  "pendientes": [
-  "Kit Yaritas (#45): ¿es el \"Kit Yara Asad\" del conteo? No se toca hasta confirmarlo.",
-  "Kits nuevos a armar en el creador: Kit 9PM, Kit Gourmand, Kit Yara Tous, Kit Odyssey Chocolate, Kit Odyssey Candee (y Kit Yara Asad si no es #45).",
+  "Kits nuevos a armar en el creador: Kit 9PM, Kit Gourmand, Kit Yara Tous, Kit Odyssey Chocolate, Kit Odyssey Candee.",
   "Precio y costo de los 18 perfumes nuevos y costo por ml de las 118 esencias (se crean en 0)."
  ]
 }
