@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import Inventory from './components/Inventory';
+import Kits from './components/Kits';
 import Transactions from './components/Transactions';
 import CashRegister from './components/CashRegister';
 import Collections from './components/Collections';
@@ -154,6 +155,8 @@ function App() {
           exportData={exportData}
           onRefresh={fetchData}
         />;
+      case 'kits':
+        return <Kits {...commonProps} inventory={inventory} onRefresh={fetchData} />;
       case 'sales':
         return <Transactions 
           {...commonProps}

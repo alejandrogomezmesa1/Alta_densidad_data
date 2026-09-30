@@ -10,7 +10,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import { esquema } from './estado.js';
-import { moverStock } from './inventario.js';
+import { moverVenta, componentesDe, resumenKits } from './inventario.js';
 import { insertarPago } from './catalogos.js';
 
 const MAX_SKEW_MS = 60 * 1000;
@@ -78,11 +78,14 @@ const crearRouter = (db) => {
                 : 'SELECT id, nombre AS name, categoria, precio AS price, precio_costo AS cost, stock FROM inventario');
             // El costo no sale de DATA: solo se avisa si el precio no lo cubre (la web bloquea la venta).
             // tipo y unidad le dicen a la web qué es cada ítem (esencia, feromona, envase…) y si se vende por ml.
+            // Kits compuestos: existencias y costo calculados con sus componentes
+            const kits = await resumenKits(db);
             res.json(rows.map(r => {
+                const k = kits.get(r.id);
                 const price = Number(r.price) || 0;
-                const cost = Number(r.cost) || 0;
+                const cost = k ? k.costo : Number(r.cost) || 0;
                 return {
-                    id: r.id, name: r.name, category: r.categoria || null, price, stock: Number(r.stock) || 0,
+                    id: r.id, name: r.name, category: r.categoria || null, price, stock: k ? k.stock : Number(r.stock) || 0,
                     type: r.tipo || 'terminado', unit: r.unidad || 'und', priceReview: cost > 0 && price <= cost
                 };
             }));
@@ -101,10 +104,22 @@ const crearRouter = (db) => {
             }
             if (pedidos.size === 0) return res.json({ ok: true, faltantes: [] });
 
-            const [rows] = await db.query('SELECT id, stock FROM inventario WHERE id IN (?)', [[...pedidos.keys()]]);
+            // Los kits compuestos piden sus componentes; la demanda se suma por ítem real
+            const necesidad = new Map();
+            const partes = new Map();
+            for (const [id, qty] of pedidos) {
+                const comps = await componentesDe(db, id);
+                const lista = comps.length ? comps.map(c => [c.id, qty * c.cantidad]) : [[id, qty]];
+                partes.set(id, lista);
+                lista.forEach(([real, q]) => necesidad.set(real, (necesidad.get(real) || 0) + q));
+            }
+            const [rows] = await db.query('SELECT id, stock FROM inventario WHERE id IN (?)', [[...necesidad.keys()]]);
             const stock = new Map(rows.map(r => [r.id, Number(r.stock) || 0]));
-            const faltantes = [...pedidos].filter(([id, qty]) => (stock.get(id) ?? 0) < qty)
-                .map(([id, qty]) => ({ inventoryId: id, requested: qty, available: Math.max(0, stock.get(id) ?? 0) }));
+            const kits = await resumenKits(db);
+            const disponible = (id) => (kits.has(id) ? kits.get(id).stock : Math.max(0, stock.get(id) ?? 0));
+            const faltantes = [...pedidos]
+                .filter(([id]) => partes.get(id).some(([real]) => (stock.get(real) ?? 0) < necesidad.get(real)))
+                .map(([id, qty]) => ({ inventoryId: id, requested: qty, available: disponible(id) }));
             res.json({ ok: faltantes.length === 0, faltantes });
         } catch (error) { next(error); }
     });
@@ -185,7 +200,7 @@ const crearRouter = (db) => {
                     if (inv.length) {
                         inventarioId = inv[0].id;
                         // El cliente ya pagó: se registra aunque falte stock, con alerta (regla D-07)
-                        const r = await moverStock(connection, { inventarioId, cantidad: -l.quantity, tipo: 'venta', origenTipo: 'venta', origenId: ventaId,
+                        const r = await moverVenta(connection, { inventarioId, cantidad: -l.quantity, tipo: 'venta', origenTipo: 'venta', origenId: ventaId,
                             motivo: `Pedido web ${ref}`, permitirNegativo: true });
                         costo = r.costo;
                         if (r.stock < 0) sinStock.push(inventarioId);
@@ -224,7 +239,7 @@ const crearRouter = (db) => {
             const [detalles] = await connection.query('SELECT inventario_id, cantidad FROM venta_detalles WHERE venta_id = ?', [ventaId]);
             for (const d of detalles) {
                 if (d.inventario_id) {
-                    await moverStock(connection, { inventarioId: d.inventario_id, cantidad: Number(d.cantidad), tipo: 'anulacion_venta',
+                    await moverVenta(connection, { inventarioId: d.inventario_id, cantidad: Number(d.cantidad), tipo: 'anulacion_venta',
                         origenTipo: 'venta', origenId: ventaId, motivo: `Reembolso del pedido web ${ref}` });
                 }
             }

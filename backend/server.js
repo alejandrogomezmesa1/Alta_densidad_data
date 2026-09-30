@@ -8,7 +8,7 @@ import db from './db.js';
 import { iniciarServidorIntegracion } from './integration.js';
 import { ejecutarMigraciones } from './migrator.js';
 import { esquema, actualizarEsquema } from './estado.js';
-import { moverStock, auditarStock } from './inventario.js';
+import { moverStock, moverVenta, auditarStock, componentesDe, resumenKits } from './inventario.js';
 import { insertarPago, categoriaGastoId } from './catalogos.js';
 
 dotenv.config();
@@ -207,7 +207,13 @@ app.get('/api/products', async (req, res, next) => {
         }
         const where = condiciones.length > 0 ? `WHERE ${condiciones.join(' AND ')}` : '';
         const [rows] = await db.query(`SELECT ${COLS_PRODUCTO()} FROM inventario ${where} ORDER BY nombre ASC`, params);
-        res.json(rows.map(productoDesdeFila));
+        // Kits compuestos: existencias y costo salen de sus componentes
+        const kits = await resumenKits(db);
+        res.json(rows.map((r) => {
+            const p = productoDesdeFila(r);
+            const k = kits.get(r.id);
+            return k ? { ...p, stock: k.stock, costPrice: k.costo, isKit: true, componentCount: k.componentes } : p;
+        }));
     } catch (error) { next(error); }
 });
 
@@ -280,7 +286,8 @@ app.put('/api/products/:id', async (req, res, next) => {
         }
         // Un cambio de stock desde el formulario queda como ajuste en el libro (regla I-05)
         const nuevo = num(req.body.stock);
-        const diferencia = nuevo === null ? 0 : nuevo - (Number(actual[0].stock) || 0);
+        const esKit = (await componentesDe(connection, Number(id))).length > 0;
+        const diferencia = nuevo === null || esKit ? 0 : nuevo - (Number(actual[0].stock) || 0);
         if (diferencia) {
             await moverStock(connection, { inventarioId: Number(id), cantidad: diferencia, tipo: 'ajuste', origenTipo: 'ajuste',
                 motivo: req.body.adjustmentReason || 'Edición manual del stock', usuarioId: req.user?.id });
@@ -333,6 +340,10 @@ app.post('/api/products/:id/adjustments', async (req, res, next) => {
             await connection.rollback();
             return res.status(404).json({ error: 'Producto no encontrado' });
         }
+        if ((await componentesDe(connection, Number(req.params.id))).length) {
+            await connection.rollback();
+            return res.status(400).json({ error: 'Las existencias de un kit dependen de sus componentes: ajusta los componentes' });
+        }
         const cantidad = num(req.body.newStock) !== null ? num(req.body.newStock) - Number(actual[0].stock) : num(req.body.quantity);
         if (!cantidad) {
             await connection.rollback();
@@ -355,6 +366,91 @@ app.get('/api/inventory/audit', async (req, res, next) => {
     try {
         res.json({ disponible: true, diferencias: await auditarStock(db) });
     } catch (error) { next(error); }
+});
+
+// --- KITS COMPUESTOS (creador de kits) ---
+// Un kit es un ítem del inventario (categoría Kit) con componentes: cualquier otro ítem con su cantidad.
+const kitDesdeFila = (r, componentes) => {
+    const stock = componentes.length ? Math.min(...componentes.map(c => Math.max(0, Math.floor(c.stock / c.cantidad + 1e-9)))) : 0;
+    const costo = Math.round(componentes.reduce((s, c) => s + c.cantidad * c.costo, 0) * 100) / 100;
+    return {
+        id: r.id, name: r.nombre, category: r.categoria, price: Number(r.precio) || 0,
+        stock, costPrice: costo, priceReview: costo > 0 && Number(r.precio) <= costo,
+        components: componentes.map(c => ({ productId: c.id, name: c.nombre, quantity: c.cantidad, stock: c.stock, costPrice: c.costo, unit: c.unidad }))
+    };
+};
+
+app.get('/api/kits', async (req, res, next) => {
+    if (!esquema.kits) return res.json([]);
+    try {
+        const [rows] = await db.query(`
+            SELECT DISTINCT i.id, i.nombre, i.categoria, i.precio FROM inventario i
+            LEFT JOIN kit_componentes kc ON kc.kit_id = i.id
+            WHERE ${esquema.inventarioTipos ? 'i.activo = 1 AND' : ''} (kc.kit_id IS NOT NULL OR LOWER(i.categoria) LIKE '%kit%')
+            ORDER BY i.nombre`);
+        const lista = [];
+        for (const r of rows) lista.push(kitDesdeFila(r, await componentesDe(db, r.id)));
+        res.json(lista);
+    } catch (error) { next(error); }
+});
+
+// Reemplaza la composición de un kit: { components: [{ productId, quantity }] }
+app.put('/api/kits/:id/components', async (req, res, next) => {
+    if (!esquema.kits) return res.status(503).json({ error: 'Los kits compuestos aún no están disponibles (migración 010 pendiente)' });
+    const kitId = Number.parseInt(req.params.id, 10);
+    const lineas = new Map();
+    for (const c of Array.isArray(req.body.components) ? req.body.components : []) {
+        const id = Number.parseInt(c.productId, 10);
+        const cantidad = Math.round(Number(c.quantity) * 100) / 100;
+        if (!id || !(cantidad > 0)) return res.status(400).json({ error: 'Cada componente necesita un producto y una cantidad mayor que 0' });
+        if (id === kitId) return res.status(400).json({ error: 'Un kit no puede contenerse a sí mismo' });
+        lineas.set(id, (lineas.get(id) || 0) + cantidad);
+    }
+    let connection;
+    try {
+        connection = await db.getConnection();
+        await connection.beginTransaction();
+        const [kit] = await connection.query('SELECT id, nombre, categoria, precio, stock FROM inventario WHERE id = ? FOR UPDATE', [kitId]);
+        if (!kit.length) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'Kit no encontrado' });
+        }
+        if (lineas.size) {
+            const ids = [...lineas.keys()];
+            const [existentes] = await connection.query('SELECT id FROM inventario WHERE id IN (?)', [ids]);
+            if (existentes.length !== ids.length) {
+                await connection.rollback();
+                return res.status(400).json({ error: 'Algún componente no existe en el inventario' });
+            }
+            // Sin kits dentro de kits: las existencias se calculan a un solo nivel
+            const [anidados] = await connection.query('SELECT DISTINCT kit_id FROM kit_componentes WHERE kit_id IN (?)', [ids]);
+            if (anidados.length) {
+                await connection.rollback();
+                return res.status(400).json({ error: 'Un kit no puede contener otro kit compuesto: agrega sus componentes directamente' });
+            }
+            const [esComponente] = await connection.query('SELECT 1 FROM kit_componentes WHERE componente_id = ? LIMIT 1', [kitId]);
+            if (esComponente.length) {
+                await connection.rollback();
+                return res.status(400).json({ error: 'Este ítem es componente de otro kit: no puede tener componentes' });
+            }
+        }
+        await connection.query('DELETE FROM kit_componentes WHERE kit_id = ?', [kitId]);
+        for (const [id, cantidad] of lineas) {
+            await connection.query('INSERT INTO kit_componentes (kit_id, componente_id, cantidad) VALUES (?, ?, ?)', [kitId, id, cantidad]);
+        }
+        // El stock propio del kit deja de contar: se lleva a 0 con un ajuste en el libro
+        if (lineas.size && Number(kit[0].stock) !== 0) {
+            await moverStock(connection, { inventarioId: kitId, cantidad: -Number(kit[0].stock), tipo: 'ajuste', origenTipo: 'ajuste',
+                motivo: 'Kit compuesto: sus existencias salen de los componentes', usuarioId: req.user?.id, permitirNegativo: true });
+        }
+        await connection.commit();
+        res.json(kitDesdeFila(kit[0], await componentesDe(db, kitId)));
+    } catch (error) {
+        if (connection) await connection.rollback();
+        next(error);
+    } finally {
+        if (connection) connection.release();
+    }
 });
 
 // --- CLIENTES (Customers) ---
@@ -419,7 +515,7 @@ const totalDeItems = (items) => items.reduce((sum, i) => sum + i.quantity * i.un
 const insertarDetalle = async (connection, saleId, item, usuarioId) => {
     let costo = 0;
     if (item.productId) {
-        const r = await moverStock(connection, { inventarioId: item.productId, cantidad: -item.quantity, tipo: 'venta',
+        const r = await moverVenta(connection, { inventarioId: item.productId, cantidad: -item.quantity, tipo: 'venta',
             origenTipo: 'venta', origenId: saleId, usuarioId });
         costo = r ? r.costo : 0;
     }
@@ -441,7 +537,7 @@ const devolverDetalles = async (connection, saleId, motivo, usuarioId) => {
     const [oldItems] = await connection.query('SELECT inventario_id, cantidad FROM venta_detalles WHERE venta_id = ?', [saleId]);
     for (const item of oldItems) {
         if (item.inventario_id) {
-            await moverStock(connection, { inventarioId: item.inventario_id, cantidad: Number(item.cantidad), tipo: 'anulacion_venta',
+            await moverVenta(connection, { inventarioId: item.inventario_id, cantidad: Number(item.cantidad), tipo: 'anulacion_venta',
                 origenTipo: 'venta', origenId: Number(saleId), motivo, usuarioId });
         }
     }

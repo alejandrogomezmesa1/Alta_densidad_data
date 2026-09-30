@@ -87,6 +87,70 @@ export async function moverStock(conn, m) {
     return { stockAnterior, stock, costo };
 }
 
+// ------------------------------------------------------------
+// Kits compuestos (migración 010)
+// Un kit con componentes no tiene stock propio: sus existencias son las que alcanzan sus
+// componentes y su costo es la suma de ellos. Vender o devolver un kit mueve sus componentes.
+// ------------------------------------------------------------
+const piezas = (stock, cantidad) => Math.max(0, Math.floor(Number(stock) / Number(cantidad) + 1e-9));
+
+export async function componentesDe(conn, kitId) {
+    if (!esquema.kits) return [];
+    const [rows] = await conn.query(
+        `SELECT kc.componente_id AS id, kc.cantidad, i.nombre, i.stock, i.precio_costo AS costo, i.unidad
+         FROM kit_componentes kc JOIN inventario i ON i.id = kc.componente_id WHERE kc.kit_id = ? ORDER BY i.nombre`, [kitId]);
+    return rows.map(r => ({ id: r.id, nombre: r.nombre, cantidad: Number(r.cantidad), stock: Number(r.stock) || 0, costo: Number(r.costo) || 0, unidad: r.unidad || 'und' }));
+}
+
+// Existencias y costo calculados de todos los kits compuestos: Map kitId → { stock, costo, componentes }
+export async function resumenKits(db) {
+    const mapa = new Map();
+    if (!esquema.kits) return mapa;
+    const [rows] = await db.query(
+        `SELECT kc.kit_id, kc.cantidad, i.stock, i.precio_costo AS costo
+         FROM kit_componentes kc JOIN inventario i ON i.id = kc.componente_id`);
+    for (const r of rows) {
+        const k = mapa.get(r.kit_id) || { stock: Infinity, costo: 0, componentes: 0 };
+        k.stock = Math.min(k.stock, piezas(r.stock, r.cantidad));
+        k.costo += Number(r.cantidad) * (Number(r.costo) || 0);
+        k.componentes += 1;
+        mapa.set(r.kit_id, k);
+    }
+    for (const k of mapa.values()) k.costo = Math.round(k.costo * 100) / 100;
+    return mapa;
+}
+
+/**
+ * Movimiento de venta o devolución: igual que moverStock, pero si el ítem es un kit compuesto
+ * mueve cada componente (cantidad × la del kit). Devuelve el costo unitario del ítem vendido
+ * (el del kit = suma de sus componentes) y el menor stock resultante (para alertas).
+ * La devolución usa la composición vigente del kit.
+ */
+export async function moverVenta(conn, m) {
+    const componentes = await componentesDe(conn, m.inventarioId);
+    if (!componentes.length) return moverStock(conn, m);
+    let costo = 0;
+    let stock = Infinity;
+    for (const c of componentes) {
+        const r = await moverStock(conn, { ...m, inventarioId: c.id, cantidad: m.cantidad * c.cantidad,
+            motivo: m.motivo || `Componente de kit #${m.inventarioId}` });
+        costo += c.cantidad * (r ? r.costo : c.costo);
+        if (r) stock = Math.min(stock, r.stock);
+    }
+    return { stockAnterior: null, stock: stock === Infinity ? 0 : stock, costo, kit: true };
+}
+
+// Pedido de ítems → cantidades por ítem real, con los kits reemplazados por sus componentes
+export async function expandirPedido(conn, pedidos) {
+    const total = new Map();
+    for (const [id, qty] of pedidos) {
+        const componentes = await componentesDe(conn, id);
+        if (!componentes.length) total.set(id, (total.get(id) || 0) + qty);
+        else componentes.forEach(c => total.set(c.id, (total.get(c.id) || 0) + qty * c.cantidad));
+    }
+    return total;
+}
+
 // Ítems cuyo stock no coincide con la suma de su libro (regla I-01: verificación)
 export async function auditarStock(db) {
     const [rows] = await db.query(`

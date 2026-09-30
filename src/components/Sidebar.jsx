@@ -13,6 +13,7 @@ import {
   Clock,
   Store,
   ArrowUpRight,
+  Gift,
   X
 } from 'lucide-react';
 
@@ -31,6 +32,7 @@ const MENU = [
   ]},
   { title: 'Catálogo', items: [
     { id: 'inventory', icon: Package, label: 'Inventario' },
+    { id: 'kits', icon: Gift, label: 'Kits' },
   ]},
   { title: 'Relaciones', items: [
     { id: 'clients', icon: Users, label: 'Clientes' },
