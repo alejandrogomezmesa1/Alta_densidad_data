@@ -1,0 +1,1700 @@
+{
+ "_descripcion": "Conteo físico del local (Productos activos.md, 29-09-2026) revisado con el usuario. Ver Cruce inventario DATA.md y Esencias consolidadas.md.",
+ "motivo": "Conteo físico 29-09-2026",
+ "ajustes": [
+  {
+   "id": 28,
+   "nombre": "Eclaire",
+   "stock": 1
+  },
+  {
+   "id": 64,
+   "nombre": "Lattafa Rosada",
+   "stock": 1
+  },
+  {
+   "id": 23,
+   "nombre": "Yara Elixir",
+   "stock": 1
+  },
+  {
+   "id": 112,
+   "nombre": "Yara Candy Lattafa",
+   "stock": 2
+  },
+  {
+   "id": 22,
+   "nombre": "Yara Lattafa",
+   "stock": 3
+  },
+  {
+   "id": 138,
+   "nombre": "Her Confession Lattafa",
+   "stock": 1
+  },
+  {
+   "id": 27,
+   "nombre": "Yumyum Baul",
+   "stock": 1
+  },
+  {
+   "id": 63,
+   "nombre": "Island Breeze Baul",
+   "stock": 1
+  },
+  {
+   "id": 30,
+   "nombre": "Island Blis Baul",
+   "stock": 1
+  },
+  {
+   "id": 19,
+   "nombre": "Cloud",
+   "stock": 1
+  },
+  {
+   "id": 18,
+   "nombre": "Thank U Next",
+   "stock": 3
+  },
+  {
+   "id": 139,
+   "nombre": "Thank U Next 2.0 Ariana Grande",
+   "stock": 1
+  },
+  {
+   "id": 134,
+   "nombre": "Eter Desert Rose Armaf",
+   "stock": 1
+  },
+  {
+   "id": 135,
+   "nombre": "Baccarat Rouge 540 Maison Francis",
+   "stock": 1
+  },
+  {
+   "id": 36,
+   "nombre": "Lacoste Rosada",
+   "stock": 2
+  },
+  {
+   "id": 3,
+   "nombre": "Light Blue Dama",
+   "stock": 2
+  },
+  {
+   "id": 11,
+   "nombre": "Omnia Coral",
+   "stock": 3
+  },
+  {
+   "id": 12,
+   "nombre": "Omnia Cristal",
+   "stock": 3
+  },
+  {
+   "id": 13,
+   "nombre": "Omnia Amatista",
+   "stock": 2
+  },
+  {
+   "id": 14,
+   "nombre": "212 Vip Rose",
+   "stock": 0
+  },
+  {
+   "id": 37,
+   "nombre": "Valentino Donna",
+   "stock": 2
+  },
+  {
+   "id": 71,
+   "nombre": "Valentino Uomo",
+   "stock": 1
+  },
+  {
+   "id": 4,
+   "nombre": "Toy 2 Dama Moschino",
+   "stock": 1
+  },
+  {
+   "id": 140,
+   "nombre": "Hawas Fire Rasasi",
+   "stock": 1
+  },
+  {
+   "id": 141,
+   "nombre": "Hawas Ice Rasasi",
+   "stock": 1
+  },
+  {
+   "id": 29,
+   "nombre": "Khamrah Qawah",
+   "stock": 1
+  },
+  {
+   "id": 7,
+   "nombre": "Lattafa Morada",
+   "stock": 1
+  },
+  {
+   "id": 6,
+   "nombre": "Lattafa Roja",
+   "stock": 2
+  },
+  {
+   "id": 118,
+   "nombre": "Badee AL Oud For Glory Lattafa",
+   "stock": 1
+  },
+  {
+   "id": 106,
+   "nombre": "Bade AL Oud Honor & Glory Lattafa",
+   "stock": 1
+  },
+  {
+   "id": 31,
+   "nombre": "Art Of Universe Lattafa",
+   "stock": 1
+  },
+  {
+   "id": 21,
+   "nombre": "Club De Nuit  Men",
+   "stock": 1
+  },
+  {
+   "id": 136,
+   "nombre": "His Confession Lattafa",
+   "stock": 1
+  },
+  {
+   "id": 143,
+   "nombre": "Alexandria II Xerjoff",
+   "stock": 1
+  },
+  {
+   "id": 73,
+   "nombre": "Erba Pura",
+   "stock": 1
+  },
+  {
+   "id": 144,
+   "nombre": "Bharara Soleil",
+   "stock": 1
+  },
+  {
+   "id": 24,
+   "nombre": "Bharara King",
+   "stock": 3
+  },
+  {
+   "id": 117,
+   "nombre": "Invictus Paco Rabanne",
+   "stock": 2
+  },
+  {
+   "id": 98,
+   "nombre": "Acqua di Gio",
+   "stock": 2
+  },
+  {
+   "id": 137,
+   "nombre": "Hugo Boss Red",
+   "stock": 1
+  },
+  {
+   "id": 9,
+   "nombre": "Lacoste Blanca",
+   "stock": 1
+  },
+  {
+   "id": 10,
+   "nombre": "Lacoste Roja",
+   "stock": 0
+  },
+  {
+   "id": 25,
+   "nombre": "Eros Azul",
+   "stock": 1
+  },
+  {
+   "id": 26,
+   "nombre": "Eros Flame",
+   "stock": 1
+  },
+  {
+   "id": 75,
+   "nombre": "Eros Energy",
+   "stock": 1
+  },
+  {
+   "id": 20,
+   "nombre": "Mandarin Sky",
+   "stock": 1
+  },
+  {
+   "id": 70,
+   "nombre": "212 Men",
+   "stock": 1
+  },
+  {
+   "id": 32,
+   "nombre": "212 Vip Men",
+   "stock": 1
+  },
+  {
+   "id": 5,
+   "nombre": "212 Vip Black",
+   "stock": 1
+  },
+  {
+   "id": 16,
+   "nombre": "Creed Aventus",
+   "stock": 3
+  },
+  {
+   "id": 33,
+   "nombre": "Creed Silver",
+   "stock": 1
+  },
+  {
+   "id": 8,
+   "nombre": "Ombre Nomada",
+   "stock": 3
+  },
+  {
+   "id": 76,
+   "nombre": "Imagination",
+   "stock": 1
+  },
+  {
+   "id": 15,
+   "nombre": "One Millon",
+   "stock": 2
+  },
+  {
+   "id": 104,
+   "nombre": "Arabians Tonka Montale",
+   "stock": 1
+  },
+  {
+   "id": 66,
+   "nombre": "Coco Mademoiselle",
+   "stock": 1
+  },
+  {
+   "id": 96,
+   "nombre": "9PM Afnan",
+   "stock": 1
+  },
+  {
+   "id": 131,
+   "nombre": "9PM Night Out Afnan",
+   "stock": 1
+  },
+  {
+   "id": 44,
+   "nombre": "Swiss Army",
+   "stock": 1
+  },
+  {
+   "id": 133,
+   "nombre": "Vulcan Black Friday French Avenue",
+   "stock": 1
+  },
+  {
+   "id": 1,
+   "nombre": "Santal 33",
+   "stock": 1
+  },
+  {
+   "id": 41,
+   "nombre": "Kit Club De Nuit",
+   "stock": 1
+  },
+  {
+   "id": 47,
+   "nombre": "Kit Santal",
+   "stock": 1
+  },
+  {
+   "id": 39,
+   "nombre": "Kit Orientica",
+   "stock": 3
+  },
+  {
+   "id": 49,
+   "nombre": "Kit Yum Yum",
+   "stock": 1
+  },
+  {
+   "id": 50,
+   "nombre": "Yum Yum Mini",
+   "stock": 2
+  },
+  {
+   "id": 40,
+   "nombre": "Kit Lattafas",
+   "stock": 1
+  },
+  {
+   "id": 51,
+   "nombre": "Lattafa Morada Mini",
+   "stock": 1
+  },
+  {
+   "id": 53,
+   "nombre": "Lattafa Blanca Mini",
+   "stock": 1
+  },
+  {
+   "id": 46,
+   "nombre": "Yarita",
+   "stock": 1
+  },
+  {
+   "id": 56,
+   "nombre": "Khamrah Mini",
+   "stock": 1
+  },
+  {
+   "id": 57,
+   "nombre": "Khamrah Dukan Mini",
+   "stock": 1
+  },
+  {
+   "id": 58,
+   "nombre": "Khamrah Qawah",
+   "stock": 1
+  }
+ ],
+ "ceros": [
+  {
+   "id": 34,
+   "nombre": "Al  Haramain Amber Oud Gold"
+  },
+  {
+   "id": 68,
+   "nombre": "Bond Blecker"
+  },
+  {
+   "id": 2,
+   "nombre": "Dior Sauvage"
+  },
+  {
+   "id": 74,
+   "nombre": "Emeer"
+  },
+  {
+   "id": 69,
+   "nombre": "Good Girl"
+  },
+  {
+   "id": 72,
+   "nombre": "Khamrah"
+  },
+  {
+   "id": 65,
+   "nombre": "Mayar Lattafa"
+  },
+  {
+   "id": 35,
+   "nombre": "Orientica Amber Rouge"
+  },
+  {
+   "id": 38,
+   "nombre": "Invictus Platinum"
+  },
+  {
+   "id": 93,
+   "nombre": "Kit Crema + Locion"
+  },
+  {
+   "id": 42,
+   "nombre": "Kit Eros Versace "
+  },
+  {
+   "id": 60,
+   "nombre": "Kit Paco Rabanne"
+  },
+  {
+   "id": 61,
+   "nombre": "Femme Paco Raban Mini"
+  },
+  {
+   "id": 43,
+   "nombre": "Invictus 50ml"
+  },
+  {
+   "id": 54,
+   "nombre": "Lattafa Negra Mini"
+  },
+  {
+   "id": 52,
+   "nombre": "Lattafa Roja Mini"
+  },
+  {
+   "id": 59,
+   "nombre": "Meow Mini"
+  },
+  {
+   "id": 62,
+   "nombre": "Phantom Paco Raban"
+  },
+  {
+   "id": 48,
+   "nombre": "Santal Mini"
+  }
+ ],
+ "kits": [
+  {
+   "id": 55,
+   "nombre": "Kit Khamrah",
+   "componentes": [
+    {
+     "id": 56,
+     "cantidad": 1
+    },
+    {
+     "id": 57,
+     "cantidad": 1
+    },
+    {
+     "id": 58,
+     "cantidad": 1
+    }
+   ]
+  }
+ ],
+ "nuevos": [
+  {
+   "nombre": "Marshmallow Blush",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "La Bomba Carolina Herrera",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Valentino Uomo Born in Roma",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Valentino Green Stravaganza",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Nitro Red Dumont",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Le Male Parfum Jean Paul Gaultier",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Le Beau Jean Paul Gaultier",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Acqua di Gio Profumo",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Lacoste Roja 125 ml",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 2,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Lacoste Verde",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Odyssey Go Mango Armaf",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Odyssey Aqua Armaf",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "212 Heroes Carolina Herrera",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Ahli Octans",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Ahli Vega",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Ahli Corvus",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "9PM Dive Afnan",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "9PM Rebel Afnan",
+   "categoria": "1.1",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia 212 Heroes (Carolina Herrera)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 33,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia 212 Men (Carolina Herrera)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 50,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia 212 Sexy (Carolina Herrera)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 25,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia 212 VIP Black (Carolina Herrera)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 34,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia 212 VIP Rosé (Carolina Herrera)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 120,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia 360 (Perry Ellis)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 62,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia 9AM dorada (Afnan)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 14,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia 9PM (Afnan)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 110,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Acqua di Giò Profumo (Giorgio Armani)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 52,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Amber Gold",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 49,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Amber Rouge (Al Haramain)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 50,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Amber Rouge (Orientica)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 67,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Amethyst (Lattafa)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Arabians Tonka (Montale)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 28,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Arruru",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 21,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Asad (Lattafa)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 14,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Aventus (Creed)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 100,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Azure (Orientica)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 10,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Berry on Top",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 42,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Bharara King",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 114,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Bharara Niche",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 26,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Bharara Rose",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 17,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Black Afrodisíaca (Paco Rabanne)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 20,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Bleecker Street (Bond No. 9)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 20,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Bleu de Chanel",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 28,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Chance (Chanel)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 35,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia CK In2U (Calvin Klein)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia CK One (Calvin Klein)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 8,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Cloud (Ariana Grande)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 62,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Club de Nuit Intense Man (Armaf)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 70,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Coco Mademoiselle (Chanel)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 100,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Corvus (Ahli)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 50,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Donna Born in Roma (Valentino)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 55,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Erba Pura (Xerjoff)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 121,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Eros (Versace)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 19,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Eros Energy (Versace)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 133,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Eros Flame (Versace)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 100,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Eternity (Calvin Klein)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 18,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Femme (Hugo Boss)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 25,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Femme (Paco Rabanne)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 46,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Good Girl (Carolina Herrera)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 148,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Good Girl Blush (Carolina Herrera)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 15,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Green Stravaganza (Valentino)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 40,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Her (Burberry)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 31,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Il Femme",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 16,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Il Kakuno (Ilmin)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 59,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Intense Café (Montale)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 15,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Interlude (Amouage)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 14,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Invictus (Paco Rabanne)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 145,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Island Bliss",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 71,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Karpos (Ahli)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 73,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Khamrah Dukhan (Lattafa)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 23,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Khamrah Qahwa (Lattafa)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 40,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Lacoste Roja",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 44,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Le Beau (Jean Paul Gaultier)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 50,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Legend (Montblanc)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 18,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Light Blue Dama (Dolce & Gabbana)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 137,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Light Blue Men (Dolce & Gabbana)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 22,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Liquid Brun (French Avenue)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 60,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Mallow Madness",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 34,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Mayar (Lattafa)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 123,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Mayar Cherry (Lattafa)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 24,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Mayar Verde (Lattafa)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 23,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Meow (Katy Perry)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 6,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Miss Dior",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 75,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Mood Vainilla",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 15,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Naxos (Xerjoff)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 59,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Noble Blush (Lattafa)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 42,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Odyssey Aqua (Armaf)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 50,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Odyssey Candy (Armaf)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 36,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Odyssey Chocolate (Armaf)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 82,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Odyssey Lichi (Armaf)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 15,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Odyssey Mandarin Sky (Armaf)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 13,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Odyssey Marshmallow (Armaf)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 53,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Odyssey Mega (Armaf)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 18,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Odyssey Spectra (Armaf)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 32,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Olympéa (Paco Rabanne)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 61,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Ombre Nomade (Louis Vuitton)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 217,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Omnia Amethyste (Bvlgari)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 45,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Omnia Coral (Bvlgari)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 82,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Omnia Crystalline (Bvlgari)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 55,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia One Million (Paco Rabanne)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 170,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Oud for Glory (Lattafa)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 22,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Phantom (Paco Rabanne)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 44,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Pure Seduction (Victoria's Secret)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 15,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia R.E.M. (Ariana Grande)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 53,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Renaissance (Xerjoff)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 30,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Roses Musk (Montale)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 15,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Royal Amber (Orientica)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 11,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Royal Blue (Orientica)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 26,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Santa Boise",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 91,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Santal 33 (Le Labo)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 13,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Sauvage (Dior)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 91,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Sensual (Lacoste)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 26,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Silver Mountain Water (Creed)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 15,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Soud Zafron (Orientica)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 29,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Starry Nights (Montale)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 15,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Sublime (Lattafa)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 59,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Swiss Army (Victorinox)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 150,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Tempation",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 13,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Thank U Next (Ariana Grande)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 36,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Toy 2 (Moschino)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 37,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Toy 2 Bubble Gum (Moschino)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 86,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Toy 2 Pearl (Moschino)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 100,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Unlimited (Hugo Boss)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 18,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Uomo Born in Roma (Valentino)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 48,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Vega (Ahli)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 32,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Velvet Gold (Orientica)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 25,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Very Good Girl (Carolina Herrera)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 64,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Y (Yves Saint Laurent)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 30,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Yara (Lattafa)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 42,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Yara Candy (Lattafa)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 28,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Yara Elixir (Lattafa)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 19,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Yara Moi (Lattafa)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 15,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Yara Tous (Lattafa)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 15,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia You",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 13,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Yum Yum (Armaf)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 200,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Esencia Éclaire (Lattafa)",
+   "categoria": "Esencia",
+   "tipo": "esencia",
+   "unidad": "ml",
+   "stock": 18,
+   "precio": 0,
+   "costo": 0
+  }
+ ],
+ "pendientes": [
+  "Kit Yaritas (#45): ¿es el \"Kit Yara Asad\" del conteo? No se toca hasta confirmarlo.",
+  "Kits nuevos a armar en el creador: Kit 9PM, Kit Gourmand, Kit Yara Tous, Kit Odyssey Chocolate, Kit Odyssey Candee (y Kit Yara Asad si no es #45).",
+  "Precio y costo de los 18 perfumes nuevos y costo por ml de las 118 esencias (se crean en 0)."
+ ]
+}
