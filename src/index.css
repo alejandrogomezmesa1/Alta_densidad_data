@@ -743,7 +743,6 @@ button, a, input, select {
 /* ---------- Creador de kits (Kits.jsx) ---------- */
 .kit-editor {
   position: relative;
-  margin-bottom: 2.5rem;
 }
 
 .kit-cerrar {
@@ -1114,4 +1113,74 @@ button, a, input, select {
   height: 7px;
   border-radius: 50%;
   background: currentColor;
+}
+
+/* ---------- Ventana emergente común (Ventana.jsx) ---------- */
+.ventana-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.ventana {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: min(90vh, 960px);
+  padding: 0 !important;
+  overflow: hidden;
+  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.8);
+}
+
+.ventana-cab {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.5rem 2rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.ventana-eyebrow {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 10px;
+  color: var(--accent-primary);
+}
+
+.ventana-cab h3 {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 300;
+}
+
+.ventana-cuerpo {
+  flex: 1;
+  min-height: 0;
+  padding: 1.5rem 2rem 2rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 720px) {
+  .ventana-fondo {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .ventana {
+    max-height: 94vh;
+  }
+  .ventana-cab {
+    padding: 1.25rem 1.25rem 1rem;
+  }
+  .ventana-cuerpo {
+    padding: 1.25rem;
+  }
 }

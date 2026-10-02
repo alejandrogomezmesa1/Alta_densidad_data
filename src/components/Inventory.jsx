@@ -4,6 +4,7 @@ import { Plus, Search, Edit2, Trash2, Filter, Download, Package, X, Check, Arrow
 import { AjusteStockModal, MovimientosModal } from './StockModals';
 import { TIPOS_INVENTARIO, formatoCantidad, nivelStock, NIVELES_STOCK } from '../utils/inventario';
 import DetailModal from './DetailModal';
+import Ventana from './Ventana';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { NumericFormat } from 'react-number-format';
@@ -213,87 +214,73 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
             <Download size={20} />
           </button>
           <button 
-            onClick={() => setIsAdding(!isAdding)}
+            onClick={() => { handleCancel(); setIsAdding(true); }}
             className="btn-primary" 
             style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}
           >
             <Plus size={20} />
-            {editingId ? 'Editando Producto' : 'Nuevo Producto'}
+            Nuevo Producto
           </button>
         </div>
       </header>
 
-      <AnimatePresence>
-        {isAdding && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="premium-card"
-            style={{ marginBottom: '2.5rem', position: 'relative' }}
-          >
-            <button onClick={handleCancel} style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-              <X size={20} />
+      <Ventana abierta={isAdding} onCerrar={handleCancel} eyebrow="Inventario" titulo={editingId ? 'Editar producto' : 'Nuevo producto'} ancho={880}>
+        <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.5rem', alignItems: 'flex-end' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>NOMBRE</label>
+            <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nombre del producto" style={{ width: '100%' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>CATEGORÍA</label>
+            <input required type="text" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="Categoría" style={{ width: '100%' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>P. VENTA (COP)</label>
+            <NumericFormat required value={formData.price} onValueChange={(values) => setFormData({...formData, price: values.value})} thousandSeparator="." decimalSeparator="," placeholder="0" style={{ width: '100%' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>P. COSTO (COP)</label>
+            <NumericFormat required value={formData.costPrice} onValueChange={(values) => setFormData({...formData, costPrice: values.value})} thousandSeparator="." decimalSeparator="," placeholder="0" style={{ width: '100%' }} />
+          </div>
+          <div>
+            <label htmlFor="inv-tipo" style={{ display: 'block', marginBottom: '0.6rem' }}>Tipo</label>
+            <select id="inv-tipo" value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })} style={{ width: '100%' }}>
+              {Object.entries(TIPOS_INVENTARIO).map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="inv-stock" style={{ display: 'block', marginBottom: '0.6rem' }}>
+              {editingId ? 'Stock actual' : 'Stock inicial'} ({LIQUIDOS.includes(formData.type) ? 'ml' : 'und'})
+            </label>
+            {editingId
+              ? <input id="inv-stock" value={formatoCantidad(formData.stock, LIQUIDOS.includes(formData.type) ? 'ml' : 'und')} readOnly title="Usa «Ajustar stock» en la tabla" style={{ width: '100%', opacity: 0.6 }} />
+              : <NumericFormat id="inv-stock" required value={formData.stock} onValueChange={(v) => setFormData({ ...formData, stock: v.value })} thousandSeparator="." decimalSeparator="," decimalScale={2} style={{ width: '100%' }} />}
+          </div>
+          <div>
+            <label htmlFor="inv-min" style={{ display: 'block', marginBottom: '0.6rem' }}>Stock mínimo</label>
+            <NumericFormat id="inv-min" value={formData.minStock} onValueChange={(v) => setFormData({ ...formData, minStock: v.value })} thousandSeparator="." decimalSeparator="," decimalScale={2} style={{ width: '100%' }} />
+          </div>
+          <div>
+            <label htmlFor="inv-codigo" style={{ display: 'block', marginBottom: '0.6rem' }}>Código (opcional)</label>
+            <input id="inv-codigo" type="text" value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value.toUpperCase() })} placeholder="ESN-YARA" style={{ width: '100%' }} />
+          </div>
+          <div>
+            <label htmlFor="inv-ucompra" style={{ display: 'block', marginBottom: '0.6rem' }}>Se compra por</label>
+            <input id="inv-ucompra" type="text" value={formData.purchaseUnit} onChange={e => setFormData({ ...formData, purchaseUnit: e.target.value })} placeholder="kg, litro, caja…" style={{ width: '100%', textTransform: 'none' }} />
+          </div>
+          <div>
+            <label htmlFor="inv-factor" style={{ display: 'block', marginBottom: '0.6rem' }}>
+              Equivale a ({LIQUIDOS.includes(formData.type) ? 'ml' : 'und'})
+            </label>
+            <NumericFormat id="inv-factor" value={formData.purchaseFactor} onValueChange={(v) => setFormData({ ...formData, purchaseFactor: v.value })} thousandSeparator="." decimalSeparator="," decimalScale={4} style={{ width: '100%' }} />
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button type="submit" className="btn-primary" style={{ flex: 1, height: '45px', fontSize: '0.8rem' }}>
+              {editingId ? 'ACTUALIZAR' : 'GUARDAR'}
             </button>
-            <h4 style={{ marginBottom: '1.5rem', color: 'var(--accent-primary)' }}>{editingId ? 'EDITAR PRODUCTO' : 'CREAR NUEVO PRODUCTO'}</h4>
-            <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.5rem', alignItems: 'flex-end' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>NOMBRE</label>
-                <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nombre del producto" style={{ width: '100%' }} />
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>CATEGORÍA</label>
-                <input required type="text" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="Categoría" style={{ width: '100%' }} />
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>P. VENTA (COP)</label>
-                <NumericFormat required value={formData.price} onValueChange={(values) => setFormData({...formData, price: values.value})} thousandSeparator="." decimalSeparator="," placeholder="0" style={{ width: '100%' }} />
-              </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>P. COSTO (COP)</label>
-                <NumericFormat required value={formData.costPrice} onValueChange={(values) => setFormData({...formData, costPrice: values.value})} thousandSeparator="." decimalSeparator="," placeholder="0" style={{ width: '100%' }} />
-              </div>
-              <div>
-                <label htmlFor="inv-tipo" style={{ display: 'block', marginBottom: '0.6rem' }}>Tipo</label>
-                <select id="inv-tipo" value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })} style={{ width: '100%' }}>
-                  {Object.entries(TIPOS_INVENTARIO).map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="inv-stock" style={{ display: 'block', marginBottom: '0.6rem' }}>
-                  {editingId ? 'Stock actual' : 'Stock inicial'} ({LIQUIDOS.includes(formData.type) ? 'ml' : 'und'})
-                </label>
-                {editingId
-                  ? <input id="inv-stock" value={formatoCantidad(formData.stock, LIQUIDOS.includes(formData.type) ? 'ml' : 'und')} readOnly title="Usa «Ajustar stock» en la tabla" style={{ width: '100%', opacity: 0.6 }} />
-                  : <NumericFormat id="inv-stock" required value={formData.stock} onValueChange={(v) => setFormData({ ...formData, stock: v.value })} thousandSeparator="." decimalSeparator="," decimalScale={2} style={{ width: '100%' }} />}
-              </div>
-              <div>
-                <label htmlFor="inv-min" style={{ display: 'block', marginBottom: '0.6rem' }}>Stock mínimo</label>
-                <NumericFormat id="inv-min" value={formData.minStock} onValueChange={(v) => setFormData({ ...formData, minStock: v.value })} thousandSeparator="." decimalSeparator="," decimalScale={2} style={{ width: '100%' }} />
-              </div>
-              <div>
-                <label htmlFor="inv-codigo" style={{ display: 'block', marginBottom: '0.6rem' }}>Código (opcional)</label>
-                <input id="inv-codigo" type="text" value={formData.code} onChange={e => setFormData({ ...formData, code: e.target.value.toUpperCase() })} placeholder="ESN-YARA" style={{ width: '100%' }} />
-              </div>
-              <div>
-                <label htmlFor="inv-ucompra" style={{ display: 'block', marginBottom: '0.6rem' }}>Se compra por</label>
-                <input id="inv-ucompra" type="text" value={formData.purchaseUnit} onChange={e => setFormData({ ...formData, purchaseUnit: e.target.value })} placeholder="kg, litro, caja…" style={{ width: '100%', textTransform: 'none' }} />
-              </div>
-              <div>
-                <label htmlFor="inv-factor" style={{ display: 'block', marginBottom: '0.6rem' }}>
-                  Equivale a ({LIQUIDOS.includes(formData.type) ? 'ml' : 'und'})
-                </label>
-                <NumericFormat id="inv-factor" value={formData.purchaseFactor} onValueChange={(v) => setFormData({ ...formData, purchaseFactor: v.value })} thousandSeparator="." decimalSeparator="," decimalScale={4} style={{ width: '100%' }} />
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button type="submit" className="btn-primary" style={{ flex: 1, height: '45px', fontSize: '0.8rem' }}>
-                  {editingId ? 'ACTUALIZAR' : 'GUARDAR'}
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </form>
+      </Ventana>
 
       <div className="premium-card" style={{ padding: 0 }}>
         <div className="search-filter-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>

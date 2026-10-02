@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Ventana from './Ventana';
 import { Plus, Calendar, ShoppingBag, Receipt, DollarSign, X, Trash2, Search, ArrowDownCircle, ArrowUpCircle, Calculator, User, CreditCard, CheckCircle2, Clock, Printer, Edit2, ListPlus, Eye } from 'lucide-react';
 import DetailModal from './DetailModal';
 import { NumericFormat } from 'react-number-format';
@@ -418,227 +419,218 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
           <h2 className="title-gradient" style={{ fontSize: '2.5rem', marginBottom: '0.25rem' }}>{config[type].title}</h2>
           <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{config[type].subtitle}</p>
         </div>
-        <button onClick={() => { if(!isAdding) setIsAdding(true); else resetForm(); }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}><Plus size={20} />{config[type].label}</button>
+        <button onClick={() => { resetForm(); setIsAdding(true); }} className="btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}><Plus size={20} />{config[type].label}</button>
       </header>
 
-      <AnimatePresence>
-        {isAdding && (
-          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="premium-card" style={{ marginBottom: '3rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-              <h4 style={{ color: 'var(--accent-primary)' }}>{editingId ? 'EDITAR REGISTRO' : `NUEVO REGISTRO DE ${config[type].title.toUpperCase()}`}</h4>
-              <button onClick={resetForm} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={20} /></button>
-            </div>
-            
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-              
-              {/* Header Info */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
-                {type === 'sales' && (
-                  <>
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <h5 style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Datos del Cliente</h5>
-                    </div>
-                    <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
-                      <div style={{ flex: 1 }}>
-                        <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>SELECCIONAR CLIENTE</label>
-                        <select 
-                          value={formData.customerId || 'NEW'} 
-                          onChange={(e) => {
-                            const cid = e.target.value;
-                            if (cid === 'NEW') {
-                              setFormData(prev => ({...prev, customerId: '', customerName: '', phone: '', idDocument: '', city: '', address: ''}));
-                            } else {
-                              const cust = customers.find(c => String(c.id) === String(cid));
-                              if (cust) {
-                                setFormData(prev => ({
-                                  ...prev, 
-                                  customerId: cust.id, 
-                                  customerName: cust.nombre, 
-                                  phone: cust.telefono || '', 
-                                  idDocument: cust.cedula || '', 
-                                  city: cust.ciudad || '', 
-                                  address: cust.direccion || ''
-                                }));
-                              }
-                            }
-                          }}
-                          style={{ width: '100%', height: '45px' }}
-                        >
-                          <option value="NEW">+ Crear Nuevo Cliente</option>
-                          {customers.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>NOMBRE (Obligatorio)</label>
-                      <input required type="text" readOnly={!!formData.customerId} value={formData.customerName} onChange={e => setFormData({...formData, customerName: e.target.value})} placeholder="Nombre del cliente" style={{ width: '100%', opacity: formData.customerId ? 0.7 : 1 }} />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>CÉDULA / NIT</label>
-                      <input type="text" readOnly={!!formData.customerId} value={formData.idDocument} onChange={e => setFormData({...formData, idDocument: e.target.value})} placeholder="Opcional" style={{ width: '100%', opacity: formData.customerId ? 0.7 : 1 }} />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>TELÉFONO</label>
-                      <input type="text" readOnly={!!formData.customerId} value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="Opcional" style={{ width: '100%', opacity: formData.customerId ? 0.7 : 1 }} />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>CIUDAD / MUNICIPIO</label>
-                      <input type="text" readOnly={!!formData.customerId} value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} placeholder="Opcional" style={{ width: '100%', opacity: formData.customerId ? 0.7 : 1 }} />
-                    </div>
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>DIRECCIÓN</label>
-                      <input type="text" readOnly={!!formData.customerId} value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Opcional" style={{ width: '100%', opacity: formData.customerId ? 0.7 : 1 }} />
-                    </div>
-                    <div style={{ gridColumn: '1 / -1', height: '1px', background: 'var(--glass-border)', margin: '1rem 0' }} />
-                  </>
-                )}
-                {type === 'purchases' && (
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>PROVEEDOR</label>
-                    <select value={formData.supplierId} onChange={e => setFormData({...formData, supplierId: e.target.value})} style={{ width: '100%', height: '45px' }}>
-                      <option value="">Seleccionar Proveedor...</option>
-                      {supplierList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  </div>
-                )}
-                {type === 'expenses' && (
-                  <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>DESCRIPCIÓN</label>
-                    <input required type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} style={{ width: '100%' }} />
-                  </div>
-                )}
-                {type === 'expenses' && categorias.length > 0 && (
-                  <div>
-                    <label htmlFor="gasto-categoria" style={{ display: 'block', marginBottom: '0.6rem' }}>Categoría</label>
-                    <select id="gasto-categoria" required value={formData.category || ''} onChange={e => setFormData({ ...formData, category: e.target.value })} style={{ width: '100%', height: '45px' }}>
-                      <option value="" disabled>Selecciona…</option>
-                      {categorias.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                    </select>
-                  </div>
-                )}
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>FECHA</label>
-                  <input required type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} style={{ width: '100%' }} />
+      <Ventana abierta={isAdding} onCerrar={resetForm} eyebrow={config[type].title} titulo={editingId ? 'Editar registro' : config[type].label} ancho={1040}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+          
+          {/* Header Info */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
+            {type === 'sales' && (
+              <>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <h5 style={{ fontSize: '0.85rem', color: 'var(--accent-primary)', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '1px' }}>Datos del Cliente</h5>
                 </div>
-                {type === 'sales' && (
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>MÉTODO DE PAGO</label>
-                    <select required value={formData.method} onChange={e => setFormData({...formData, method: e.target.value})} style={{ width: '100%', height: '45px' }}>
-                      {metodos.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
-                    </select>
-                  </div>
-                )}
-              </div>
-
-              {/* Cart Section for Sales */}
-              {type === 'sales' && (
-                <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: 0, border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <h5 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Añadir Productos</h5>
-                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                    <div style={{ flex: 2, minWidth: '200px' }}>
-                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>PRODUCTO</label>
-                      <select value={currentItem.productId} onChange={e => setCurrentItem({...currentItem, productId: e.target.value})} style={{ width: '100%', height: '45px' }}>
-                        <option value="">Seleccionar...</option>
-                        {productList.map(p => <option key={p.id} value={p.id}>{p.name} (Stock: {p.stock})</option>)}
-                      </select>
-                    </div>
-                    <div style={{ flex: 1, minWidth: '100px' }}>
-                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>CANTIDAD</label>
-                      <NumericFormat thousandSeparator="." decimalSeparator="," allowNegative={false} value={currentItem.quantity} onValueChange={(values) => setCurrentItem({...currentItem, quantity: values.value})} style={{ width: '100%' }} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: '120px' }}>
-                      <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>P. UNITARIO</label>
-                      <NumericFormat thousandSeparator="." decimalSeparator="," allowNegative={false} value={currentItem.unitPrice} onValueChange={(values) => setCurrentItem({...currentItem, unitPrice: values.value})} style={{ width: '100%' }} />
-                    </div>
-                    <button type="button" onClick={addToCart} style={{ height: '45px', padding: '0 1.5rem', background: 'var(--glass-bg)', color: 'var(--accent-primary)', border: '1px solid var(--accent-primary)', borderRadius: 0, fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                      <ListPlus size={18} /> Añadir
-                    </button>
-                  </div>
-
-                  {/* Cart Items Table */}
-                  {cart.length > 0 && (
-                    <div className="table-responsive-wrapper" style={{ marginTop: '1.5rem', background: 'var(--bg-main)', borderRadius: 0 }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead>
-                          <tr style={{ background: 'rgba(255,255,255,0.02)', textAlign: 'left' }}>
-                            <th style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Producto</th>
-                            <th style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Cant.</th>
-                            <th style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>P. Unit</th>
-                            <th style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Subtotal</th>
-                            <th></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {cart.map((item, idx) => (
-                            <tr key={idx} style={{ borderBottom: '1px solid var(--glass-border)' }}>
-                              <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{item.productName}</td>
-                              <td style={{ padding: '0.75rem 1rem' }}>{item.quantity}</td>
-                              <td style={{ padding: '0.75rem 1rem' }}>${Math.round(item.unitPrice).toLocaleString('es-CO')}</td>
-                              <td style={{ padding: '0.75rem 1rem', color: 'var(--accent-primary)', fontWeight: 500 }}>${Math.round(item.quantity * item.unitPrice).toLocaleString('es-CO')}</td>
-                              <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
-                                <button type="button" onClick={() => removeFromCart(idx)} style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer' }}><Trash2 size={16} /></button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Single Product Section for Purchases */}
-              {type === 'purchases' && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: 0, border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>PRODUCTO A COMPRAR</label>
-                    <select required value={currentItem.productId} onChange={e => setCurrentItem({...currentItem, productId: e.target.value})} style={{ width: '100%', height: '45px' }}>
-                      <option value="">Seleccionar Producto...</option>
-                      {productList.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>CANTIDAD</label>
-                    <NumericFormat required thousandSeparator="." decimalSeparator="," allowNegative={false} value={currentItem.quantity} onValueChange={(values) => setCurrentItem({...currentItem, quantity: values.value})} style={{ width: '100%' }} />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>PRECIO UNITARIO</label>
-                    <NumericFormat required thousandSeparator="." decimalSeparator="," allowNegative={false} value={currentItem.unitPrice} onValueChange={(values) => setCurrentItem({...currentItem, unitPrice: values.value})} style={{ width: '100%' }} />
-                  </div>
-                </div>
-              )}
-
-              {/* Totals & Payments */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '2rem', background: 'rgba(201, 169, 97, 0.05)', padding: '1.5rem', borderRadius: 0, border: '1px solid rgba(201, 169, 97, 0.1)' }}>
-                {type === 'expenses' ? (
+                <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
                   <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>MONTO TOTAL</label>
-                    <NumericFormat required thousandSeparator="." decimalSeparator="," allowNegative={false} value={formData.amount} onValueChange={(values) => setFormData({...formData, amount: values.value})} style={{ width: '100%', maxWidth: '300px', fontSize: '1.5rem', fontWeight: 500, color: 'var(--error)' }} />
+                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>SELECCIONAR CLIENTE</label>
+                    <select 
+                      value={formData.customerId || 'NEW'} 
+                      onChange={(e) => {
+                        const cid = e.target.value;
+                        if (cid === 'NEW') {
+                          setFormData(prev => ({...prev, customerId: '', customerName: '', phone: '', idDocument: '', city: '', address: ''}));
+                        } else {
+                          const cust = customers.find(c => String(c.id) === String(cid));
+                          if (cust) {
+                            setFormData(prev => ({
+                              ...prev, 
+                              customerId: cust.id, 
+                              customerName: cust.nombre, 
+                              phone: cust.telefono || '', 
+                              idDocument: cust.cedula || '', 
+                              city: cust.ciudad || '', 
+                              address: cust.direccion || ''
+                            }));
+                          }
+                        }
+                      }}
+                      style={{ width: '100%', height: '45px' }}
+                    >
+                      <option value="NEW">+ Crear Nuevo Cliente</option>
+                      {customers.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                    </select>
                   </div>
-                ) : (
-                  <div>
-                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 500, display: 'block', marginBottom: '0.5rem' }}>Total a Pagar</span>
-                    <span style={{ fontSize: '2.5rem', fontWeight: 500, color: 'var(--accent-primary)' }}>${Math.round(calculatedTotal).toLocaleString('es-CO')}</span>
-                  </div>
-                )}
-
-                {type === 'sales' && (
-                  <div style={{ flex: 1, minWidth: '200px' }}>
-                    <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>ABONO INICIAL (Opcional)</label>
-                    <NumericFormat thousandSeparator="." decimalSeparator="," allowNegative={false} value={formData.initialPayment} onValueChange={(values) => setFormData({...formData, initialPayment: values.value})} placeholder="Ej. 50000" style={{ width: '100%' }} />
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', gap: '1rem', width: '100%', maxWidth: '400px' }}>
-                  {editingId && <button type="button" onClick={resetForm} className="btn-secondary" style={{ flex: 1 }}>Cancelar</button>}
-                  <button type="submit" className="btn-primary" style={{ flex: 2, height: '50px' }}>{editingId ? 'Actualizar Registro' : config[type].submitText}</button>
                 </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>NOMBRE (Obligatorio)</label>
+                  <input required type="text" readOnly={!!formData.customerId} value={formData.customerName} onChange={e => setFormData({...formData, customerName: e.target.value})} placeholder="Nombre del cliente" style={{ width: '100%', opacity: formData.customerId ? 0.7 : 1 }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>CÉDULA / NIT</label>
+                  <input type="text" readOnly={!!formData.customerId} value={formData.idDocument} onChange={e => setFormData({...formData, idDocument: e.target.value})} placeholder="Opcional" style={{ width: '100%', opacity: formData.customerId ? 0.7 : 1 }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>TELÉFONO</label>
+                  <input type="text" readOnly={!!formData.customerId} value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="Opcional" style={{ width: '100%', opacity: formData.customerId ? 0.7 : 1 }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>CIUDAD / MUNICIPIO</label>
+                  <input type="text" readOnly={!!formData.customerId} value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} placeholder="Opcional" style={{ width: '100%', opacity: formData.customerId ? 0.7 : 1 }} />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>DIRECCIÓN</label>
+                  <input type="text" readOnly={!!formData.customerId} value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Opcional" style={{ width: '100%', opacity: formData.customerId ? 0.7 : 1 }} />
+                </div>
+                <div style={{ gridColumn: '1 / -1', height: '1px', background: 'var(--glass-border)', margin: '1rem 0' }} />
+              </>
+            )}
+            {type === 'purchases' && (
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>PROVEEDOR</label>
+                <select value={formData.supplierId} onChange={e => setFormData({...formData, supplierId: e.target.value})} style={{ width: '100%', height: '45px' }}>
+                  <option value="">Seleccionar Proveedor...</option>
+                  {supplierList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+            )}
+            {type === 'expenses' && (
+              <div style={{ gridColumn: 'span 2' }}>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>DESCRIPCIÓN</label>
+                <input required type="text" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} style={{ width: '100%' }} />
+              </div>
+            )}
+            {type === 'expenses' && categorias.length > 0 && (
+              <div>
+                <label htmlFor="gasto-categoria" style={{ display: 'block', marginBottom: '0.6rem' }}>Categoría</label>
+                <select id="gasto-categoria" required value={formData.category || ''} onChange={e => setFormData({ ...formData, category: e.target.value })} style={{ width: '100%', height: '45px' }}>
+                  <option value="" disabled>Selecciona…</option>
+                  {categorias.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+              </div>
+            )}
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>FECHA</label>
+              <input required type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} style={{ width: '100%' }} />
+            </div>
+            {type === 'sales' && (
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>MÉTODO DE PAGO</label>
+                <select required value={formData.method} onChange={e => setFormData({...formData, method: e.target.value})} style={{ width: '100%', height: '45px' }}>
+                  {metodos.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Cart Section for Sales */}
+          {type === 'sales' && (
+            <div style={{ background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: 0, border: '1px solid rgba(255,255,255,0.05)' }}>
+              <h5 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Añadir Productos</h5>
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <div style={{ flex: 2, minWidth: '200px' }}>
+                  <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>PRODUCTO</label>
+                  <select value={currentItem.productId} onChange={e => setCurrentItem({...currentItem, productId: e.target.value})} style={{ width: '100%', height: '45px' }}>
+                    <option value="">Seleccionar...</option>
+                    {productList.map(p => <option key={p.id} value={p.id}>{p.name} (Stock: {p.stock})</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1, minWidth: '100px' }}>
+                  <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>CANTIDAD</label>
+                  <NumericFormat thousandSeparator="." decimalSeparator="," allowNegative={false} value={currentItem.quantity} onValueChange={(values) => setCurrentItem({...currentItem, quantity: values.value})} style={{ width: '100%' }} />
+                </div>
+                <div style={{ flex: 1, minWidth: '120px' }}>
+                  <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>P. UNITARIO</label>
+                  <NumericFormat thousandSeparator="." decimalSeparator="," allowNegative={false} value={currentItem.unitPrice} onValueChange={(values) => setCurrentItem({...currentItem, unitPrice: values.value})} style={{ width: '100%' }} />
+                </div>
+                <button type="button" onClick={addToCart} style={{ height: '45px', padding: '0 1.5rem', background: 'var(--glass-bg)', color: 'var(--accent-primary)', border: '1px solid var(--accent-primary)', borderRadius: 0, fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                  <ListPlus size={18} /> Añadir
+                </button>
               </div>
 
-            </form>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              {/* Cart Items Table */}
+              {cart.length > 0 && (
+                <div className="table-responsive-wrapper" style={{ marginTop: '1.5rem', background: 'var(--bg-main)', borderRadius: 0 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: 'rgba(255,255,255,0.02)', textAlign: 'left' }}>
+                        <th style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Producto</th>
+                        <th style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Cant.</th>
+                        <th style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>P. Unit</th>
+                        <th style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Subtotal</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cart.map((item, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                          <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{item.productName}</td>
+                          <td style={{ padding: '0.75rem 1rem' }}>{item.quantity}</td>
+                          <td style={{ padding: '0.75rem 1rem' }}>${Math.round(item.unitPrice).toLocaleString('es-CO')}</td>
+                          <td style={{ padding: '0.75rem 1rem', color: 'var(--accent-primary)', fontWeight: 500 }}>${Math.round(item.quantity * item.unitPrice).toLocaleString('es-CO')}</td>
+                          <td style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>
+                            <button type="button" onClick={() => removeFromCart(idx)} style={{ background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer' }}><Trash2 size={16} /></button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Single Product Section for Purchases */}
+          {type === 'purchases' && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: 0, border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>PRODUCTO A COMPRAR</label>
+                <select required value={currentItem.productId} onChange={e => setCurrentItem({...currentItem, productId: e.target.value})} style={{ width: '100%', height: '45px' }}>
+                  <option value="">Seleccionar Producto...</option>
+                  {productList.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>CANTIDAD</label>
+                <NumericFormat required thousandSeparator="." decimalSeparator="," allowNegative={false} value={currentItem.quantity} onValueChange={(values) => setCurrentItem({...currentItem, quantity: values.value})} style={{ width: '100%' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>PRECIO UNITARIO</label>
+                <NumericFormat required thousandSeparator="." decimalSeparator="," allowNegative={false} value={currentItem.unitPrice} onValueChange={(values) => setCurrentItem({...currentItem, unitPrice: values.value})} style={{ width: '100%' }} />
+              </div>
+            </div>
+          )}
+
+          {/* Totals & Payments */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '2rem', background: 'rgba(201, 169, 97, 0.05)', padding: '1.5rem', borderRadius: 0, border: '1px solid rgba(201, 169, 97, 0.1)' }}>
+            {type === 'expenses' ? (
+              <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>MONTO TOTAL</label>
+                <NumericFormat required thousandSeparator="." decimalSeparator="," allowNegative={false} value={formData.amount} onValueChange={(values) => setFormData({...formData, amount: values.value})} style={{ width: '100%', maxWidth: '300px', fontSize: '1.5rem', fontWeight: 500, color: 'var(--error)' }} />
+              </div>
+            ) : (
+              <div>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 500, display: 'block', marginBottom: '0.5rem' }}>Total a Pagar</span>
+                <span style={{ fontSize: '2.5rem', fontWeight: 500, color: 'var(--accent-primary)' }}>${Math.round(calculatedTotal).toLocaleString('es-CO')}</span>
+              </div>
+            )}
+
+            {type === 'sales' && (
+              <div style={{ flex: 1, minWidth: '200px' }}>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>ABONO INICIAL (Opcional)</label>
+                <NumericFormat thousandSeparator="." decimalSeparator="," allowNegative={false} value={formData.initialPayment} onValueChange={(values) => setFormData({...formData, initialPayment: values.value})} placeholder="Ej. 50000" style={{ width: '100%' }} />
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '1rem', width: '100%', maxWidth: '400px' }}>
+              {editingId && <button type="button" onClick={resetForm} className="btn-secondary" style={{ flex: 1 }}>Cancelar</button>}
+              <button type="submit" className="btn-primary" style={{ flex: 2, height: '50px' }}>{editingId ? 'Actualizar Registro' : config[type].submitText}</button>
+            </div>
+          </div>
+
+        </form>
+      </Ventana>
 
       <div className="premium-card" style={{ padding: 0 }}>
         <div className="search-filter-bar">

@@ -2,9 +2,10 @@
 // esencias…) con su cantidad. Sus existencias y su costo se calculan con los componentes,
 // y al venderlo DATA descuenta cada componente.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Trash2, X, Gift, AlertTriangle, Save } from 'lucide-react';
+import { Plus, Search, Trash2, Gift, AlertTriangle, Save } from 'lucide-react';
 import { NumericFormat } from 'react-number-format';
 import { api } from '../services/api';
+import Ventana from './Ventana';
 import { formatoCantidad, nivelStock, NIVELES_STOCK } from '../utils/inventario';
 
 const pesos = (n) => `$${Math.round(Number(n) || 0).toLocaleString('es-CO')}`;
@@ -133,10 +134,9 @@ const Kits = ({ inventory, notify, confirm, onRefresh, config }) => {
         </button>
       </header>
 
+      <Ventana abierta={!!editor} onCerrar={() => setEditor(null)} eyebrow="Creador de kits" titulo={editor && editor.id ? 'Editar kit' : 'Nuevo kit'} ancho={880}>
       {editor && (
-        <div className="premium-card kit-editor">
-          <button onClick={() => setEditor(null)} className="kit-cerrar" aria-label="Cerrar editor"><X size={20} /></button>
-          <h4 style={{ marginBottom: '1.5rem', color: 'var(--accent-primary)' }}>{editor.id ? 'EDITAR KIT' : 'NUEVO KIT'}</h4>
+        <div className="kit-editor">
           <div className="kit-campos">
             <div>
               <label htmlFor="kit-nombre">Nombre</label>
@@ -196,6 +196,7 @@ const Kits = ({ inventory, notify, confirm, onRefresh, config }) => {
           )}
         </div>
       )}
+      </Ventana>
 
       <div className="premium-card" style={{ padding: 0 }}>
         <div className="search-filter-bar">
