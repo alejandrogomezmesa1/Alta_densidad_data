@@ -11,9 +11,12 @@
 
 html {
   background: var(--c-bg);
+  /* Deslizar con dos dedos (Mac) no hace "atrás" y no se pierde lo escrito en un formulario */
+  overscroll-behavior-x: none;
 }
 
 body {
+  overscroll-behavior-x: none;
   background: var(--c-bg);
   color: var(--c-ink);
   font: 400 14px/1.5 var(--f-ui);

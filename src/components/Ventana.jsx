@@ -17,6 +17,9 @@ const Ventana = ({ abierta, onCerrar, eyebrow, titulo, ancho = 720, children }) 
     document.body.style.overflow = 'hidden';
     const onKey = (e) => { if (e.key === 'Escape') cerrar.current?.(); };
     document.addEventListener('keydown', onKey);
+    // Con un formulario abierto, salir del panel (atrás, recargar, cerrar la pestaña) pide confirmar
+    const antesDeSalir = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', antesDeSalir);
     // Primer campo editable, después de la animación de entrada
     const t = setTimeout(() => {
       const campo = caja.current?.querySelector('input:not([type=hidden]):not([readonly]):not([disabled]), select, textarea');
@@ -25,6 +28,7 @@ const Ventana = ({ abierta, onCerrar, eyebrow, titulo, ancho = 720, children }) 
     return () => {
       document.body.style.overflow = previo;
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('beforeunload', antesDeSalir);
       clearTimeout(t);
     };
   }, [abierta]);
