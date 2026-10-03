@@ -224,10 +224,19 @@ const datosInventario = (body) => {
     };
 };
 
+// Datos mínimos de un ítem del inventario: sin nombre, categoría o precio de venta no se guarda
+const errorProducto = (body) => {
+    if (!body.name || !String(body.name).trim()) return 'El nombre es obligatorio';
+    if (!body.category || !String(body.category).trim()) return 'La categoría es obligatoria';
+    if (!(num(body.price) > 0)) return 'El precio de venta debe ser mayor que 0';
+    if (num(body.costPrice) < 0) return 'El precio de costo no puede ser negativo';
+    return null;
+};
+
 app.post('/api/products', async (req, res, next) => {
     const { name, category, price, costPrice } = req.body;
     const stockInicial = num(req.body.stock) || 0;
-    if (!name || !String(name).trim()) return res.status(400).json({ error: 'El nombre es obligatorio' });
+    if (errorProducto(req.body)) return res.status(400).json({ error: errorProducto(req.body) });
     let connection;
     try {
         connection = await db.getConnection();
@@ -260,6 +269,7 @@ app.post('/api/products', async (req, res, next) => {
 app.put('/api/products/:id', async (req, res, next) => {
     const { id } = req.params;
     const { name, category, price, costPrice } = req.body;
+    if (errorProducto(req.body)) return res.status(400).json({ error: errorProducto(req.body) });
     let connection;
     try {
         connection = await db.getConnection();
@@ -518,6 +528,14 @@ const normalizarItems = (items) => (Array.isArray(items) ? items : []).map(item 
     };
 });
 
+// Ninguna línea de venta sin precio: una venta en $0 descuenta inventario sin ingreso
+const errorItems = (items) => {
+    if (!items.length) return 'La venta debe tener al menos un producto';
+    if (items.some(i => !i.productId)) return 'Cada línea de la venta necesita un producto';
+    if (items.some(i => !(i.unitPrice > 0))) return 'Cada producto de la venta necesita un precio mayor que 0';
+    return null;
+};
+
 const totalDeItems = (items) => items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
 
 // Descuenta el stock y registra la línea con el costo real del momento (regla I-07)
@@ -589,7 +607,7 @@ app.get('/api/sales', async (req, res, next) => {
 app.post('/api/sales', async (req, res, next) => {
     const { date, customerId, customerName, phone, idDocument, city, address, method } = req.body;
     const items = normalizarItems(req.body.items);
-    if (!items.length) return res.status(400).json({ error: 'La venta debe tener al menos un producto' });
+    if (errorItems(items)) return res.status(400).json({ error: errorItems(items) });
 
     // El total y el estado se calculan en el servidor, no se confía en el cliente
     const total = totalDeItems(items);
@@ -674,7 +692,7 @@ app.put('/api/sales/:id', async (req, res, next) => {
     const { id } = req.params;
     const { date, customerId, customerName, phone, idDocument, city, address, method } = req.body;
     const items = normalizarItems(req.body.items);
-    if (!items.length) return res.status(400).json({ error: 'La venta debe tener al menos un producto' });
+    if (errorItems(items)) return res.status(400).json({ error: errorItems(items) });
     const total = totalDeItems(items);
 
     let connection;
@@ -781,6 +799,7 @@ const reversaCompra = async (connection, compraId, motivo, usuarioId) => {
 app.post('/api/purchases', async (req, res, next) => {
     const c = datosCompra(req.body);
     if (!c.invId || !c.cantidad) return res.status(400).json({ error: 'Producto y cantidad son obligatorios' });
+    if (!(c.precioUnitario > 0)) return res.status(400).json({ error: 'El precio unitario de la compra debe ser mayor que 0' });
     let connection;
     try {
         connection = await db.getConnection();
@@ -804,6 +823,7 @@ app.put('/api/purchases/:id', async (req, res, next) => {
     const { id } = req.params;
     const c = datosCompra(req.body);
     if (!c.invId || !c.cantidad) return res.status(400).json({ error: 'Producto y cantidad son obligatorios' });
+    if (!(c.precioUnitario > 0)) return res.status(400).json({ error: 'El precio unitario de la compra debe ser mayor que 0' });
     let connection;
     try {
         connection = await db.getConnection();
@@ -855,6 +875,7 @@ app.get('/api/expenses', async (req, res, next) => {
 
 app.post('/api/expenses', async (req, res, next) => {
     const { description, amount, category, date } = req.body;
+    if (!String(description || '').trim() || !(Number(amount) > 0)) return res.status(400).json({ error: 'La descripción y un monto mayor que 0 son obligatorios' });
     try {
         const categoriaId = await categoriaGastoId(db, category);
         const [result] = esquema.categoriasGasto
@@ -867,6 +888,7 @@ app.post('/api/expenses', async (req, res, next) => {
 app.put('/api/expenses/:id', async (req, res, next) => {
     const { id } = req.params;
     const { description, amount, category, date } = req.body;
+    if (!String(description || '').trim() || !(Number(amount) > 0)) return res.status(400).json({ error: 'La descripción y un monto mayor que 0 son obligatorios' });
     try {
         const categoriaId = await categoriaGastoId(db, category);
         if (esquema.categoriasGasto) {

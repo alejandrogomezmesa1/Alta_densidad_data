@@ -138,27 +138,52 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
     return cart.reduce((sum, item) => sum + (parseFloat(item.quantity) * parseFloat(item.unitPrice)), 0);
   }, [cart, formData.amount, type, currentItem.quantity, currentItem.unitPrice]);
 
+  // Al elegir el producto se propone su precio (de venta en ventas, de costo en compras); se puede cambiar
+  const elegirProducto = (productId) => {
+    const product = productList.find(p => String(p.id) === String(productId));
+    const sugerido = product ? Number(type === 'purchases' ? product.costPrice : product.price) : 0;
+    setCurrentItem(c => ({ ...c, productId, unitPrice: sugerido > 0 ? String(sugerido) : '' }));
+  };
+
+  const pesos = (v) => `$${Math.round(Number(v) || 0).toLocaleString('es-CO')}`;
+
   const addToCart = () => {
-    if (!currentItem.productId || !currentItem.quantity || !currentItem.unitPrice) {
-      notify?.('Por favor completa los detalles del producto', 'warning');
+    if (!currentItem.productId) {
+      notify?.('Selecciona el producto.', 'warning');
+      return;
+    }
+    if (!(parseFloat(currentItem.quantity) > 0)) {
+      notify?.('La cantidad debe ser mayor que 0.', 'warning');
+      return;
+    }
+    if (!(parseFloat(currentItem.unitPrice) > 0)) {
+      notify?.('El precio unitario es obligatorio y debe ser mayor que 0.', 'warning');
       return;
     }
     const product = productList.find(p => String(p.id) === String(currentItem.productId));
     if (!product) return;
     
     // Check stock for sales
-    if (type === 'sales' && product.stock < parseInt(currentItem.quantity)) {
+    if (type === 'sales' && product.stock < parseFloat(currentItem.quantity)) {
       notify?.(`Stock insuficiente. Disponible: ${product.stock}`, 'error');
       return;
     }
 
-    setCart(prev => [...prev, {
-      ...currentItem,
-      productName: product.name,
-      costAtSale: product.costPrice || 0
-    }]);
-    
-    setCurrentItem({ productId: '', quantity: '1', unitPrice: '' });
+    const anadir = () => {
+      setCart(prev => [...prev, {
+        ...currentItem,
+        productName: product.name,
+        costAtSale: product.costPrice || 0
+      }]);
+      setCurrentItem({ productId: '', quantity: '1', unitPrice: '' });
+    };
+    // Vender por debajo del costo es pérdida: se pide confirmación
+    const costo = Number(product.costPrice) || 0;
+    if (type === 'sales' && costo > 0 && parseFloat(currentItem.unitPrice) < costo) {
+      confirm?.(`${product.name} se vendería a ${pesos(currentItem.unitPrice)}, por debajo de su costo (${pesos(costo)}). ¿Añadir de todos modos?`, anadir);
+      return;
+    }
+    anadir();
   };
 
   const removeFromCart = (index) => {
@@ -173,13 +198,25 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
     setFormData({ amount: '', description: '', customerId: '', customerName: '', phone: '', idDocument: '', city: '', address: '', initialPayment: '', method: 'Efectivo', supplierId: mostFrequentSupplierId || '', date: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }) });
   };
 
-  const handleSubmit = (e) => {
+  const [guardando, setGuardando] = useState(false);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (guardando) return;
     let payload;
     
     if (type === 'sales') {
       if (cart.length === 0) {
         notify?.('Agrega al menos un producto', 'error');
+        return;
+      }
+      // Un producto elegido pero sin pulsar "Añadir" no entraría en la venta
+      if (currentItem.productId) {
+        notify?.('Tienes un producto seleccionado sin añadir: pulsa «Añadir» o quítalo antes de registrar.', 'warning');
+        return;
+      }
+      if (!String(formData.customerName || '').trim()) {
+        notify?.('El nombre del cliente es obligatorio.', 'warning');
         return;
       }
       payload = {
@@ -201,6 +238,10 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
         notify?.('Selecciona un producto', 'error');
         return;
       }
+      if (!(parseFloat(currentItem.quantity) > 0) || !(parseFloat(currentItem.unitPrice) > 0)) {
+        notify?.('La cantidad y el precio unitario deben ser mayores que 0.', 'warning');
+        return;
+      }
       payload = {
         ...formData,
         productId: currentItem.productId,
@@ -209,17 +250,20 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
         unitPrice: parseFloat(currentItem.unitPrice || 0)
       };
     } else {
+      if (!String(formData.description || '').trim() || !(parseFloat(formData.amount) > 0)) {
+        notify?.('La descripción y un monto mayor que 0 son obligatorios.', 'warning');
+        return;
+      }
       payload = {
         ...formData
       };
     }
 
-    if (editingId) {
-      onUpdate(editingId, payload);
-    } else {
-      onAdd(payload);
-    }
-    resetForm();
+    setGuardando(true);
+    const ok = editingId ? await onUpdate(editingId, payload) : await onAdd(payload);
+    setGuardando(false);
+    // Si el servidor rechaza el registro, el formulario se conserva para corregirlo
+    if (ok !== false) resetForm();
   };
 
   const handleEdit = (item) => {
@@ -531,7 +575,7 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
               <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                 <div style={{ flex: 2, minWidth: '200px' }}>
                   <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>PRODUCTO</label>
-                  <select value={currentItem.productId} onChange={e => setCurrentItem({...currentItem, productId: e.target.value})} style={{ width: '100%', height: '45px' }}>
+                  <select value={currentItem.productId} onChange={e => elegirProducto(e.target.value)} style={{ width: '100%', height: '45px' }}>
                     <option value="">Seleccionar...</option>
                     {productList.map(p => <option key={p.id} value={p.id}>{p.name} (Stock: {p.stock})</option>)}
                   </select>
@@ -586,7 +630,7 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', background: 'rgba(0,0,0,0.2)', padding: '1.5rem', borderRadius: 0, border: '1px solid rgba(255,255,255,0.05)' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>PRODUCTO A COMPRAR</label>
-                <select required value={currentItem.productId} onChange={e => setCurrentItem({...currentItem, productId: e.target.value})} style={{ width: '100%', height: '45px' }}>
+                <select required value={currentItem.productId} onChange={e => elegirProducto(e.target.value)} style={{ width: '100%', height: '45px' }}>
                   <option value="">Seleccionar Producto...</option>
                   {productList.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
@@ -625,7 +669,7 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
 
             <div style={{ display: 'flex', gap: '1rem', width: '100%', maxWidth: '400px' }}>
               {editingId && <button type="button" onClick={resetForm} className="btn-secondary" style={{ flex: 1 }}>Cancelar</button>}
-              <button type="submit" className="btn-primary" style={{ flex: 2, height: '50px' }}>{editingId ? 'Actualizar Registro' : config[type].submitText}</button>
+              <button type="submit" className="btn-primary" disabled={guardando} style={{ flex: 2, height: '50px' }}>{guardando ? 'Guardando…' : editingId ? 'Actualizar Registro' : config[type].submitText}</button>
             </div>
           </div>
 

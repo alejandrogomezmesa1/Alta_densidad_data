@@ -54,24 +54,24 @@ export const useInventory = (notify, isAuthenticated = true) => {
     try {
       await api.post('/products', product);
       fetchData();
-      notify?.('Producto añadido al inventario', 'success');
-    } catch (error) { notify?.(error.message || 'Error al añadir producto', 'error'); }
+      notify?.('Producto añadido al inventario', 'success'); return true;
+    } catch (error) { notify?.(error.message || 'Error al añadir producto', 'error'); return false; }
   }, [fetchData, notify]);
 
   const updateProduct = useCallback(async (id, updates) => {
     try {
       await api.put(`/products/${id}`, updates);
       fetchData();
-      notify?.('Producto actualizado correctamente', 'success');
-    } catch (error) { notify?.(error.message || 'Error al actualizar producto', 'error'); }
+      notify?.('Producto actualizado correctamente', 'success'); return true;
+    } catch (error) { notify?.(error.message || 'Error al actualizar producto', 'error'); return false; }
   }, [fetchData, notify]);
 
   const deleteProduct = useCallback(async (id) => {
     try {
       await api.delete(`/products/${id}`);
       fetchData();
-      notify?.('Producto eliminado', 'info');
-    } catch (error) { notify?.(error.message || 'Error al eliminar producto', 'error'); }
+      notify?.('Producto eliminado', 'info'); return true;
+    } catch (error) { notify?.(error.message || 'Error al eliminar producto', 'error'); return false; }
   }, [fetchData, notify]);
 
   // --- SALES LOGIC ---
@@ -79,32 +79,32 @@ export const useInventory = (notify, isAuthenticated = true) => {
     try {
       await api.post('/sales', sale);
       fetchData();
-      notify?.('Venta registrada con éxito', 'success');
-    } catch (error) { notify?.(error.message || 'Error al registrar venta', 'error'); }
+      notify?.('Venta registrada con éxito', 'success'); return true;
+    } catch (error) { notify?.(error.message || 'Error al registrar venta', 'error'); return false; }
   }, [fetchData, notify]);
 
   const addPaymentToSale = useCallback(async (saleId, payment) => {
     try {
       await api.post(`/sales/${saleId}/payments`, payment);
       fetchData();
-      notify?.('Abono registrado correctamente', 'success');
-    } catch (error) { notify?.(error.message || 'Error al registrar abono', 'error'); }
+      notify?.('Abono registrado correctamente', 'success'); return true;
+    } catch (error) { notify?.(error.message || 'Error al registrar abono', 'error'); return false; }
   }, [fetchData, notify]);
 
   const updateSale = useCallback(async (id, sale) => {
     try {
       await api.put(`/sales/${id}`, sale);
       fetchData();
-      notify?.('Venta actualizada correctamente', 'success');
-    } catch (error) { notify?.(error.message || 'Error al actualizar', 'error'); }
+      notify?.('Venta actualizada correctamente', 'success'); return true;
+    } catch (error) { notify?.(error.message || 'Error al actualizar', 'error'); return false; }
   }, [fetchData, notify]);
 
   const deleteSale = useCallback(async (saleId) => {
     try {
       await api.delete(`/sales/${saleId}`);
       fetchData();
-      notify?.('Venta eliminada y stock revertido', 'info');
-    } catch (error) { notify?.(error.message || 'Error al eliminar venta', 'error'); }
+      notify?.('Venta eliminada y stock revertido', 'info'); return true;
+    } catch (error) { notify?.(error.message || 'Error al eliminar venta', 'error'); return false; }
   }, [fetchData, notify]);
 
   // --- PURCHASES LOGIC ---
@@ -116,8 +116,8 @@ export const useInventory = (notify, isAuthenticated = true) => {
 
       await api.post('/purchases', { ...purchase, amount: totalAmount, unitPrice });
       fetchData();
-      notify?.('Compra registrada. Stock incrementado', 'success');
-    } catch (error) { notify?.(error.message || 'Error al registrar compra', 'error'); }
+      notify?.('Compra registrada. Stock incrementado', 'success'); return true;
+    } catch (error) { notify?.(error.message || 'Error al registrar compra', 'error'); return false; }
   }, [fetchData, notify]);
 
   const updatePurchase = useCallback(async (id, purchase) => {
@@ -128,16 +128,16 @@ export const useInventory = (notify, isAuthenticated = true) => {
 
       await api.put(`/purchases/${id}`, { ...purchase, amount: totalAmount, unitPrice });
       fetchData();
-      notify?.('Compra actualizada correctamente', 'success');
-    } catch (error) { notify?.(error.message || 'Error al actualizar', 'error'); }
+      notify?.('Compra actualizada correctamente', 'success'); return true;
+    } catch (error) { notify?.(error.message || 'Error al actualizar', 'error'); return false; }
   }, [fetchData, notify]);
 
   const deletePurchase = useCallback(async (purchaseId) => {
     try {
       await api.delete(`/purchases/${purchaseId}`);
       fetchData();
-      notify?.('Compra eliminada y stock ajustado', 'info');
-    } catch (error) { notify?.(error.message || 'Error al eliminar compra', 'error'); }
+      notify?.('Compra eliminada y stock ajustado', 'info'); return true;
+    } catch (error) { notify?.(error.message || 'Error al eliminar compra', 'error'); return false; }
   }, [fetchData, notify]);
 
   // --- EXPENSES LOGIC ---
@@ -145,24 +145,24 @@ export const useInventory = (notify, isAuthenticated = true) => {
     try {
       await api.post('/expenses', expense);
       fetchData();
-      notify?.('Gasto operativo registrado', 'success');
-    } catch (error) { notify?.(error.message || 'Error al registrar gasto', 'error'); }
+      notify?.('Gasto operativo registrado', 'success'); return true;
+    } catch (error) { notify?.(error.message || 'Error al registrar gasto', 'error'); return false; }
   }, [fetchData, notify]);
 
   const updateExpense = useCallback(async (id, expense) => {
     try {
       await api.put(`/expenses/${id}`, expense);
       fetchData();
-      notify?.('Gasto actualizado', 'success');
-    } catch (error) { notify?.(error.message || 'Error', 'error'); }
+      notify?.('Gasto actualizado', 'success'); return true;
+    } catch (error) { notify?.(error.message || 'Error', 'error'); return false; }
   }, [fetchData, notify]);
 
   const deleteExpense = useCallback(async (expenseId) => {
     try {
       await api.delete(`/expenses/${expenseId}`);
       fetchData();
-      notify?.('Gasto eliminado', 'info');
-    } catch (error) { notify?.(error.message || 'Error al eliminar gasto', 'error'); }
+      notify?.('Gasto eliminado', 'info'); return true;
+    } catch (error) { notify?.(error.message || 'Error al eliminar gasto', 'error'); return false; }
   }, [fetchData, notify]);
 
   // --- SUPPLIERS LOGIC ---
@@ -170,24 +170,24 @@ export const useInventory = (notify, isAuthenticated = true) => {
     try {
       await api.post('/suppliers', supplier);
       fetchData();
-      notify?.('Proveedor añadido correctamente', 'success');
-    } catch (error) { notify?.('Error al añadir proveedor', 'error'); }
+      notify?.('Proveedor añadido correctamente', 'success'); return true;
+    } catch (error) { notify?.('Error al añadir proveedor', 'error'); return false; }
   }, [fetchData, notify]);
 
   const updateSupplier = useCallback(async (id, updates) => {
     try {
       await api.put(`/suppliers/${id}`, updates);
       fetchData();
-      notify?.('Proveedor actualizado', 'success');
-    } catch (error) { notify?.('Error al actualizar proveedor', 'error'); }
+      notify?.('Proveedor actualizado', 'success'); return true;
+    } catch (error) { notify?.('Error al actualizar proveedor', 'error'); return false; }
   }, [fetchData, notify]);
 
   const deleteSupplier = useCallback(async (id) => {
     try {
       await api.delete(`/suppliers/${id}`);
       fetchData();
-      notify?.('Proveedor eliminado', 'info');
-    } catch (error) { notify?.('Error al eliminar proveedor', 'error'); }
+      notify?.('Proveedor eliminado', 'info'); return true;
+    } catch (error) { notify?.('Error al eliminar proveedor', 'error'); return false; }
   }, [fetchData, notify]);
 
   const getMostFrequentSupplierId = useCallback(() => {
@@ -212,16 +212,16 @@ export const useInventory = (notify, isAuthenticated = true) => {
     try {
       await api.put(`/customers/${id}`, updates);
       fetchData();
-      notify?.('Datos del cliente actualizados', 'success');
-    } catch (error) { notify?.('Error al actualizar cliente', 'error'); }
+      notify?.('Datos del cliente actualizados', 'success'); return true;
+    } catch (error) { notify?.('Error al actualizar cliente', 'error'); return false; }
   }, [fetchData, notify]);
 
   const deleteCustomer = useCallback(async (id) => {
     try {
       await api.delete(`/customers/${id}`);
       fetchData();
-      notify?.('Cliente eliminado del sistema', 'success');
-    } catch (error) { notify?.('Error al eliminar cliente', 'error'); }
+      notify?.('Cliente eliminado del sistema', 'success'); return true;
+    } catch (error) { notify?.('Error al eliminar cliente', 'error'); return false; }
   }, [fetchData, notify]);
 
   const exportData = useCallback(() => {

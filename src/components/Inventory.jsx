@@ -25,6 +25,8 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
   const [editingId, setEditingId] = useState(null);
   const [selectedDetail, setSelectedDetail] = useState(null);
   const [formData, setFormData] = useState(FORM_VACIO);
+  const [intentado, setIntentado] = useState(false);
+  const [guardando, setGuardando] = useState(false);
   const [ajustando, setAjustando] = useState(null);
   const [historial, setHistorial] = useState(null);
 
@@ -94,6 +96,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
 
   const handleEdit = (product) => {
     setEditingId(product.id);
+    setIntentado(false);
     setFormData({
       ...FORM_VACIO, ...product,
       price: String(product.price), costPrice: String(product.costPrice), stock: String(product.stock),
@@ -103,25 +106,56 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
     setIsAdding(true);
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  // Campos obligatorios: nada se guarda con precio o costo vacío o en 0 (se vendería regalado o
+  // el margen saldría falso). El costo de un kit compuesto lo calculan sus componentes.
+  const editandoKit = Boolean(editingId && items.find((p) => p.id === editingId)?.isKit);
+  const faltantes = [
+    !String(formData.name).trim() && ['name', 'nombre'],
+    !String(formData.category).trim() && ['category', 'categoría'],
+    !(Number(formData.price) > 0) && ['price', 'precio de venta'],
+    !editandoKit && !(Number(formData.costPrice) > 0) && ['costPrice', 'precio de costo'],
+    !editingId && String(formData.stock).trim() === '' && ['stock', 'stock inicial']
+  ].filter(Boolean);
+  const invalido = (k) => (intentado && faltantes.some(([c]) => c === k) ? { borderColor: 'var(--error)', boxShadow: '0 0 0 1px var(--error)' } : {});
+
+  const enviar = async () => {
+    setGuardando(true);
+    let ok;
     if (editingId) {
       // El stock no se edita aquí: se cambia con "Ajustar stock" para que quede el motivo
       const sinStock = { ...formData };
       delete sinStock.stock;
-      updateProduct(editingId, sinStock);
-      setEditingId(null);
+      ok = await updateProduct(editingId, sinStock);
     } else {
-      addProduct(formData);
+      ok = await addProduct(formData);
     }
-    setFormData(FORM_VACIO);
-    setIsAdding(false);
+    setGuardando(false);
+    // Si el servidor rechaza el guardado, la ventana sigue abierta con lo escrito
+    if (ok) handleCancel();
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (guardando) return;
+    setIntentado(true);
+    if (faltantes.length) {
+      notify?.(`Completa los campos obligatorios: ${faltantes.map(([, t]) => t).join(', ')}.`, 'warning');
+      return;
+    }
+    const precio = Number(formData.price);
+    const costo = Number(formData.costPrice);
+    if (!editandoKit && precio <= costo) {
+      confirm?.(`El precio de venta ($${Math.round(precio).toLocaleString('es-CO')}) no supera el costo ($${Math.round(costo).toLocaleString('es-CO')}): cada venta daría pérdida y la tienda lo pondrá en revisión. ¿Guardar de todos modos?`, enviar);
+      return;
+    }
+    enviar();
   };
 
   const handleCancel = () => {
     setIsAdding(false);
     setEditingId(null);
     setFormData(FORM_VACIO);
+    setIntentado(false);
   };
 
   const handleExportStockZero = () => {
@@ -225,22 +259,24 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
       </header>
 
       <Ventana abierta={isAdding} onCerrar={handleCancel} eyebrow="Inventario" titulo={editingId ? 'Editar producto' : 'Nuevo producto'} ancho={880}>
-        <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.5rem', alignItems: 'flex-end' }}>
+        <form onSubmit={handleSubmit} noValidate style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.5rem', alignItems: 'flex-end' }}>
           <div>
-            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>NOMBRE</label>
-            <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nombre del producto" style={{ width: '100%' }} />
+            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>NOMBRE *</label>
+            <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nombre del producto" style={{ width: '100%', ...invalido('name') }} />
           </div>
           <div>
-            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>CATEGORÍA</label>
-            <input required type="text" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="Categoría" style={{ width: '100%' }} />
+            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>CATEGORÍA *</label>
+            <input required type="text" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="Categoría" style={{ width: '100%', ...invalido('category') }} />
           </div>
           <div>
-            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>P. VENTA (COP)</label>
-            <NumericFormat required value={formData.price} onValueChange={(values) => setFormData({...formData, price: values.value})} thousandSeparator="." decimalSeparator="," placeholder="0" style={{ width: '100%' }} />
+            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>P. VENTA (COP) *</label>
+            <NumericFormat required allowNegative={false} value={formData.price} onValueChange={(values) => setFormData({...formData, price: values.value})} thousandSeparator="." decimalSeparator="," placeholder="0" style={{ width: '100%', ...invalido('price') }} />
           </div>
           <div>
-            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>P. COSTO (COP)</label>
-            <NumericFormat required value={formData.costPrice} onValueChange={(values) => setFormData({...formData, costPrice: values.value})} thousandSeparator="." decimalSeparator="," placeholder="0" style={{ width: '100%' }} />
+            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>P. COSTO (COP){editandoKit ? '' : ' *'}</label>
+            {editandoKit
+              ? <input value={`$${Math.round(Number(formData.costPrice) || 0).toLocaleString('es-CO')}`} readOnly title="El costo de un kit sale de sus componentes" style={{ width: '100%', opacity: 0.6 }} />
+              : <NumericFormat required allowNegative={false} value={formData.costPrice} onValueChange={(values) => setFormData({...formData, costPrice: values.value})} thousandSeparator="." decimalSeparator="," placeholder="0" style={{ width: '100%', ...invalido('costPrice') }} />}
           </div>
           <div>
             <label htmlFor="inv-tipo" style={{ display: 'block', marginBottom: '0.6rem' }}>Tipo</label>
@@ -254,7 +290,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
             </label>
             {editingId
               ? <input id="inv-stock" value={formatoCantidad(formData.stock, LIQUIDOS.includes(formData.type) ? 'ml' : 'und')} readOnly title="Usa «Ajustar stock» en la tabla" style={{ width: '100%', opacity: 0.6 }} />
-              : <NumericFormat id="inv-stock" required value={formData.stock} onValueChange={(v) => setFormData({ ...formData, stock: v.value })} thousandSeparator="." decimalSeparator="," decimalScale={2} style={{ width: '100%' }} />}
+              : <NumericFormat id="inv-stock" required allowNegative={false} value={formData.stock} onValueChange={(v) => setFormData({ ...formData, stock: v.value })} thousandSeparator="." decimalSeparator="," decimalScale={2} style={{ width: '100%', ...invalido('stock') }} />}
           </div>
           <div>
             <label htmlFor="inv-min" style={{ display: 'block', marginBottom: '0.6rem' }}>Stock mínimo</label>
@@ -275,8 +311,8 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
             <NumericFormat id="inv-factor" value={formData.purchaseFactor} onValueChange={(v) => setFormData({ ...formData, purchaseFactor: v.value })} thousandSeparator="." decimalSeparator="," decimalScale={4} style={{ width: '100%' }} />
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button type="submit" className="btn-primary" style={{ flex: 1, height: '45px', fontSize: '0.8rem' }}>
-              {editingId ? 'ACTUALIZAR' : 'GUARDAR'}
+            <button type="submit" className="btn-primary" disabled={guardando} style={{ flex: 1, height: '45px', fontSize: '0.8rem' }}>
+              {guardando ? 'GUARDANDO…' : editingId ? 'ACTUALIZAR' : 'GUARDAR'}
             </button>
           </div>
         </form>
