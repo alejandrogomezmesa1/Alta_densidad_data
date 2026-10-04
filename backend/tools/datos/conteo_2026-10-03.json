@@ -1,0 +1,27 @@
+{
+  "_descripcion": "Segundo conteo físico (Productos activos.md subido al Drive el 03-10-2026). Solo cambian perfumes 1.1 y un kit; esencias, envases negros y esencias 1.1 iguales al 29-09.",
+  "motivo": "Conteo físico 03-10-2026",
+  "ajustes": [
+    { "id": 9, "nombre": "Lacoste Blanca", "stock": 2 },
+    { "id": 8, "nombre": "Ombre Nomada", "stock": 2 },
+    { "id": 76, "nombre": "Imagination", "stock": 0 },
+    { "nombre": "9PM Rebel Afnan", "stock": 1 },
+    { "id": 1, "nombre": "Santal 33", "stock": 4 },
+    { "id": 50, "nombre": "Yum Yum Mini", "stock": 1 }
+  ],
+  "ceros": [],
+  "kits": [],
+  "nuevos": [
+    { "nombre": "Starry Nights Montale", "categoria": "1.1", "tipo": "terminado", "unidad": "und", "stock": 1, "precio": 0, "costo": 0 },
+    { "nombre": "9PM Elixir Afnan", "categoria": "1.1", "tipo": "terminado", "unidad": "und", "stock": 1, "precio": 0, "costo": 0 },
+    { "nombre": "9AM Pour Femme Afnan", "categoria": "1.1", "tipo": "terminado", "unidad": "und", "stock": 1, "precio": 0, "costo": 0 },
+    { "nombre": "Voyage Nautica", "categoria": "1.1", "tipo": "terminado", "unidad": "und", "stock": 1, "precio": 0, "costo": 0 },
+    { "nombre": "Toy Boy Moschino", "categoria": "1.1", "tipo": "terminado", "unidad": "und", "stock": 1, "precio": 0, "costo": 0 },
+    { "nombre": "Her Burberry", "categoria": "1.1", "tipo": "terminado", "unidad": "und", "stock": 1, "precio": 0, "costo": 0 },
+    { "nombre": "Layton Parfums de Marly", "categoria": "1.1", "tipo": "terminado", "unidad": "und", "stock": 1, "precio": 0, "costo": 0 }
+  ],
+  "pendientes": [
+    "Precio y costo de los 7 perfumes nuevos (se crean en 0).",
+    "Fichas de la tienda de los 7 nuevos: ver datos/fichas_nuevos_2026-10-03.json."
+  ]
+}

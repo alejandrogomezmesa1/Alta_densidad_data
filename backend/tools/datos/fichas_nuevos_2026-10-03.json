@@ -1,0 +1,169 @@
+[
+ {
+  "nombre": "Starry Nights Montale",
+  "marca": "Montale",
+  "original": "Starry Nights",
+  "genero": "Unisex",
+  "categoria": "Arabe",
+  "familia": "Oriental floral",
+  "salida": [
+   "Manzana",
+   "Bergamota",
+   "Limón"
+  ],
+  "corazon": [
+   "Rosa",
+   "Pachulí",
+   "Jazmín"
+  ],
+  "fondo": [
+   "Almizcle blanco",
+   "Notas atalcadas",
+   "Ámbar"
+  ]
+ },
+ {
+  "nombre": "9PM Elixir Afnan",
+  "marca": "Afnan",
+  "original": "9PM Elixir",
+  "genero": "Unisex",
+  "categoria": "Arabe",
+  "familia": "Ámbar especiado",
+  "salida": [
+   "Cardamomo",
+   "Nuez moscada",
+   "Elemí"
+  ],
+  "corazon": [
+   "Pimienta de Jamaica",
+   "Cuero",
+   "Lavanda"
+  ],
+  "fondo": [
+   "Cisto",
+   "Láudano",
+   "Pachulí",
+   "Vainilla"
+  ]
+ },
+ {
+  "nombre": "9AM Pour Femme Afnan",
+  "marca": "Afnan",
+  "original": "9AM Pour Femme",
+  "genero": "Femenino",
+  "categoria": "Arabe",
+  "familia": "Frutal cítrica",
+  "salida": [
+   "Mandarina",
+   "Bergamota",
+   "Pomelo"
+  ],
+  "corazon": [
+   "Grosella negra",
+   "Frambuesa"
+  ],
+  "fondo": [
+   "Almizcle",
+   "Naranja",
+   "Ámbar"
+  ]
+ },
+ {
+  "nombre": "Voyage Nautica",
+  "marca": "Nautica",
+  "original": "Voyage",
+  "genero": "Masculino",
+  "categoria": "Diseñador",
+  "familia": "Amaderada acuática",
+  "salida": [
+   "Hojas verdes",
+   "Manzana"
+  ],
+  "corazon": [
+   "Loto",
+   "Mimosa"
+  ],
+  "fondo": [
+   "Almizcle",
+   "Cedro",
+   "Musgo de roble",
+   "Ámbar"
+  ]
+ },
+ {
+  "nombre": "Toy Boy Moschino",
+  "marca": "Moschino",
+  "original": "Toy Boy",
+  "genero": "Masculino",
+  "categoria": "Diseñador",
+  "familia": "Amaderada especiada",
+  "salida": [
+   "Bergamota",
+   "Pimienta rosa",
+   "Nuez moscada",
+   "Pera",
+   "Elemí"
+  ],
+  "corazon": [
+   "Clavo",
+   "Rosa",
+   "Flor de lino",
+   "Magnolia"
+  ],
+  "fondo": [
+   "Cashmeran",
+   "Vetiver",
+   "Ámbar",
+   "Almizcle"
+  ]
+ },
+ {
+  "nombre": "Her Burberry",
+  "marca": "Burberry",
+  "original": "Her",
+  "genero": "Femenino",
+  "categoria": "Diseñador",
+  "familia": "Floral frutal gourmand",
+  "salida": [
+   "Grosella negra",
+   "Arándano",
+   "Frambuesa"
+  ],
+  "corazon": [
+   "Jazmín",
+   "Violeta"
+  ],
+  "fondo": [
+   "Maderas blancas",
+   "Almizcle",
+   "Ámbar"
+  ]
+ },
+ {
+  "nombre": "Layton Parfums de Marly",
+  "marca": "Parfums de Marly",
+  "original": "Layton",
+  "genero": "Masculino",
+  "categoria": "Diseñador",
+  "familia": "Ámbar floral",
+  "salida": [
+   "Manzana",
+   "Lavanda",
+   "Bergamota",
+   "Mandarina"
+  ],
+  "corazon": [
+   "Geranio",
+   "Violeta",
+   "Jazmín"
+  ],
+  "fondo": [
+   "Vainilla",
+   "Cardamomo",
+   "Sándalo",
+   "Pimienta",
+   "Pachulí",
+   "Madera de guayaco"
+  ]
+ }
+]

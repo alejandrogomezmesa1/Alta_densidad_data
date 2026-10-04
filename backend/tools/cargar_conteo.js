@@ -41,8 +41,15 @@ try {
     const [filas] = await conn.query('SELECT id, nombre, categoria, stock, activo FROM inventario');
     const porId = new Map(filas.map((f) => [f.id, f]));
 
-    // 1. Verificación: cada id existe y su nombre coincide con el del plan
+    // 1. Verificación: cada id existe y su nombre coincide con el del plan. Un ajuste sin id se busca por
+    //    nombre exacto (ítems creados en un conteo anterior) y debe haber uno solo con ese nombre.
     const errores = [];
+    for (const x of plan.ajustes) {
+        if (x.id) continue;
+        const iguales = filas.filter((f) => mismo(f.nombre, x.nombre) && f.activo !== 0);
+        if (iguales.length === 1) x.id = iguales[0].id;
+        else errores.push(`"${x.nombre}": ${iguales.length ? `${iguales.length} ítems con ese nombre` : 'no existe'}`);
+    }
     for (const x of [...plan.ajustes, ...plan.ceros]) {
         const f = porId.get(x.id);
         if (!f) errores.push(`#${x.id} ${x.nombre}: no existe`);
