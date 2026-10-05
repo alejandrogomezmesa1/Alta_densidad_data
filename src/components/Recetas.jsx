@@ -6,6 +6,8 @@ import { Plus, Save, Trash2, FlaskConical, Package } from 'lucide-react';
 import { api } from '../services/api';
 
 const pesos = (v) => `$${Math.round(Number(v) || 0).toLocaleString('es-CO')}`;
+// Costos unitarios con decimales (el alcohol cuesta $6,5 el ml)
+const unit = (v) => `$${(Number(v) || 0).toLocaleString('es-CO', { maximumFractionDigits: 2 })}`;
 const cifra = (v) => Number(v || 0).toLocaleString('es-CO', { maximumFractionDigits: 3 });
 const CLASES = [['arabe', 'Árabe'], ['tradicional', 'Tradicional']];
 const TIPOS_INSUMO = ['base', 'feromona', 'accesorio', 'envase'];
@@ -25,7 +27,7 @@ function Lineas({ lineas, insumos, envasesTam, costoEsencia, onCambiar, onQuitar
           {lineas.map((l) => {
             const item = insumos.find((i) => i.id === Number(l.itemId));
             let unitario; let unidad; let nota = null;
-            if (l.role === 'esencia') { unidad = 'ml'; unitario = null; nota = CLASES.map(([c, t]) => `${t} ${pesos(costoEsencia[c])}/ml`).join(' · '); }
+            if (l.role === 'esencia') { unidad = 'ml'; unitario = null; nota = CLASES.map(([c, t]) => `${t} ${unit(costoEsencia[c])}/ml`).join(' · '); }
             else if (l.role === 'envase') {
               unidad = 'und';
               const costos = envasesTam.map((e) => e.unitCost);
@@ -52,7 +54,7 @@ function Lineas({ lineas, insumos, envasesTam, costoEsencia, onCambiar, onQuitar
                     <small style={{ color: 'var(--text-muted)' }}>{unidad}</small>
                   </span>
                 </td>
-                <td style={estiloCelda}>{l.role === 'esencia' ? 'Según clase' : `${pesos(unitario)}${unidad ? ` / ${unidad}` : ''}`}</td>
+                <td style={estiloCelda}>{l.role === 'esencia' ? 'Según clase' : `${unit(unitario)}${unidad ? ` / ${unidad}` : ''}`}</td>
                 <td style={estiloCelda}>{subtotal == null ? '—' : pesos(subtotal)}</td>
                 <td style={{ ...estiloCelda, textAlign: 'right' }}>
                   {l.role === 'insumo' && <button type="button" className="btn-icon danger" onClick={() => onQuitar(l.key)} title="Quitar" aria-label="Quitar línea"><Trash2 size={14} /></button>}
