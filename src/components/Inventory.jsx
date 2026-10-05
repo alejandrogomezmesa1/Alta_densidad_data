@@ -9,7 +9,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { NumericFormat } from 'react-number-format';
 
-const FORM_VACIO = { name: '', category: '', price: '', costPrice: '', stock: '0', type: 'terminado', minStock: '0', code: '', purchaseUnit: '', purchaseFactor: '1' };
+const FORM_VACIO = { name: '', category: '', price: '', costPrice: '', stock: '0', type: 'terminado', minStock: '0', code: '', purchaseUnit: '', purchaseFactor: '1', essenceClass: '' };
+const CLASES_ESENCIA = { arabe: 'Árabe', tradicional: 'Tradicional' };
 const LIQUIDOS = ['esencia', 'base', 'feromona'];
 
 const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, exportData, notify, confirm, onRefresh, config }) => {
@@ -19,6 +20,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [claseFilter, setClaseFilter] = useState('all');
   const [stockFilter, setStockFilter] = useState('all'); // 'all' | 'in_stock' | 'low' | 'out'
   const [sortBy, setSortBy] = useState('recent'); // 'recent' | 'name_asc' | 'name_desc' | 'stock_asc' | 'stock_desc'
   const [isAdding, setIsAdding] = useState(false);
@@ -42,12 +44,13 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
     return Array.from(cats).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
   }, [items]);
 
-  const hayFiltrosActivos = searchTerm.trim() !== '' || categoryFilter !== 'all' || typeFilter !== 'all' || stockFilter !== 'all' || sortBy !== 'recent';
+  const hayFiltrosActivos = searchTerm.trim() !== '' || categoryFilter !== 'all' || typeFilter !== 'all' || claseFilter !== 'all' || stockFilter !== 'all' || sortBy !== 'recent';
 
   const limpiarFiltros = () => {
     setSearchTerm('');
     setCategoryFilter('all');
     setTypeFilter('all');
+    setClaseFilter('all');
     setStockFilter('all');
     setSortBy('recent');
   };
@@ -72,6 +75,11 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
       if (typeFilter !== 'all') {
         if ((p?.type || 'terminado') !== typeFilter) return false;
       }
+      // 3b. Clase de esencia (árabe / tradicional / sin clasificar)
+      if (claseFilter !== 'all') {
+        if (p?.type !== 'esencia') return false;
+        if (claseFilter === 'sin' ? !!p.essenceClass : p.essenceClass !== claseFilter) return false;
+      }
 
       // 4. Filtro por estado de stock
       if (stockFilter === 'low') {
@@ -92,7 +100,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
       if (sortBy === 'price_asc') return Number(a.price) - Number(b.price);
       return b.id - a.id;
     });
-  }, [items, searchTerm, categoryFilter, typeFilter, stockFilter, sortBy]);
+  }, [items, searchTerm, categoryFilter, typeFilter, claseFilter, stockFilter, sortBy]);
 
   const handleEdit = (product) => {
     setEditingId(product.id);
@@ -101,7 +109,8 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
       ...FORM_VACIO, ...product,
       price: String(product.price), costPrice: String(product.costPrice), stock: String(product.stock),
       type: product.type || 'terminado', minStock: String(product.minStock ?? 0), code: product.code || '',
-      purchaseUnit: product.purchaseUnit || '', purchaseFactor: String(product.purchaseFactor ?? 1)
+      purchaseUnit: product.purchaseUnit || '', purchaseFactor: String(product.purchaseFactor ?? 1),
+      essenceClass: product.essenceClass || ''
     });
     setIsAdding(true);
   };
@@ -114,7 +123,8 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
     !String(formData.category).trim() && ['category', 'categoría'],
     !(Number(formData.price) > 0) && ['price', 'precio de venta'],
     !editandoKit && !(Number(formData.costPrice) > 0) && ['costPrice', 'precio de costo'],
-    !editingId && String(formData.stock).trim() === '' && ['stock', 'stock inicial']
+    !editingId && String(formData.stock).trim() === '' && ['stock', 'stock inicial'],
+    formData.type === 'esencia' && !formData.essenceClass && ['essenceClass', 'clase de esencia']
   ].filter(Boolean);
   const invalido = (k) => (intentado && faltantes.some(([c]) => c === k) ? { borderColor: 'var(--error)', boxShadow: '0 0 0 1px var(--error)' } : {});
 
@@ -284,6 +294,16 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
               {Object.entries(TIPOS_INVENTARIO).map(([v, t]) => <option key={v} value={v}>{t}</option>)}
             </select>
           </div>
+          {formData.type === 'esencia' && (
+            <div>
+              <label htmlFor="inv-clase" style={{ display: 'block', marginBottom: '0.6rem' }}>Clase de esencia *</label>
+              <select id="inv-clase" value={formData.essenceClass} onChange={e => setFormData({ ...formData, essenceClass: e.target.value })} style={{ width: '100%', ...invalido('essenceClass') }}>
+                <option value="">Seleccionar…</option>
+                <option value="arabe">Árabe</option>
+                <option value="tradicional">Tradicional (diseñador)</option>
+              </select>
+            </div>
+          )}
           <div>
             <label htmlFor="inv-stock" style={{ display: 'block', marginBottom: '0.6rem' }}>
               {editingId ? 'Stock actual' : 'Stock inicial'} ({LIQUIDOS.includes(formData.type) ? 'ml' : 'und'})
@@ -369,6 +389,16 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
               {Object.entries(TIPOS_INVENTARIO).map(([v, t]) => (
                 <option key={v} value={v}>{t}</option>
               ))}
+            </select>
+          </div>
+
+          {/* Clase de esencia */}
+          <div style={{ flex: '0 1 150px', minWidth: '125px' }}>
+            <select value={claseFilter} onChange={e => setClaseFilter(e.target.value)} style={{ width: '100%', borderRadius: 0 }} title="Clase de esencia">
+              <option value="all">Todas las clases</option>
+              <option value="arabe">Esencias árabes</option>
+              <option value="tradicional">Esencias tradicionales</option>
+              <option value="sin">Esencias sin clasificar</option>
             </select>
           </div>
 
@@ -461,7 +491,10 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
                       <span className="mobile-label">Categoría</span>
                       <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{product.category}</span>
                       {product.type && product.type !== 'terminado' && (
-                        <div className="up" style={{ fontSize: '9px', color: 'var(--accent-primary)', marginTop: '0.25rem' }}>{TIPOS_INVENTARIO[product.type]}</div>
+                        <div className="up" style={{ fontSize: '9px', color: 'var(--accent-primary)', marginTop: '0.25rem' }}>
+                          {TIPOS_INVENTARIO[product.type]}
+                          {product.type === 'esencia' && <span style={{ marginLeft: 6, color: product.essenceClass ? 'var(--text-secondary)' : 'var(--warning, #c9a227)' }}>· {CLASES_ESENCIA[product.essenceClass] || 'Sin clasificar'}</span>}
+                        </div>
                       )}
                     </td>
                     <td style={{ padding: '1.25rem 2rem' }}>

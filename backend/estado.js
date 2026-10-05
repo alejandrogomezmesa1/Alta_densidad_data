@@ -8,7 +8,8 @@ export const esquema = {
     metodosPago: false,      // 007
     categoriasGasto: false,  // 008
     kits: false,             // 010: kits compuestos
-    configuraciones: false   // 011: módulo Configuraciones
+    configuraciones: false,  // 011: módulo Configuraciones
+    claseEsencia: false      // 012: esencia árabe / tradicional
 };
 
 export const actualizarEsquema = (aplicadas) => {
@@ -20,4 +21,5 @@ export const actualizarEsquema = (aplicadas) => {
     esquema.categoriasGasto = aplicadas.has('008');
     esquema.kits = aplicadas.has('010');
     esquema.configuraciones = aplicadas.has('011');
+    esquema.claseEsencia = aplicadas.has('012');
 };

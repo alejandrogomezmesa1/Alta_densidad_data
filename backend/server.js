@@ -178,11 +178,21 @@ const productoDesdeFila = (r) => ({
     ...(esquema.inventarioTipos ? {
         code: r.code, type: r.type, unit: r.unit, minStock: Number(r.minStock) || 0,
         purchaseUnit: r.purchaseUnit, purchaseFactor: Number(r.purchaseFactor) || 1
-    } : {})
+    } : {}),
+    ...(esquema.claseEsencia ? { essenceClass: r.essenceClass || null } : {})
 });
 
+// Clase de esencia: solo se toca si el formulario la envía (otros llamadores no la conocen)
+const CLASES_ESENCIA = ['arabe', 'tradicional'];
+async function guardarClaseEsencia(conn, id, body) {
+    if (!esquema.claseEsencia || !Object.prototype.hasOwnProperty.call(body, 'essenceClass')) return;
+    const clase = body.type === 'esencia' && CLASES_ESENCIA.includes(body.essenceClass) ? body.essenceClass : null;
+    await conn.query('UPDATE inventario SET clase_esencia = ? WHERE id = ?', [clase, id]);
+}
+
 const COLS_PRODUCTO = () => `id, nombre as name, categoria as category, precio as price, precio_costo as costPrice, stock, fecha_creacion as createdAt
-    ${esquema.inventarioTipos ? ', codigo as code, tipo as type, unidad as unit, stock_minimo as minStock, unidad_compra as purchaseUnit, factor_compra as purchaseFactor' : ''}`;
+    ${esquema.inventarioTipos ? ', codigo as code, tipo as type, unidad as unit, stock_minimo as minStock, unidad_compra as purchaseUnit, factor_compra as purchaseFactor' : ''}
+    ${esquema.claseEsencia ? ', clase_esencia as essenceClass' : ''}`;
 
 app.get('/api/products', async (req, res, next) => {
     try {
@@ -252,6 +262,7 @@ app.post('/api/products', async (req, res, next) => {
             [result] = await connection.query('INSERT INTO inventario (nombre, categoria, precio, precio_costo, stock) VALUES (?, ?, ?, ?, 0)',
                 [name, category, num(price) || 0, num(costPrice) || 0]);
         }
+        await guardarClaseEsencia(connection, result.insertId, req.body);
         if (stockInicial > 0) {
             await moverStock(connection, { inventarioId: result.insertId, cantidad: stockInicial, tipo: 'inicial', costoUnitario: num(costPrice) || 0,
                 origenTipo: 'producto', origenId: result.insertId, motivo: 'Stock inicial al crear el producto', usuarioId: req.user?.id });
@@ -289,6 +300,7 @@ app.put('/api/products/:id', async (req, res, next) => {
             await connection.query('UPDATE inventario SET nombre = ?, categoria = ?, precio = ?, precio_costo = ? WHERE id = ?',
                 [name, category, num(price) || 0, num(costPrice) || 0, id]);
         }
+        await guardarClaseEsencia(connection, Number(id), req.body);
         // Un cambio de stock desde el formulario queda como ajuste en el libro (regla I-05)
         const nuevo = num(req.body.stock);
         const esKit = (await componentesDe(connection, Number(id))).length > 0;
