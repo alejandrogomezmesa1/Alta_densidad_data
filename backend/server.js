@@ -238,7 +238,9 @@ const datosInventario = (body) => {
 const errorProducto = (body) => {
     if (!body.name || !String(body.name).trim()) return 'El nombre es obligatorio';
     if (!body.category || !String(body.category).trim()) return 'La categoría es obligatoria';
-    if (!(num(body.price) > 0)) return 'El precio de venta debe ser mayor que 0';
+    // Los insumos (alcohol, envases, bolsas…) no se venden: el precio de venta solo se exige a lo terminado
+    if ((body.type || 'terminado') === 'terminado' && !(num(body.price) > 0)) return 'El precio de venta debe ser mayor que 0';
+    if (num(body.price) < 0) return 'El precio de venta no puede ser negativo';
     if (num(body.costPrice) < 0) return 'El precio de costo no puede ser negativo';
     return null;
 };
@@ -410,6 +412,65 @@ const kitDesdeFila = (r, componentes) => {
         components: componentes.map(c => ({ productId: c.id, name: c.nombre, quantity: c.cantidad, stock: c.stock, costPrice: c.costo, unit: c.unidad }))
     };
 };
+
+// --- RECETAS DE PREPARADO Y EMPAQUE ---
+// Costo por ml de la esencia según su clase: promedio ponderado por stock de las esencias activas
+async function costosEsencia(conn) {
+    if (!esquema.claseEsencia) return {};
+    const [rows] = await conn.query(`SELECT clase_esencia AS clase,
+        SUM(precio_costo * GREATEST(stock, 0)) / NULLIF(SUM(GREATEST(stock, 0)), 0) AS ponderado, AVG(precio_costo) AS promedio
+        FROM inventario WHERE tipo = 'esencia' AND activo = 1 AND clase_esencia IS NOT NULL GROUP BY clase_esencia`);
+    return Object.fromEntries(rows.map((r) => [r.clase, Number(r.ponderado ?? r.promedio) || 0]));
+}
+
+app.get('/api/recipes', async (req, res, next) => {
+    if (!esquema.recetas) return res.status(503).json({ error: 'Las recetas aún no están disponibles (migración 013 pendiente)' });
+    try {
+        const [lineas] = await db.query(`SELECT r.id, r.ambito AS scope, r.ml, r.rol AS role, r.inventario_id AS itemId, r.cantidad AS quantity, r.orden AS sortOrder,
+            i.nombre AS itemName, i.unidad AS unit, i.precio_costo AS unitCost, i.stock
+            FROM recetas r LEFT JOIN inventario i ON i.id = r.inventario_id ORDER BY r.ambito, r.ml, r.orden, r.id`);
+        // Envases del inventario por tamaño (el costo del "envase elegido" va de su mínimo a su máximo)
+        const [envases] = await db.query("SELECT id, nombre AS name, precio_costo AS unitCost, stock FROM inventario WHERE tipo = 'envase' AND activo = 1 ORDER BY nombre");
+        res.json({
+            lines: lineas.map((l) => ({ ...l, quantity: Number(l.quantity), unitCost: l.unitCost == null ? null : Number(l.unitCost), stock: l.stock == null ? null : Number(l.stock) })),
+            essenceCost: await costosEsencia(db),
+            containers: envases.map((e) => ({ ...e, unitCost: Number(e.unitCost) || 0, stock: Number(e.stock) || 0, ml: Number((/(\d+)\s*ml/i.exec(e.name) || [])[1]) || null }))
+        });
+    } catch (error) { next(error); }
+});
+
+// Reemplaza todas las líneas (el panel envía la receta completa)
+app.put('/api/recipes', async (req, res, next) => {
+    if (!esquema.recetas) return res.status(503).json({ error: 'Las recetas aún no están disponibles (migración 013 pendiente)' });
+    const lineas = Array.isArray(req.body.lines) ? req.body.lines : [];
+    const limpias = [];
+    for (const [i, l] of lineas.entries()) {
+        const ambito = l.scope === 'pedido' ? 'pedido' : 'tamano';
+        const ml = ambito === 'tamano' ? parseInt(l.ml, 10) : null;
+        const rol = ['esencia', 'envase', 'insumo'].includes(l.role) ? l.role : 'insumo';
+        const cantidad = Number(l.quantity);
+        if (ambito === 'tamano' && !(ml > 0 && ml <= 1000)) return res.status(400).json({ error: 'Cada tamaño debe tener ml válidos' });
+        if (ambito === 'pedido' && rol !== 'insumo') return res.status(400).json({ error: 'El empaque por pedido solo lleva insumos' });
+        if (!(cantidad >= 0)) return res.status(400).json({ error: 'Las cantidades no pueden ser negativas' });
+        const itemId = rol === 'insumo' ? parseInt(l.itemId, 10) : null;
+        if (rol === 'insumo' && !(itemId > 0)) return res.status(400).json({ error: 'Cada línea de insumo necesita un ítem del inventario' });
+        limpias.push([ambito, ml, rol, itemId, cantidad, i]);
+    }
+    let connection;
+    try {
+        connection = await db.getConnection();
+        await connection.beginTransaction();
+        await connection.query('DELETE FROM recetas');
+        if (limpias.length) await connection.query('INSERT INTO recetas (ambito, ml, rol, inventario_id, cantidad, orden) VALUES ?', [limpias]);
+        await connection.commit();
+        res.json({ ok: true, count: limpias.length });
+    } catch (error) {
+        if (connection) await connection.rollback();
+        next(error);
+    } finally {
+        if (connection) connection.release();
+    }
+});
 
 app.get('/api/kits', async (req, res, next) => {
     if (!esquema.kits) return res.json([]);

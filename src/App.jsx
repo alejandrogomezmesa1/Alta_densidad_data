@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard';
 import Inventory from './components/Inventory';
 import Kits from './components/Kits';
 import Configuraciones from './components/Configuraciones';
+import Recetas from './components/Recetas';
 import { CONFIG_DEFECTO } from './utils/inventario';
 import Transactions from './components/Transactions';
 import CashRegister from './components/CashRegister';
@@ -166,6 +167,8 @@ function App() {
         />;
       case 'settings':
         return <Configuraciones {...commonProps} onGuardado={(v) => setConfig({ ...CONFIG_DEFECTO, ...v })} />;
+      case 'recipes':
+        return <Recetas {...commonProps} inventory={inventory} />;
       case 'kits':
         return <Kits {...commonProps} inventory={inventory} onRefresh={fetchData} />;
       case 'sales':

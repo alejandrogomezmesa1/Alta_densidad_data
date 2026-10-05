@@ -15,8 +15,7 @@ import {
   ArrowUpRight,
   Gift,
   Settings,
-  X
-} from 'lucide-react';
+  X, FlaskConical } from 'lucide-react';
 
 // Panel de administración de la tienda web (mismo sistema, otro sitio)
 const PANEL_TIENDA = import.meta.env.VITE_PAGE_ADMIN_URL || 'https://alta-densidad-page.vercel.app/admin';
@@ -34,6 +33,7 @@ const MENU = [
   { title: 'Catálogo', items: [
     { id: 'inventory', icon: Package, label: 'Inventario' },
     { id: 'kits', icon: Gift, label: 'Kits' },
+    { id: 'recipes', icon: FlaskConical, label: 'Recetas y empaque' },
   ]},
   { title: 'Relaciones', items: [
     { id: 'clients', icon: Users, label: 'Clientes' },

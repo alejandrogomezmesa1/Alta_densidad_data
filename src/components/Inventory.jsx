@@ -121,8 +121,8 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
   const faltantes = [
     !String(formData.name).trim() && ['name', 'nombre'],
     !String(formData.category).trim() && ['category', 'categoría'],
-    !(Number(formData.price) > 0) && ['price', 'precio de venta'],
-    !editandoKit && !(Number(formData.costPrice) > 0) && ['costPrice', 'precio de costo'],
+    formData.type === 'terminado' && !(Number(formData.price) > 0) && ['price', 'precio de venta'],
+    !editandoKit && ['terminado', 'esencia'].includes(formData.type) && !(Number(formData.costPrice) > 0) && ['costPrice', 'precio de costo'],
     !editingId && String(formData.stock).trim() === '' && ['stock', 'stock inicial'],
     formData.type === 'esencia' && !formData.essenceClass && ['essenceClass', 'clase de esencia']
   ].filter(Boolean);
@@ -154,7 +154,7 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
     }
     const precio = Number(formData.price);
     const costo = Number(formData.costPrice);
-    if (!editandoKit && precio <= costo) {
+    if (!editandoKit && formData.type === 'terminado' && precio <= costo) {
       confirm?.(`El precio de venta ($${Math.round(precio).toLocaleString('es-CO')}) no supera el costo ($${Math.round(costo).toLocaleString('es-CO')}): cada venta daría pérdida y la tienda lo pondrá en revisión. ¿Guardar de todos modos?`, enviar);
       return;
     }
@@ -279,11 +279,11 @@ const Inventory = ({ inventory, addProduct, updateProduct, deleteProduct, export
             <input required type="text" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="Categoría" style={{ width: '100%', ...invalido('category') }} />
           </div>
           <div>
-            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>P. VENTA (COP) *</label>
+            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>P. VENTA (COP){formData.type === 'terminado' ? ' *' : ''}</label>
             <NumericFormat required allowNegative={false} value={formData.price} onValueChange={(values) => setFormData({...formData, price: values.value})} thousandSeparator="." decimalSeparator="," placeholder="0" style={{ width: '100%', ...invalido('price') }} />
           </div>
           <div>
-            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>P. COSTO (COP){editandoKit ? '' : ' *'}</label>
+            <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>{LIQUIDOS.includes(formData.type) ? 'COSTO POR ML (COP)' : 'P. COSTO (COP)'}{!editandoKit && ['terminado', 'esencia'].includes(formData.type) ? ' *' : ''}</label>
             {editandoKit
               ? <input value={`$${Math.round(Number(formData.costPrice) || 0).toLocaleString('es-CO')}`} readOnly title="El costo de un kit sale de sus componentes" style={{ width: '100%', opacity: 0.6 }} />
               : <NumericFormat required allowNegative={false} value={formData.costPrice} onValueChange={(values) => setFormData({...formData, costPrice: values.value})} thousandSeparator="." decimalSeparator="," placeholder="0" style={{ width: '100%', ...invalido('costPrice') }} />}
