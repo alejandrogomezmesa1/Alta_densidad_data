@@ -1,0 +1,201 @@
+{
+ "_descripcion": "Insumos de preparado y empaque (05-10-2026). Alcohol: 17 L a $130.000 / 20 L. Fijador $35.000 / L. Resto pendiente (0).",
+ "motivo": "Alta de insumos 05-10-2026",
+ "ajustes": [],
+ "ceros": [],
+ "kits": [],
+ "nuevos": [
+  {
+   "nombre": "Alcohol para perfumería",
+   "categoria": "Insumos",
+   "tipo": "base",
+   "unidad": "ml",
+   "stock": 17000,
+   "precio": 0,
+   "costo": 6.5
+  },
+  {
+   "nombre": "Fijador",
+   "categoria": "Insumos",
+   "tipo": "base",
+   "unidad": "ml",
+   "stock": 0,
+   "precio": 0,
+   "costo": 35
+  },
+  {
+   "nombre": "Feromonas",
+   "categoria": "Insumos",
+   "tipo": "feromona",
+   "unidad": "ml",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Colorante",
+   "categoria": "Insumos",
+   "tipo": "accesorio",
+   "unidad": "ml",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Pegaloca",
+   "categoria": "Empaque",
+   "tipo": "accesorio",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Bolsa para envolver la caja",
+   "categoria": "Empaque",
+   "tipo": "accesorio",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Bolsa de envío al cliente",
+   "categoria": "Empaque",
+   "tipo": "accesorio",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Sticker de la bolsa",
+   "categoria": "Empaque",
+   "tipo": "accesorio",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Envase Amira 30 ml",
+   "categoria": "Envases",
+   "tipo": "envase",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Envase Cartier 30 ml",
+   "categoria": "Envases",
+   "tipo": "envase",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Envase Cartier 60 ml",
+   "categoria": "Envases",
+   "tipo": "envase",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Envase Cilindro 100 ml",
+   "categoria": "Envases",
+   "tipo": "envase",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Envase Eros 60 ml",
+   "categoria": "Envases",
+   "tipo": "envase",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Envase Victory 60 ml",
+   "categoria": "Envases",
+   "tipo": "envase",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Envase Good Girl 30 ml",
+   "categoria": "Envases",
+   "tipo": "envase",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Envase Calavera 50 ml",
+   "categoria": "Envases",
+   "tipo": "envase",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Envase Mini Yara 30 ml",
+   "categoria": "Envases",
+   "tipo": "envase",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Envase Valentino 30 ml",
+   "categoria": "Envases",
+   "tipo": "envase",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Envase Valentino 60 ml",
+   "categoria": "Envases",
+   "tipo": "envase",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Envase Sauvage 30 ml",
+   "categoria": "Envases",
+   "tipo": "envase",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Envase Moschino Bear 60 ml",
+   "categoria": "Envases",
+   "tipo": "envase",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  }
+ ],
+ "pendientes": [
+  "Stock y costo de fijador, feromonas, colorante, empaque y envases."
+ ]
+}

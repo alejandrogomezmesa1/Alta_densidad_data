@@ -1,0 +1,84 @@
+{
+ "_descripcion": "Kits con foto que faltaban (06-10-2026): Afnan 9AM/9AM Dive/9PM y Lattafa Give Me Gourmand. Minis con 1 und c/u (1 kit de cada).",
+ "motivo": "Alta de kits con foto 06-10-2026",
+ "ajustes": [],
+ "ceros": [],
+ "kits": [],
+ "nuevos": [
+  {
+   "nombre": "9AM Mini Afnan 30 ml",
+   "categoria": "Mini",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "9AM Dive Mini Afnan 30 ml",
+   "categoria": "Mini",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "9PM Mini Afnan 30 ml",
+   "categoria": "Mini",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Mallow Madness Mini Lattafa 30 ml",
+   "categoria": "Mini",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Berry On Top Mini Lattafa 30 ml",
+   "categoria": "Mini",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Vanilla Freak Mini Lattafa 30 ml",
+   "categoria": "Mini",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 1,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Kit 9AM & 9PM Afnan (3x30 ml)",
+   "categoria": "Kit",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  },
+  {
+   "nombre": "Kit Give Me Gourmand Lattafa (3x30 ml)",
+   "categoria": "Kit",
+   "tipo": "terminado",
+   "unidad": "und",
+   "stock": 0,
+   "precio": 0,
+   "costo": 0
+  }
+ ],
+ "pendientes": [
+  "Precio y costo de los kits y minis; confirmar 30 ml."
+ ]
+}

@@ -1,35 +1,53 @@
 import React, { useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { 
-  TrendingUp, DollarSign, Package, Receipt, ArrowUpRight, ArrowDownRight, 
-  Target, BarChart3, PieChart as PieIcon, Trophy, Clock, Zap, AlertCircle, 
-  ChevronRight, Star, ShoppingCart, Activity, CheckCircle, Wallet, X
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  TrendingUp, DollarSign, Package, ArrowUpRight, ArrowDownRight,
+  BarChart3, PieChart as PieIcon, Clock, Zap, AlertCircle,
+  ChevronRight, ShoppingCart, Activity, Wallet, X, Layers,
+  Droplets, Box, FlaskConical, Sparkles, Gem, Archive
 } from 'lucide-react';
-import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, Legend, BarChart, Bar
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend, Treemap
 } from 'recharts';
 import { getPayments, balanceOf, saleProductNames } from '../utils/sales';
-import { nivelStock, formatoCantidad } from '../utils/inventario';
+import { nivelStock, formatoCantidad, TIPOS_INVENTARIO } from '../utils/inventario';
 
-const StatCard = ({ title, value, icon: Icon, color, percentage, subValue, trend, delay = 0, onClick }) => (
-  <motion.div 
+/* ── Formato de moneda COP ─────────────────────────────────────────── */
+const fmtCOP = (v) => `$${Math.round(Number(v) || 0).toLocaleString('es-CO')}`;
+const fmtPct = (v) => `${(Number(v) || 0).toFixed(1)}%`;
+
+/* ── Paleta Haute Parfumerie (oros, marfiles, vino, grises) ────────── */
+const PALETTE = ['#C9A961', '#9A7B3F', '#F2EEE6', '#6B675F', '#5A1220', '#3d7fc4', '#2f9e6e', '#c98a1b', '#8B3A48', '#4A90D9'];
+
+/* ── Íconos por tipo de inventario ─────────────────────────────────── */
+const TIPO_ICONS = {
+  terminado: Package,
+  esencia: Droplets,
+  base: FlaskConical,
+  feromona: Sparkles,
+  envase: Box,
+  accesorio: Gem,
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   STAT CARD — tarjeta de KPI compacta con glow
+   ═══════════════════════════════════════════════════════════════════════ */
+const StatCard = ({ title, value, icon: Icon, color, subValue, detail, delay = 0, onClick }) => (
+  <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.5, delay }}
     onClick={onClick}
-    className="premium-card hover-glow" 
+    className="premium-card hover-glow"
     style={{ flex: 1, minWidth: '220px', position: 'relative', overflow: 'hidden', cursor: onClick ? 'pointer' : 'default' }}
   >
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
       <div style={{ width: '38px', height: '38px', display: 'grid', placeItems: 'center', border: `1px solid rgba(${color}, 0.45)`, color: `rgb(${color})` }}>
         <Icon size={18} strokeWidth={1.6} />
       </div>
-      {percentage !== undefined && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: trend === 'up' ? 'var(--success)' : 'var(--error)', fontSize: '0.8rem', fontWeight: 500 }}>
-          {trend === 'up' ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-          {percentage}%
-        </div>
+      {detail && (
+        <div style={{ fontSize: '0.75rem', color: `rgb(${color})`, fontWeight: 500 }}>{detail}</div>
       )}
     </div>
     <div>
@@ -43,19 +61,21 @@ const StatCard = ({ title, value, icon: Icon, color, percentage, subValue, trend
   </motion.div>
 );
 
-const DetailModal = ({ isOpen, onClose, title, data, type }) => {
+/* ═══════════════════════════════════════════════════════════════════════
+   DETAIL MODAL — lista de ítems al hacer clic en una tarjeta
+   ═══════════════════════════════════════════════════════════════════════ */
+const DetailModal = ({ isOpen, onClose, title, data }) => {
   if (!isOpen) return null;
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, padding: '1.5rem' }}>
-      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="premium-card" style={{ maxWidth: '600px', width: '100%', maxHeight: '80vh', overflowY: 'auto' }}>
+      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="premium-card" style={{ maxWidth: '650px', width: '100%', maxHeight: '80vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <h3 style={{ color: 'var(--accent-primary)', fontSize: '1.25rem' }}>{title}</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={24} /></button>
         </div>
-        
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {data.length === 0 ? (
-            <p style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No hay movimientos registrados.</p>
+            <p style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Sin datos.</p>
           ) : data.map((item, i) => (
             <div key={i} className="glass" style={{ padding: '1rem', borderRadius: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
@@ -63,9 +83,7 @@ const DetailModal = ({ isOpen, onClose, title, data, type }) => {
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{item.sublabel}</div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontWeight: 500, color: item.amount < 0 ? 'var(--error)' : 'var(--success)' }}>
-                  {item.amount < 0 ? '-' : '+'}${Math.abs(Math.round(item.amount)).toLocaleString('es-CO')}
-                </div>
+                <div style={{ fontWeight: 500, color: item.color || 'var(--text-main)' }}>{item.value}</div>
                 {item.extra && <div style={{ fontSize: '0.65rem', color: 'var(--accent-primary)' }}>{item.extra}</div>}
               </div>
             </div>
@@ -77,641 +95,575 @@ const DetailModal = ({ isOpen, onClose, title, data, type }) => {
   );
 };
 
+/* ═══════════════════════════════════════════════════════════════════════
+   CUSTOM TOOLTIP para recharts
+   ═══════════════════════════════════════════════════════════════════════ */
+const ChartTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{ background: 'rgba(11,11,12,0.95)', border: '1px solid var(--glass-border)', padding: '0.75rem 1rem', fontSize: '0.8rem' }}>
+      <p style={{ color: 'var(--text-muted)', marginBottom: '0.4rem' }}>{label}</p>
+      {payload.map((p, i) => (
+        <p key={i} style={{ color: p.color || 'var(--text-main)', fontWeight: 500 }}>
+          {p.name}: {fmtCOP(p.value)}
+        </p>
+      ))}
+    </div>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DASHBOARD PRINCIPAL
+   ═══════════════════════════════════════════════════════════════════════ */
 const Dashboard = ({ sales, inventory, purchases, expenses, setActiveTab, config }) => {
-  const [period, setPeriod] = useState('month');
+  const [activeModal, setActiveModal] = useState(null);
 
   const salesList = Array.isArray(sales) ? sales : [];
   const expensesList = Array.isArray(expenses) ? expenses : [];
   const inventoryList = Array.isArray(inventory) ? inventory : [];
 
-  const stats = useMemo(() => {
+  /* ── 1. Cómputos de inventario (el corazón del nuevo dashboard) ──── */
+  const inv = useMemo(() => {
+    let totalCost = 0;
+    let totalSale = 0;
+    let activeCount = 0;
+    let totalItems = inventoryList.length;
+    let outOfStock = 0;
+    let lowStock = 0;
+    let zeroPrice = 0;
+    let zeroCost = 0;
+
+    // Por tipo
+    const byType = {};
+    // Por categoría
+    const byCat = {};
+    // Top productos por valor de costo
+    const topByCost = [];
+    // Slow-moving
+    const recentSaleIds = new Set();
+
+    // Ítems vendidos en los últimos 30 días
     const now = new Date();
-    // Manual format to avoid environment-specific behavior of toLocaleDateString
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
-    const safeParseDate = (dateStr) => {
-      if (!dateStr) return new Date(0);
-      const cleanDate = dateStr.split(/T| /)[0];
-      // Append time to force local timezone parsing for YYYY-MM-DD
-      return new Date(cleanDate + "T00:00:00");
-    };
-
-    const isToday = (dateStr) => {
-      if (!dateStr) return false;
-      return dateStr.split(/T| /)[0] === todayStr;
-    };
-
-    const currentSales = salesList.filter(s => {
-      if (period === 'all') return true;
-      if (period === 'today') return isToday(s.date);
-      
-      const d = safeParseDate(s.date);
-      if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
-      if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
-      return isToday(s.date);
-    });
-
-    const currentExpenses = expensesList.filter(e => {
-      if (period === 'all') return true;
-      if (period === 'today') return isToday(e.date);
-
-      const d = safeParseDate(e.date);
-      if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
-      if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
-      return isToday(e.date);
-    });
-
-    const totalSales = currentSales.reduce((acc, curr) => acc + (parseFloat(curr.total) || 0), 0);
-    const periodSalesItems = currentSales.map(s => ({
-      label: s.customerName || 'Venta General',
-      sublabel: saleProductNames(s) || 'Varios productos',
-      amount: parseFloat(s.total) || 0,
-      extra: s.date
-    }));
-
-    const totalExpenses = currentExpenses.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
-    
-    // PROFIT LOGIC: Proportional profit recognition based on payments received in period
-    let totalProfitPeriod = 0;
-    const profitItems = [];
+    const thirtyDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
     salesList.forEach(s => {
-      const totalAmount = parseFloat(s.total) || 0;
-      if (totalAmount <= 0) return;
-
-      const paymentsInPeriod = getPayments(s).filter(p => {
-        if (period === 'all') return true;
-        if (period === 'today') return isToday(p.date);
-
-        const d = safeParseDate(p.date);
-        if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
-        if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
-        return isToday(p.date);
-      });
-
-      if (paymentsInPeriod.length > 0) {
-        const paidInPeriod = paymentsInPeriod.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
-        
-        let cost = 0;
-        if (s.items && s.items.length > 0) {
-          cost = s.items.reduce((sum, i) => sum + ((parseFloat(i.costAtSale) || 0) * parseInt(i.quantity || 1)), 0);
-        } else {
-          cost = (parseFloat(s.costAtSale) || 0) * (parseInt(s.quantity) || 1);
+      const d = new Date((s.date || '').split(/T| /)[0] + 'T00:00:00');
+      if (d >= thirtyDaysAgo) {
+        if (s.items?.length) {
+          s.items.forEach(i => i.productId && recentSaleIds.add(String(i.productId)));
+        } else if (s.productId) {
+          recentSaleIds.add(String(s.productId));
         }
-
-        const saleProfit = totalAmount - cost;
-        const recognizedProfit = (paidInPeriod / totalAmount) * saleProfit;
-        totalProfitPeriod += recognizedProfit;
-        profitItems.push({
-          label: s.customerName || 'Venta',
-          sublabel: `Cobrado en periodo: $${paidInPeriod.toLocaleString('es-CO')}`,
-          amount: recognizedProfit,
-          extra: `Utilidad proporcional`
-        });
       }
     });
 
-    currentExpenses.forEach(e => {
-      profitItems.push({
-        label: `Gasto: ${e.description}`,
-        sublabel: e.categoria,
-        amount: -parseFloat(e.amount),
-        extra: 'Deducción operativa'
-      });
+    let slowCost = 0;
+    let slowCount = 0;
+
+    inventoryList.forEach(p => {
+      const stock = Number(p.stock) || 0;
+      const cost = Number(p.costPrice) || 0;
+      const price = Number(p.price) || 0;
+      const itemCostValue = stock * cost;
+      const itemSaleValue = stock * price;
+
+      totalCost += itemCostValue;
+      totalSale += itemSaleValue;
+
+      if (stock > 0) activeCount++;
+      if (nivelStock(p, config) === 'agotado') outOfStock++;
+      if (nivelStock(p, config) === 'advertencia') lowStock++;
+      if (price === 0 && stock > 0) zeroPrice++;
+      if (cost === 0 && stock > 0) zeroCost++;
+
+      // Por tipo
+      const type = p.type || 'terminado';
+      if (!byType[type]) byType[type] = { cost: 0, sale: 0, count: 0, stock: 0, unit: p.unit };
+      byType[type].cost += itemCostValue;
+      byType[type].sale += itemSaleValue;
+      byType[type].count++;
+      byType[type].stock += stock;
+
+      // Por categoría
+      const cat = (p.category || 'Sin categoría').trim();
+      if (!byCat[cat]) byCat[cat] = { cost: 0, sale: 0, count: 0 };
+      byCat[cat].cost += itemCostValue;
+      byCat[cat].sale += itemSaleValue;
+      byCat[cat].count++;
+
+      // Top por valor
+      if (stock > 0) {
+        topByCost.push({ id: p.id, name: p.name, stock, cost, price, costValue: itemCostValue, saleValue: itemSaleValue, type, unit: p.unit, category: cat });
+      }
+
+      // Slow-moving
+      if (stock > 0 && !recentSaleIds.has(String(p.id))) {
+        slowCost += itemCostValue;
+        slowCount++;
+      }
     });
 
-    const netProfit = totalProfitPeriod - totalExpenses;
-    
-    // Semáforo de stock con los límites de Configuraciones
-    const lowStockCount = inventoryList.filter(p => nivelStock(p, config) === 'advertencia').length;
-    const outOfStockCount = inventoryList.filter(p => nivelStock(p, config) === 'agotado').length;
-    const inventoryValue = inventoryList.reduce((acc, p) => acc + (p.stock * p.costPrice), 0);
-    const potentialRevenue = inventoryList.reduce((acc, p) => acc + (p.stock * p.price), 0);
+    topByCost.sort((a, b) => b.costValue - a.costValue);
+
+    // Datos para charts
+    const typeChartData = Object.entries(byType)
+      .map(([key, v]) => ({
+        name: TIPOS_INVENTARIO[key] || key,
+        key,
+        costo: Math.round(v.cost),
+        venta: Math.round(v.sale),
+        items: v.count,
+        stock: v.stock,
+        unit: v.unit,
+      }))
+      .sort((a, b) => b.costo - a.costo);
+
+    const catChartData = Object.entries(byCat)
+      .map(([name, v]) => ({ name, value: Math.round(v.cost), sale: Math.round(v.sale), count: v.count }))
+      .sort((a, b) => b.value - a.value);
+
+    const margin = totalSale - totalCost;
+    const marginPct = totalCost > 0 ? (margin / totalCost) * 100 : 0;
+
+    return {
+      totalCost, totalSale, margin, marginPct,
+      activeCount, totalItems, outOfStock, lowStock,
+      zeroPrice, zeroCost,
+      typeChartData, catChartData,
+      topByCost: topByCost.slice(0, 15),
+      slowCost, slowCount,
+    };
+  }, [inventoryList, salesList, config]);
+
+  /* ── 2. Resumen financiero rápido (compacto, no redundante) ──────── */
+  const finance = useMemo(() => {
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const thirtyDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+
+    const monthSales = salesList.filter(s => {
+      const d = new Date((s.date || '').split(/T| /)[0] + 'T00:00:00');
+      return d >= thirtyDaysAgo;
+    });
+    const totalMonthSales = monthSales.reduce((a, s) => a + (parseFloat(s.total) || 0), 0);
+
+    const todaySales = salesList.filter(s => (s.date || '').split(/T| /)[0] === todayStr);
+    const totalToday = todaySales.reduce((a, s) => a + (parseFloat(s.total) || 0), 0);
+
+    let totalCashMonth = 0;
+    salesList.forEach(s => {
+      const payments = getPayments(s).filter(p => {
+        const d = new Date((p.date || '').split(/T| /)[0] + 'T00:00:00');
+        return d >= thirtyDaysAgo;
+      });
+      totalCashMonth += payments.reduce((a, p) => a + (parseFloat(p.amount) || 0), 0);
+    });
 
     const accountsReceivable = salesList.reduce((acc, sale) => acc + balanceOf(sale), 0);
 
-    const accountsReceivableItems = salesList.filter(s => balanceOf(s) > 0.01).map(s => {
-      return {
-        label: s.customerName || 'Cliente',
-        sublabel: saleProductNames(s) || 'Venta',
-        amount: balanceOf(s),
-        extra: `Total: $${Math.round(s.total).toLocaleString('es-CO')}`
-      };
-    });
+    const monthExpenses = expensesList.filter(e => {
+      const d = new Date((e.date || '').split(/T| /)[0] + 'T00:00:00');
+      return d >= thirtyDaysAgo;
+    }).reduce((a, e) => a + (parseFloat(e.amount) || 0), 0);
 
-    // CASH FLOW: All payments made in the period
-    let totalCashIn = 0;
-    const cashInItems = [];
+    return { totalMonthSales, totalToday, totalCashMonth, accountsReceivable, monthExpenses };
+  }, [salesList, expensesList]);
+
+  /* ── 3. Datos para el modal "Top por valor" ─────────────────────── */
+  const topDetailItems = inv.topByCost.map(p => ({
+    label: p.name,
+    sublabel: `${TIPOS_INVENTARIO[p.type] || p.type} · ${formatoCantidad(p.stock, p.unit)}${p.unit === 'ml' ? '' : ' und'}`,
+    value: fmtCOP(p.costValue),
+    extra: `Venta: ${fmtCOP(p.saleValue)}`,
+    color: 'var(--accent-primary)',
+  }));
+
+  /* ── 4. Datos para el modal "Slow-moving" ───────────────────────── */
+  const slowItems = useMemo(() => {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+    const recentIds = new Set();
     salesList.forEach(s => {
-      const paymentsInPeriod = getPayments(s).filter(p => {
-        if (period === 'all') return true;
-        if (period === 'today') return isToday(p.date);
-
-        const d = safeParseDate(p.date);
-        if (period === 'week') return d >= new Date(now.getTime() - 7*24*60*60*1000);
-        if (period === 'month') return d >= new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
-        return isToday(p.date);
-      });
-
-      const amt = paymentsInPeriod.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
-      
-      if (amt > 0) {
-        totalCashIn += amt;
-        cashInItems.push({
-          label: s.customerName || 'Abono / Pago',
-          sublabel: saleProductNames(s) || 'Venta',
-          amount: amt,
-          extra: `Recaudo: ${s.date ? s.date.split(/T| /)[0] : 'Fecha no registrada'}`
-        });
+      const d = new Date((s.date || '').split(/T| /)[0] + 'T00:00:00');
+      if (d >= thirtyDaysAgo) {
+        if (s.items?.length) s.items.forEach(i => i.productId && recentIds.add(String(i.productId)));
+        else if (s.productId) recentIds.add(String(s.productId));
       }
     });
+    return inventoryList
+      .filter(p => (Number(p.stock) || 0) > 0 && !recentIds.has(String(p.id)))
+      .sort((a, b) => (b.stock * b.costPrice) - (a.stock * a.costPrice))
+      .slice(0, 20)
+      .map(p => ({
+        label: p.name,
+        sublabel: `${formatoCantidad(p.stock, p.unit)}${p.unit === 'ml' ? '' : ' und'} · ${TIPOS_INVENTARIO[p.type] || p.type || 'Producto'}`,
+        value: fmtCOP(p.stock * (p.costPrice || 0)),
+        color: 'var(--warning)',
+      }));
+  }, [inventoryList, salesList]);
 
-    const totalCOGS = currentSales.reduce((acc, curr) => {
-      let cost = 0;
-      if (curr.items && curr.items.length > 0) {
-        cost = curr.items.reduce((sum, i) => sum + ((parseFloat(i.costAtSale) || 0) * parseInt(i.quantity || 1)), 0);
-      } else {
-        cost = (parseFloat(curr.costAtSale) || 0) * (parseInt(curr.quantity) || 0);
-      }
-      return acc + cost;
-    }, 0);
+  /* ── 5. Items con costo 0 (modal) ───────────────────────────────── */
+  const zeroCostItems = useMemo(() =>
+    inventoryList
+      .filter(p => (Number(p.stock) || 0) > 0 && !(Number(p.costPrice) || 0))
+      .map(p => ({
+        label: p.name,
+        sublabel: `${formatoCantidad(p.stock, p.unit)}${p.unit === 'ml' ? '' : ' und'}`,
+        value: 'Sin costo',
+        color: 'var(--error)',
+      }))
+  , [inventoryList]);
 
-    // Calculate Top Products based on revenue
-    const productSalesMap = {};
-    currentSales.forEach(sale => {
-      const processItem = (pId, qty, rev, fallbackName) => {
-        const key = pId ? `p${pId}` : `n${fallbackName || 'Otros'}`;
-        if (!productSalesMap[key]) {
-          const productInfo = pId ? inventoryList.find(p => String(p.id) === String(pId)) : null;
-          productSalesMap[key] = { name: productInfo?.name || fallbackName || 'Producto eliminado', qty: 0, revenue: 0 };
-        }
-        productSalesMap[key].qty += parseInt(qty) || 0;
-        productSalesMap[key].revenue += parseFloat(rev) || 0;
-      };
-
-      if (sale.items && sale.items.length > 0) {
-        sale.items.forEach(i => processItem(i.productId, i.quantity, i.unitPrice * i.quantity, i.productName));
-      } else if (sale.productId) {
-        processItem(sale.productId, sale.quantity, sale.total);
-      }
-    });
-
-    const topProducts = Object.values(productSalesMap)
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5); // Top 5 products
-
-    // Calculate Top Debtors
-    const debtorsMap = {};
-    salesList.forEach(sale => {
-      const balance = balanceOf(sale);
-      if (balance > 0.01) {
-        const cName = sale.customerName || 'Cliente General';
-        if (!debtorsMap[cName]) debtorsMap[cName] = { name: cName, balance: 0 };
-        debtorsMap[cName].balance += balance;
-      }
-    });
-    const topDebtors = Object.values(debtorsMap).sort((a, b) => b.balance - a.balance).slice(0, 5);
-
-    // Calculate Slow Moving Inventory (Capital Inmovilizado)
-    const activeProductIds = new Set();
-    currentSales.forEach(sale => {
-      if (sale.items) {
-        sale.items.forEach(i => i.productId && activeProductIds.add(String(i.productId)));
-      } else if (sale.productId) {
-        activeProductIds.add(String(sale.productId));
-      }
-    });
-    
-    let slowMovingCapital = 0;
-    let slowMovingProductsCount = 0;
-    inventoryList.forEach(p => {
-      if (p.stock > 0 && !activeProductIds.has(String(p.id))) {
-        slowMovingCapital += (p.stock * p.costPrice);
-        slowMovingProductsCount++;
-      }
-    });
-
-    return { 
-      totalSales, totalExpenses, netProfit, 
-      lowStockCount, outOfStockCount, inventoryValue, potentialRevenue,
-      accountsReceivable, topProducts, topDebtors, slowMovingCapital, slowMovingProductsCount,
-      currentSales, totalCashIn, totalCOGS,
-      avgTicket: currentSales.length > 0 ? totalSales / currentSales.length : 0,
-      salesCount: currentSales.length,
-      periodSalesItems, cashInItems, profitItems, accountsReceivableItems
-    };
-  }, [salesList, expensesList, inventoryList, period, config]);
-
-  const chartData = useMemo(() => {
-    const data = [];
-    
-    if (period === 'all') {
-      // Group by month for the last 12 months
-      for(let i=11; i>=0; i--) {
-        const d = new Date();
-        d.setMonth(d.getMonth() - i);
-        const monthYear = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-        
-        const monthSales = stats.currentSales
-          .filter(s => {
-            const dateStr = s.date || '';
-            return dateStr.startsWith(monthYear);
-          })
-          .reduce((acc, curr) => acc + (parseFloat(curr.total) || 0), 0);
-          
-        const monthProfit = stats.currentSales
-          .filter(s => {
-            const dateStr = s.date || '';
-            return dateStr.startsWith(monthYear);
-          })
-          .reduce((acc, curr) => {
-            let cost = 0;
-            if (curr.items && curr.items.length > 0) {
-              cost = curr.items.reduce((cAcc, item) => cAcc + ((parseFloat(item.costAtSale) || 0) * (parseInt(item.quantity) || 1)), 0);
-            } else {
-              cost = (parseFloat(curr.costAtSale) || 0) * (parseInt(curr.quantity) || 0);
-            }
-            return acc + (parseFloat(curr.total) - cost);
-          }, 0);
-          
-        data.push({
-          name: d.toLocaleDateString('es-ES', { month: 'short', year: '2-digit' }),
-          ventas: monthSales,
-          utilidad: monthProfit
-        });
-      }
-    } else {
-      const days = period === 'week' ? 7 : 30;
-      for(let i=days-1; i>=0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        // Correctly format local date to YYYY-MM-DD
-        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        
-        const daySales = stats.currentSales
-          .filter(s => {
-             const sDate = s.date ? s.date.split(/T| /)[0] : '';
-             return sDate === dateStr;
-          })
-          .reduce((acc, curr) => acc + (parseFloat(curr.total) || 0), 0);
-        
-        const dayProfit = stats.currentSales
-          .filter(s => {
-             const sDate = s.date ? s.date.split(/T| /)[0] : '';
-             return sDate === dateStr;
-          })
-          .reduce((acc, curr) => {
-            let cost = 0;
-            if (curr.items && curr.items.length > 0) {
-              cost = curr.items.reduce((cAcc, item) => cAcc + ((parseFloat(item.costAtSale) || 0) * (parseInt(item.quantity) || 1)), 0);
-            } else {
-              cost = (parseFloat(curr.costAtSale) || 0) * (parseInt(curr.quantity) || 0);
-            }
-            return acc + (parseFloat(curr.total) - cost);
-          }, 0);
-        
-        data.push({
-          name: d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
-          ventas: daySales,
-          utilidad: dayProfit
-        });
-      }
-    }
-    return data;
-  }, [stats.currentSales, period]);
-
-  const categoryData = useMemo(() => {
-    const categories = {};
-    stats.currentSales.forEach(sale => {
-      if (sale.items && sale.items.length > 0) {
-        sale.items.forEach(i => {
-          const product = inventoryList.find(p => String(p.id) === String(i.productId));
-          const cat = product?.category || 'Otros';
-          categories[cat] = (categories[cat] || 0) + ((parseFloat(i.unitPrice) || 0) * (parseInt(i.quantity) || 1));
-        });
-      } else if (sale.productId) {
-        const product = inventoryList.find(p => String(p.id) === String(sale.productId));
-        const cat = product?.category || 'Otros';
-        categories[cat] = (categories[cat] || 0) + (parseFloat(sale.total) || 0);
-      }
-    });
-    return Object.entries(categories).map(([name, value]) => ({ name, value }));
-  }, [stats.currentSales, inventoryList]);
-
-  // Paleta editorial de la marca: oros, marfil y grises cálidos
-  const COLORS = ['#C9A961', '#F2EEE6', '#9A7B3F', '#6B675F', '#3d7fc4', '#8B3A48'];
-
-  const [activeModal, setActiveModal] = useState(null);
+  /* ── Custom treemap content ─────────────────────────────────────── */
+  const TreemapContent = ({ x, y, width, height, name, costo, index }) => {
+    if (width < 50 || height < 35) return null;
+    return (
+      <g>
+        <rect x={x} y={y} width={width} height={height} fill={PALETTE[index % PALETTE.length]} fillOpacity={0.85} stroke="var(--bg-main)" strokeWidth={2} />
+        <text x={x + width / 2} y={y + height / 2 - 8} textAnchor="middle" fill="var(--bg-main)" fontSize={11} fontWeight={600} fontFamily="var(--f-ui)">
+          {name}
+        </text>
+        <text x={x + width / 2} y={y + height / 2 + 10} textAnchor="middle" fill="var(--bg-main)" fontSize={10} fontFamily="var(--f-ui)" opacity={0.8}>
+          {fmtCOP(costo)}
+        </text>
+      </g>
+    );
+  };
 
   return (
     <div className="main-content">
       <header className="page-header">
         <div>
-          <h2 className="title-gradient" style={{ fontSize: '2.8rem', marginBottom: '0.5rem' }}>Evolución del Negocio</h2>
-          <p style={{ color: 'var(--text-secondary)', fontWeight: 500, fontSize: '1.1rem' }}>Análisis histórico y proyección financiera (COP).</p>
-        </div>
-        <div className="glass" style={{ display: 'flex', padding: '0.4rem', borderRadius: 0, flexWrap: 'wrap' }}>
-          {['today', 'week', 'month', 'all'].map(p => (
-            <button key={p} onClick={() => setPeriod(p)} style={{ flex: 1, minWidth: '80px', padding: '0.6rem 0.5rem', borderRadius: 0, background: period === p ? 'var(--accent-primary)' : 'transparent', color: period === p ? 'var(--bg-main)' : 'var(--text-secondary)', fontWeight: 500, border: 'none', cursor: 'pointer' }}>
-              {p === 'today' ? 'Hoy' : p === 'week' ? 'Semana' : p === 'month' ? 'Mes' : 'Todo'}
-            </button>
-          ))}
+          <h2 className="title-gradient" style={{ fontSize: '2.8rem', marginBottom: '0.5rem' }}>Centro de Inteligencia</h2>
+          <p style={{ color: 'var(--text-secondary)', fontWeight: 500, fontSize: '1.1rem' }}>
+            Radiografía completa de tu inventario y capital (COP).
+          </p>
         </div>
       </header>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
-          <StatCard 
-            title={period === 'month' ? "Ventas Mes" : (period === 'week' ? "Ventas Semana" : (period === 'all' ? "Ventas Totales" : "Ventas Hoy"))} 
-            value={`$${Math.round(stats.totalSales).toLocaleString('es-CO')}`} 
-            icon={TrendingUp} 
-            color="47, 158, 110" 
-            onClick={() => setActiveModal({ title: period === 'month' ? "Ventas del Mes" : (period === 'week' ? "Ventas de la Semana" : (period === 'all' ? "Ventas Totales" : "Ventas Hoy")), data: stats.periodSalesItems })} 
-          />
-          <StatCard 
-            title={period === 'month' ? "Recaudo Mes" : (period === 'week' ? "Recaudo Semana" : (period === 'all' ? "Recaudo Total" : "Recaudo Hoy"))} 
-            value={`$${Math.round(stats.totalCashIn).toLocaleString('es-CO')}`} 
-            icon={Wallet} 
-            color="201, 169, 97" 
-            onClick={() => setActiveModal({ title: 'Detalle de Recaudo', data: stats.cashInItems })} 
-          />
-          <StatCard 
-            title={period === 'month' ? "Margen Mes" : (period === 'week' ? "Margen Semana" : (period === 'all' ? "Margen Total" : "Margen Hoy"))} 
-            value={`$${Math.round(stats.netProfit).toLocaleString('es-CO')}`} 
-            icon={DollarSign} 
-            color="242, 238, 230" 
-            subValue={`Rentabilidad: ${stats.totalSales > 0 ? ((stats.netProfit/stats.totalSales)*100).toFixed(1) : 0}%`} 
-            onClick={() => setActiveModal({ title: 'Detalle de Margen Neto', data: stats.profitItems })} 
-          />
-          <StatCard 
-            delay={0.4} 
-            title="Cartera Cliente" 
-            value={`$${Math.round(stats.accountsReceivable).toLocaleString('es-CO')}`} 
-            icon={Clock} 
-            color="194, 65, 59" 
-            subValue="Por cobrar" 
-            onClick={() => setActiveModal({ title: 'Detalle de Cartera', data: stats.accountsReceivableItems })} 
-          />
-        </div>
-
-        <DetailModal 
-          isOpen={!!activeModal} 
-          onClose={() => setActiveModal(null)} 
-          title={activeModal?.title} 
-          data={activeModal?.data || []} 
-        />
-      
-      {/* Critical Alerts Section */}
-      {(stats.lowStockCount > 0 || stats.outOfStockCount > 0) && (
-        <div style={{ margin: '2.5rem 0 2rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem', color: 'var(--error)' }}>
-            <AlertCircle size={15} />
-            <span className="up" style={{ fontSize: '10px' }}>Alertas de inventario</span>
+      {/* ── Barra financiera compacta (resumen, no chart redundante) ──── */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass"
+        style={{ display: 'flex', flexWrap: 'wrap', gap: '1px', marginBottom: '2rem', overflow: 'hidden' }}
+      >
+        {[
+          { label: 'Ventas hoy', value: fmtCOP(finance.totalToday), icon: ShoppingCart, color: 'var(--success)' },
+          { label: 'Ventas mes', value: fmtCOP(finance.totalMonthSales), icon: TrendingUp, color: 'var(--accent-primary)' },
+          { label: 'Recaudo mes', value: fmtCOP(finance.totalCashMonth), icon: Wallet, color: 'var(--accent-secondary)' },
+          { label: 'Cartera', value: fmtCOP(finance.accountsReceivable), icon: Clock, color: 'var(--error)' },
+          { label: 'Gastos mes', value: fmtCOP(finance.monthExpenses), icon: ArrowDownRight, color: 'var(--error)' },
+        ].map((item, i) => (
+          <div key={i} style={{ flex: '1 1 160px', padding: '1rem 1.25rem', background: 'var(--c-surface)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <item.icon size={16} color={item.color} strokeWidth={1.8} />
+            <div>
+              <div className="up" style={{ fontSize: '9px', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>{item.label}</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 500, fontFamily: 'var(--f-display)' }}>{item.value}</div>
+            </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
-            {inventoryList.filter(p => nivelStock(p, config) === 'agotado').slice(0, 6).map(p => (
-              <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={p.id} className="glass" style={{ padding: '1rem 1.5rem', borderRadius: 0, borderLeft: '4px solid var(--error)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        ))}
+      </motion.div>
+
+      {/* ── KPIs principales de inventario ──────────────────────────────── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+        <StatCard
+          title="Inversión en Inventario"
+          value={fmtCOP(inv.totalCost)}
+          icon={DollarSign}
+          color="201, 169, 97"
+          subValue={`${inv.activeCount} ítems con existencias`}
+          onClick={() => setActiveModal({ title: 'Top 15 — Mayor capital invertido', data: topDetailItems })}
+        />
+        <StatCard
+          title="Valor de Venta Potencial"
+          value={fmtCOP(inv.totalSale)}
+          icon={TrendingUp}
+          color="47, 158, 110"
+          subValue={`${inv.totalItems} ítems en catálogo`}
+          delay={0.1}
+        />
+        <StatCard
+          title="Margen Potencial"
+          value={fmtCOP(inv.margin)}
+          icon={Activity}
+          color="242, 238, 230"
+          detail={inv.margin > 0 ? `+${fmtPct(inv.marginPct)}` : fmtPct(inv.marginPct)}
+          subValue="Diferencia venta − costo"
+          delay={0.2}
+        />
+        <StatCard
+          title="Capital Inmovilizado"
+          value={fmtCOP(inv.slowCost)}
+          icon={Archive}
+          color="194, 65, 59"
+          subValue={`${inv.slowCount} productos sin venta en 30 días`}
+          delay={0.3}
+          onClick={() => setActiveModal({ title: 'Productos sin movimiento (30 días)', data: slowItems })}
+        />
+      </div>
+
+      {/* ── Alertas de inventario ───────────────────────────────────────── */}
+      {(inv.outOfStock > 0 || inv.lowStock > 0 || inv.zeroCost > 0) && (
+        <div style={{ marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
+            <AlertCircle size={15} color="var(--error)" />
+            <span className="up" style={{ fontSize: '10px', color: 'var(--error)' }}>Alertas de inventario</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+            {inv.outOfStock > 0 && (
+              <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="glass" style={{ padding: '1.25rem 1.5rem', borderRadius: 0, borderLeft: '4px solid var(--error)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => setActiveTab('inventory')}>
                 <div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>{p.name}</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--error)', fontWeight: 500 }}>PRODUCTO AGOTADO</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 500, color: 'var(--error)', fontFamily: 'var(--f-display)' }}>{inv.outOfStock}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Productos agotados</div>
                 </div>
-                <button onClick={() => setActiveTab('inventory')} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.7rem', fontWeight: 500, cursor: 'pointer' }}>REABASTECER</button>
+                <ChevronRight size={16} color="var(--text-muted)" />
               </motion.div>
-            ))}
-            {inventoryList.filter(p => nivelStock(p, config) === 'advertencia').slice(0, 6).map(p => (
-              <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} key={p.id} className="glass" style={{ padding: '1rem 1.5rem', borderRadius: 0, borderLeft: '4px solid var(--warning)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            )}
+            {inv.lowStock > 0 && (
+              <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="glass" style={{ padding: '1.25rem 1.5rem', borderRadius: 0, borderLeft: '4px solid var(--warning)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => setActiveTab('inventory')}>
                 <div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>{p.name}</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--warning)', fontWeight: 500 }}>EN ADVERTENCIA: {formatoCantidad(p.stock, p.unit)}{p.unit === 'ml' ? '' : ' UND'}</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 500, color: 'var(--warning)', fontFamily: 'var(--f-display)' }}>{inv.lowStock}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>En advertencia</div>
                 </div>
-                <button onClick={() => setActiveTab('inventory')} style={{ background: 'none', border: 'none', color: 'var(--accent-primary)', fontSize: '0.7rem', fontWeight: 500, cursor: 'pointer' }}>REABASTECER</button>
+                <ChevronRight size={16} color="var(--text-muted)" />
               </motion.div>
-            ))}
+            )}
+            {inv.zeroCost > 0 && (
+              <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.2 }} className="glass" style={{ padding: '1.25rem 1.5rem', borderRadius: 0, borderLeft: '4px solid var(--info)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => setActiveModal({ title: 'Productos con costo $0', data: zeroCostItems })}>
+                <div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 500, color: 'var(--info)', fontFamily: 'var(--f-display)' }}>{inv.zeroCost}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Con costo $0 (vigilante ciego)</div>
+                </div>
+                <ChevronRight size={16} color="var(--text-muted)" />
+              </motion.div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Main Graph Restored */}
-      <div className="premium-card" style={{ marginBottom: '2rem', height: '450px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2.5rem' }}>
-          <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', textTransform: 'uppercase' }}>
-            <Activity size={20} color="var(--accent-primary)" /> 
-            RENDIMIENTO {period === 'week' ? 'SEMANAL' : period === 'month' ? 'MENSUAL' : 'HISTÓRICO'}: VENTAS VS UTILIDAD
+      {/* ── Mapa de capital por tipo (Treemap) ─────────────────────────── */}
+      {inv.typeChartData.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="premium-card" style={{ marginBottom: '2rem' }}>
+          <h4 style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <Layers size={20} color="var(--accent-primary)" /> DISTRIBUCIÓN DE CAPITAL POR TIPO
           </h4>
-          <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8rem', fontWeight: 500 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><div style={{ width: '10px', height: '10px', borderRadius: 0, background: 'var(--accent-primary)' }} /> VENTAS</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><div style={{ width: '10px', height: '10px', borderRadius: 0, background: 'var(--success)' }} /> UTILIDAD</div>
-          </div>
-        </div>
-        <div style={{ height: '320px', minWidth: 0 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="colorV" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--accent-primary)" stopOpacity={0.2}/><stop offset="95%" stopColor="var(--accent-primary)" stopOpacity={0}/></linearGradient>
-                <linearGradient id="colorG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--success)" stopOpacity={0.1}/><stop offset="95%" stopColor="var(--success)" stopOpacity={0}/></linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-              <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
-              <YAxis 
-                stroke="var(--text-muted)" 
-                fontSize={10} 
-                tickLine={false} 
-                axisLine={false} 
-                tickFormatter={(v) => `$${Number(v).toLocaleString('es-CO', { maximumFractionDigits: 0 })}`}
-              />
-              <Tooltip contentStyle={{ background: 'rgba(11, 11, 12,0.95)', border: '1px solid var(--glass-border)', borderRadius: 0 }} />
-              <Area type="monotone" dataKey="ventas" stroke="var(--accent-primary)" strokeWidth={3} fill="url(#colorV)" />
-              <Area type="monotone" dataKey="utilidad" stroke="var(--success)" strokeWidth={2} fill="url(#colorG)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem', marginBottom: '2rem' }}>
-        {/* Top Products */}
-        <div className="premium-card">
-          <h4 style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}><Star size={20} color="var(--warning)" /> PRODUCTOS ESTRELLA</h4>
-          <div className="table-responsive-wrapper">
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase' }}>
-                <th style={{ padding: '1rem 0' }}>Producto</th>
-                <th>Ventas</th>
-                <th style={{ textAlign: 'right' }}>Ingresos</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stats.topProducts.map((p, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                  <td style={{ padding: '1.2rem 0', fontWeight: 500, fontSize: '0.9rem' }}>
-                    <span className="mobile-label">Producto</span>
-                    {p.name}
-                  </td>
-                  <td style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                    <span className="mobile-label">Ventas</span>
-                    {p.qty} u.
-                  </td>
-                  <td style={{ textAlign: 'right', fontWeight: 500, color: 'var(--success)' }}>
-                    <span className="mobile-label" style={{ textAlign: 'left' }}>Ingresos</span>
-                    ${Math.round(p.revenue).toLocaleString('es-CO')}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
-        </div>
-
-        {/* Top Debtors */}
-        <div className="premium-card">
-          <h4 style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}><AlertCircle size={20} color="var(--error)" /> TOP DEUDORES</h4>
-          <div className="table-responsive-wrapper">
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase' }}>
-                <th style={{ padding: '1rem 0' }}>Cliente</th>
-                <th style={{ textAlign: 'right' }}>Deuda Pendiente</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stats.topDebtors.map((d, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                  <td style={{ padding: '1.2rem 0', fontWeight: 500, fontSize: '0.9rem' }}>
-                    <span className="mobile-label">Cliente</span>
-                    {d.name}
-                  </td>
-                  <td style={{ textAlign: 'right', fontWeight: 500, color: 'var(--error)' }}>
-                    <span className="mobile-label" style={{ textAlign: 'left' }}>Deuda Pendiente</span>
-                    ${Math.round(d.balance).toLocaleString('es-CO')}
-                  </td>
-                </tr>
-              ))}
-              {stats.topDebtors.length === 0 && (
-                <tr>
-                  <td colSpan="2" style={{ padding: '2rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>No hay deudas pendientes registradas.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-          </div>
-        </div>
-
-        {/* Stock Status Radial */}
-        <div className="premium-card">
-          <h4 style={{ marginBottom: '2rem' }}><Zap size={20} color="var(--info)" /> ESTADO DE STOCK</h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '1.25rem', borderRadius: 0, border: '1px solid var(--glass-border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>En advertencia</span>
-                <span style={{ fontWeight: 500, color: 'var(--warning)' }}>{stats.lowStockCount}</span>
-              </div>
-              <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: 0, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${(stats.lowStockCount / (inventoryList.length || 1)) * 100}%`, background: 'var(--warning)' }} />
-              </div>
-            </div>
-            
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div className="glass" style={{ padding: '1rem', borderRadius: 0, textAlign: 'center' }}>
-                <div style={{ fontSize: '1.2rem', fontWeight: 500, color: 'var(--success)' }}>{inventoryList.length - stats.outOfStockCount}</div>
-                <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Ok</div>
-              </div>
-              <div className="glass" style={{ padding: '1rem', borderRadius: 0, textAlign: 'center' }}>
-                <div style={{ fontSize: '1.2rem', fontWeight: 500, color: 'var(--error)' }}>{stats.outOfStockCount}</div>
-                <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Agotado</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
-        {/* Sales by Category Restored */}
-        <div className="premium-card">
-          <h4 style={{ marginBottom: '2rem' }}><PieIcon size={20} color="var(--accent-primary)" /> VENTAS POR CATEGORÍA</h4>
-          <div style={{ height: '300px', minWidth: 0 }}>
+          <div style={{ height: '280px', minWidth: 0 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={categoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                  {categoryData.map((e, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip contentStyle={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 0, fontFamily: 'var(--f-ui)', fontSize: 12 }} itemStyle={{ color: 'var(--text-main)' }} />
-                <Legend />
-              </PieChart>
+              <Treemap
+                data={inv.typeChartData}
+                dataKey="costo"
+                nameKey="name"
+                content={<TreemapContent />}
+              >
+                <Tooltip content={({ payload }) => {
+                  if (!payload?.length) return null;
+                  const d = payload[0]?.payload;
+                  if (!d) return null;
+                  return (
+                    <div style={{ background: 'rgba(11,11,12,0.95)', border: '1px solid var(--glass-border)', padding: '0.75rem 1rem', fontSize: '0.8rem' }}>
+                      <p style={{ fontWeight: 600, marginBottom: '0.3rem' }}>{d.name}</p>
+                      <p>Costo: {fmtCOP(d.costo)}</p>
+                      <p>Venta: {fmtCOP(d.venta)}</p>
+                      <p style={{ color: 'var(--text-muted)' }}>{d.items} ítems</p>
+                    </div>
+                  );
+                }} />
+              </Treemap>
             </ResponsiveContainer>
           </div>
-        </div>
+          {/* Leyenda descriptiva debajo */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.25rem', marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--glass-border)' }}>
+            {inv.typeChartData.map((t, i) => {
+              const Icon = TIPO_ICONS[t.key] || Package;
+              const pct = inv.totalCost > 0 ? ((t.costo / inv.totalCost) * 100).toFixed(1) : '0.0';
+              return (
+                <div key={t.key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
+                  <div style={{ width: 12, height: 12, background: PALETTE[i % PALETTE.length], flexShrink: 0 }} />
+                  <Icon size={14} color="var(--text-muted)" />
+                  <span style={{ color: 'var(--text-secondary)' }}>{t.name}</span>
+                  <span style={{ color: 'var(--accent-primary)', fontWeight: 500 }}>{pct}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
 
-        {/* Expenses Breakdown */}
-        <div className="premium-card">
-          <h4 style={{ marginBottom: '2rem' }}><BarChart3 size={20} color="var(--error)" /> ESTRUCTURA DE COSTOS</h4>
-          <div style={{ height: '300px', minWidth: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '2rem', marginBottom: '2rem' }}>
+        {/* ── Top 15 productos con más capital invertido (horizontal bar) ── */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="premium-card">
+          <h4 style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <BarChart3 size={20} color="var(--accent-primary)" /> TOP CAPITAL INVERTIDO
+          </h4>
+          <div style={{ height: Math.max(320, inv.topByCost.length * 32), minWidth: 0 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={[
-                    { name: 'Inversión Productos', value: stats.totalCOGS },
-                    { name: 'Gastos de Operación', value: stats.totalExpenses }
-                  ]}
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={10}
-                  dataKey="value"
-                >
-                  <Cell fill="var(--accent-primary)" />
-                  <Cell fill="var(--error)" />
-                </Pie>
-                <Tooltip contentStyle={{ background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 0, fontFamily: 'var(--f-ui)', fontSize: 12 }} itemStyle={{ color: 'var(--text-main)' }} />
-                <Legend />
-              </PieChart>
+              <BarChart
+                data={inv.topByCost.slice(0, 10)}
+                layout="vertical"
+                margin={{ left: 10, right: 20, top: 0, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
+                <XAxis type="number" stroke="var(--text-muted)" fontSize={10} tickFormatter={v => fmtCOP(v)} tickLine={false} axisLine={false} />
+                <YAxis type="category" dataKey="name" width={140} stroke="var(--text-muted)" fontSize={11} tickLine={false} axisLine={false} />
+                <Tooltip content={({ payload }) => {
+                  if (!payload?.length) return null;
+                  const d = payload[0]?.payload;
+                  if (!d) return null;
+                  return (
+                    <div style={{ background: 'rgba(11,11,12,0.95)', border: '1px solid var(--glass-border)', padding: '0.75rem 1rem', fontSize: '0.8rem' }}>
+                      <p style={{ fontWeight: 600, marginBottom: '0.3rem' }}>{d.name}</p>
+                      <p>Costo inv.: {fmtCOP(d.costValue)}</p>
+                      <p>Venta pot.: {fmtCOP(d.saleValue)}</p>
+                      <p style={{ color: 'var(--text-muted)' }}>{formatoCantidad(d.stock, d.unit)}{d.unit === 'ml' ? '' : ' und'}</p>
+                    </div>
+                  );
+                }} />
+                <Bar dataKey="costValue" name="Capital" fill="var(--accent-primary)" radius={[0, 2, 2, 0]} />
+              </BarChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </motion.div>
+
+        {/* ── Distribución por categoría (pie) ────────────────────────────── */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="premium-card">
+          <h4 style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <PieIcon size={20} color="var(--accent-primary)" /> CAPITAL POR CATEGORÍA
+          </h4>
+          {inv.catChartData.length > 0 ? (
+            <div style={{ height: '350px', minWidth: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={inv.catChartData} cx="50%" cy="45%" innerRadius={60} outerRadius={90} paddingAngle={3} dataKey="value">
+                    {inv.catChartData.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
+                  </Pie>
+                  <Tooltip content={({ payload }) => {
+                    if (!payload?.length) return null;
+                    const d = payload[0]?.payload;
+                    if (!d) return null;
+                    return (
+                      <div style={{ background: 'rgba(11,11,12,0.95)', border: '1px solid var(--glass-border)', padding: '0.75rem 1rem', fontSize: '0.8rem' }}>
+                        <p style={{ fontWeight: 600, marginBottom: '0.3rem' }}>{d.name}</p>
+                        <p>Costo: {fmtCOP(d.value)}</p>
+                        <p>Venta: {fmtCOP(d.sale)}</p>
+                        <p style={{ color: 'var(--text-muted)' }}>{d.count} ítems</p>
+                      </div>
+                    );
+                  }} />
+                  <Legend
+                    formatter={(value) => <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{value}</span>}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '3rem 0' }}>Sin categorías registradas.</p>
+          )}
+        </motion.div>
       </div>
 
-      {/* Strategic Insights */}
-      <div className="premium-card" style={{ background: 'linear-gradient(90deg, rgba(201, 169, 97,0.05) 0%, transparent 100%)', borderLeft: '4px solid var(--accent-primary)' }}>
-        <h4 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}><Activity size={20} color="var(--accent-primary)" /> INSIGHTS ESTRATÉGICOS</h4>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <div style={{ minWidth: '40px', height: '40px', borderRadius: 0, background: 'rgba(47, 158, 110,0.1)', color: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Trophy size={20} />
-            </div>
-            <div>
-              <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>Ticket Promedio</div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Cada cliente deja en promedio <strong>${Math.round(stats.avgTicket).toLocaleString('es-CO')}</strong>.</p>
-            </div>
+      {/* ── Costo vs Venta por tipo (bar agrupado) ─────────────────────── */}
+      {inv.typeChartData.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="premium-card" style={{ marginBottom: '2rem' }}>
+          <h4 style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <Zap size={20} color="var(--accent-primary)" /> COSTO vs VENTA POR TIPO
+          </h4>
+          <div style={{ height: '320px', minWidth: 0 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={inv.typeChartData} margin={{ left: 10, right: 10, top: 5, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis stroke="var(--text-muted)" fontSize={10} tickLine={false} axisLine={false} tickFormatter={v => fmtCOP(v)} />
+                <Tooltip content={<ChartTooltip />} />
+                <Bar dataKey="costo" name="Costo" fill="var(--accent-primary)" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="venta" name="Venta" fill="var(--success)" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <div style={{ minWidth: '40px', height: '40px', borderRadius: 0, background: 'rgba(194, 65, 59,0.1)', color: 'var(--error)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <AlertCircle size={20} />
-            </div>
-            <div>
-              <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>Cartera en Riesgo</div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Tienes <strong>${Math.round(stats.accountsReceivable).toLocaleString('es-CO')}</strong> por cobrar. Usa el panel de deudores para hacer seguimiento.</p>
-            </div>
+          <div style={{ display: 'flex', gap: '2rem', justifyContent: 'center', marginTop: '1rem', fontSize: '0.8rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><div style={{ width: 10, height: 10, background: 'var(--accent-primary)' }} /> Costo</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><div style={{ width: 10, height: 10, background: 'var(--success)' }} /> Venta</div>
           </div>
+        </motion.div>
+      )}
+
+      {/* ── Salud del inventario (resumen bottom) ──────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.6 }}
+        className="premium-card"
+        style={{ background: 'linear-gradient(90deg, rgba(201,169,97,0.05) 0%, transparent 100%)', borderLeft: '4px solid var(--accent-primary)', marginBottom: '2rem' }}
+      >
+        <h4 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <Activity size={20} color="var(--accent-primary)" /> SALUD DEL INVENTARIO
+        </h4>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '2rem' }}>
+          {/* Cobertura de stock */}
           <div style={{ display: 'flex', gap: '1rem' }}>
-            <div style={{ minWidth: '40px', height: '40px', borderRadius: 0, background: 'rgba(201, 138, 27,0.1)', color: 'var(--warning)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ minWidth: '40px', height: '40px', background: 'rgba(47,158,110,0.1)', color: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Package size={20} />
             </div>
             <div>
-              <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>Capital Inmovilizado</div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Tienes <strong>${Math.round(stats.slowMovingCapital).toLocaleString('es-CO')}</strong> atrapados en {stats.slowMovingProductsCount} productos sin rotación.</p>
+              <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>Cobertura</div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                <strong>{inv.activeCount}</strong> de {inv.totalItems} ítems tienen existencias ({inv.totalItems > 0 ? ((inv.activeCount / inv.totalItems) * 100).toFixed(0) : 0}%).
+              </p>
             </div>
           </div>
+          {/* Margen global */}
           <div style={{ display: 'flex', gap: '1rem' }}>
-            <div style={{ minWidth: '40px', height: '40px', borderRadius: 0, background: 'rgba(61, 127, 196,0.1)', color: 'var(--info)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <CheckCircle size={20} />
+            <div style={{ minWidth: '40px', height: '40px', background: 'rgba(201,169,97,0.1)', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <TrendingUp size={20} />
             </div>
             <div>
-              <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>Efectividad de Flujo</div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>El ingreso real del periodo cubre tus gastos operativos con un saldo de <strong>${Math.round(stats.totalCashIn - stats.totalExpenses).toLocaleString('es-CO')}</strong>.</p>
+              <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>Margen Global</div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                Si vendes todo al precio actual tu margen sería de <strong>{fmtPct(inv.marginPct)}</strong> sobre la inversión.
+              </p>
+            </div>
+          </div>
+          {/* Capital inmovilizado */}
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <div style={{ minWidth: '40px', height: '40px', background: 'rgba(194,65,59,0.1)', color: 'var(--error)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <AlertCircle size={20} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>Rotación</div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                {inv.slowCount > 0
+                  ? <><strong>{fmtCOP(inv.slowCost)}</strong> ({inv.slowCount} ítems) sin venta en 30 días. Considera promociones.</>
+                  : 'Todos los ítems con stock tuvieron movimiento en los últimos 30 días. ¡Excelente rotación!'
+                }
+              </p>
+            </div>
+          </div>
+          {/* Vigilante de precios */}
+          <div style={{ display: 'flex', gap: '1rem' }}>
+            <div style={{ minWidth: '40px', height: '40px', background: 'rgba(61,127,196,0.1)', color: 'var(--info)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Zap size={20} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 500, marginBottom: '0.25rem' }}>Vigilante de Costos</div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                {inv.zeroCost > 0
+                  ? <><strong>{inv.zeroCost}</strong> ítems con existencias tienen costo $0. El vigilante de precios está ciego para ellos.</>
+                  : 'Todos los ítems con existencias tienen costo registrado. ✓'
+                }
+              </p>
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
+
+      {/* ── Modal ──────────────────────────────────────────────────────── */}
+      <DetailModal
+        isOpen={!!activeModal}
+        onClose={() => setActiveModal(null)}
+        title={activeModal?.title}
+        data={activeModal?.data || []}
+      />
     </div>
   );
 };
 
 export default Dashboard;
-
-
