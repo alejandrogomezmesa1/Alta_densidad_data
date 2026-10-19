@@ -1,8 +1,9 @@
 // Recetas y empaque: qué lleva cada tamaño de perfume preparado (la esencia y el envase que elige el
-// cliente + alcohol, fijador, feromonas, colorante…) y qué empaque lleva cada pedido. Con los costos
+// cliente + alcohol, fijador, feromonas, colorante…), qué lleva un decant de 10 ml (sin feromonas;
+// envase de la categoría «Decants») y qué empaque lleva cada pedido. Con los costos
 // del inventario calcula en vivo el costo real de cada tamaño, para esencia árabe y tradicional.
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Save, Trash2, FlaskConical, Package } from 'lucide-react';
+import { Plus, Save, Trash2, FlaskConical, Package, Droplet } from 'lucide-react';
 import { api } from '../services/api';
 
 const pesos = (v) => `$${Math.round(Number(v) || 0).toLocaleString('es-CO')}`;
@@ -79,6 +80,7 @@ const Recetas = ({ notify, confirm, inventory }) => {
   const [guardadas, setGuardadas] = useState('[]');
   const [guardando, setGuardando] = useState(false);
   const [nuevoMl, setNuevoMl] = useState('');
+  const [decants, setDecants] = useState(null);
 
   const cargar = () => api.get('/recipes')
     .then((r) => {
@@ -88,7 +90,8 @@ const Recetas = ({ notify, confirm, inventory }) => {
       setGuardadas(JSON.stringify(ls.map(({ key, ...x }) => x)));
     })
     .catch((err) => notify?.(`No se pudieron cargar las recetas: ${err.message}`, 'error'));
-  useEffect(() => { cargar(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const cargarDecants = () => api.get('/decants').then(setDecants).catch(() => setDecants(null));
+  useEffect(() => { cargar(); cargarDecants(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const insumos = useMemo(() => (Array.isArray(inventory) ? inventory : [])
     .filter((p) => TIPOS_INSUMO.includes(p.type))
@@ -96,7 +99,8 @@ const Recetas = ({ notify, confirm, inventory }) => {
   const tamanos = useMemo(() => [...new Set(lineas.filter((l) => l.scope === 'tamano').map((l) => Number(l.ml)))].sort((a, b) => a - b), [lineas]);
   const sucio = JSON.stringify(lineas.map(({ key, ...x }) => x)) !== guardadas;
   const costoEsencia = datos ? datos.essenceCost : {};
-  const envasesDe = (ml) => (datos ? datos.containers.filter((e) => e.ml === ml) : []);
+  // Los envases de decant solo cuentan para la receta de decant, y viceversa
+  const envasesDe = (ml, decant = false) => (datos ? datos.containers.filter((e) => (decant ? e.decant : e.ml === ml && !e.decant)) : []);
 
   const cambiar = (key, cambio) => setLineas((ls) => ls.map((l) => (l.key === key ? { ...l, ...cambio } : l)));
   const quitar = (key) => setLineas((ls) => ls.filter((l) => l.key !== key));
@@ -110,14 +114,15 @@ const Recetas = ({ notify, confirm, inventory }) => {
   const quitarTamano = (ml) => confirm?.(`¿Quitar la receta de ${ml} ml?`, () => setLineas((ls) => ls.filter((l) => !(l.scope === 'tamano' && Number(l.ml) === ml))));
 
   // Costo de un grupo de líneas (la esencia según la clase; el envase al costo más alto de su tamaño)
-  const costo = (ls, ml, clase) => ls.reduce((s, l) => {
+  const costo = (ls, ml, clase, decant = false) => ls.reduce((s, l) => {
     const q = Number(l.quantity) || 0;
     if (l.role === 'esencia') return s + q * (costoEsencia[clase] || 0);
-    if (l.role === 'envase') { const c = envasesDe(ml).map((e) => e.unitCost); return s + q * (c.length ? Math.max(...c) : 0); }
+    if (l.role === 'envase') { const c = envasesDe(ml, decant).map((e) => e.unitCost); return s + q * (c.length ? Math.max(...c) : 0); }
     const item = insumos.find((i) => i.id === Number(l.itemId));
     return s + q * (item ? item.costPrice : 0);
   }, 0);
   const lineasPedido = lineas.filter((l) => l.scope === 'pedido');
+  const lineasDecant = lineas.filter((l) => l.scope === 'decant');
   const costoPedido = costo(lineasPedido);
 
   async function guardar() {
@@ -128,6 +133,7 @@ const Recetas = ({ notify, confirm, inventory }) => {
       await api.put('/recipes', { lines: lineas.map(({ key, ...l }) => ({ ...l, quantity: Number(l.quantity) || 0 })) });
       notify?.('Recetas guardadas.', 'success');
       await cargar();
+      cargarDecants();
     } catch (err) {
       notify?.(err.message, 'error');
     } finally {
@@ -181,6 +187,33 @@ const Recetas = ({ notify, confirm, inventory }) => {
         </div>
         <button type="button" className="btn-secondary" onClick={agregarTamano}><Plus size={14} /> Agregar tamaño</button>
       </section>
+
+      {datos.decants && (
+        <section className="premium-card" style={{ marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}><Droplet size={18} /> Decant de 10 ml</h3>
+            <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              {CLASES.map(([c, t]) => (
+                <span key={c} style={{ fontSize: '0.85rem' }}>Costo con esencia {t.toLowerCase()}: <b style={{ color: 'var(--accent-primary)' }}>{pesos(costo(lineasDecant, 10, c, true))}</b></span>
+              ))}
+            </div>
+          </div>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 0 }}>
+            Sin feromonas. El envase lo elige el cliente entre los ítems de la categoría «Decants» del inventario (atomizador de bolsillo, vial de vidrio…).
+            Al venderse en la web se descuenta esta receta.
+          </p>
+          <Lineas lineas={lineasDecant} insumos={insumos} envasesTam={envasesDe(10, true)} costoEsencia={costoEsencia} conRoles
+            onCambiar={cambiar} onQuitar={quitar} onAgregar={(role) => agregar('decant', 10, role)} />
+          {decants?.disponible && (
+            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginTop: '0.9rem', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+              {decants.recetaLista
+                ? <span>Con el inventario actual: <b>{decants.esencias.filter((e) => e.decants > 0).length}</b> esencias alcanzan para al menos un decant ({cifra(decants.esenciaMl)} ml de esencia cada uno).</span>
+                : <span style={{ color: 'var(--warning, #c9a227)' }}>Falta la cantidad de esencia: sin ella la tienda no puede saber cuántos decants salen de cada esencia.</span>}
+              {decants.envases.map((e) => <span key={e.id}>{e.name}: <b>{cifra(e.stock)}</b> en stock</span>)}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="premium-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>

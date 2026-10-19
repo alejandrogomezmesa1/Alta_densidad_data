@@ -11,6 +11,7 @@ import { esquema, actualizarEsquema } from './estado.js';
 import { leerConfiguraciones, guardarConfiguraciones, definicionesPublicas } from './configuraciones.js';
 import { moverStock, moverVenta, auditarStock, componentesDe, resumenKits } from './inventario.js';
 import { insertarPago, categoriaGastoId } from './catalogos.js';
+import { devolverConsumos, catalogoDecants, CATEGORIA_DECANTS } from './recetas.js';
 
 dotenv.config();
 
@@ -430,11 +431,14 @@ app.get('/api/recipes', async (req, res, next) => {
             i.nombre AS itemName, i.unidad AS unit, i.precio_costo AS unitCost, i.stock
             FROM recetas r LEFT JOIN inventario i ON i.id = r.inventario_id ORDER BY r.ambito, r.ml, r.orden, r.id`);
         // Envases del inventario por tamaño (el costo del "envase elegido" va de su mínimo a su máximo)
-        const [envases] = await db.query("SELECT id, nombre AS name, precio_costo AS unitCost, stock FROM inventario WHERE tipo = 'envase' AND activo = 1 ORDER BY nombre");
+        const [envases] = await db.query("SELECT id, nombre AS name, precio_costo AS unitCost, stock, categoria FROM inventario WHERE tipo = 'envase' AND activo = 1 ORDER BY nombre");
         res.json({
             lines: lineas.map((l) => ({ ...l, quantity: Number(l.quantity), unitCost: l.unitCost == null ? null : Number(l.unitCost), stock: l.stock == null ? null : Number(l.stock) })),
             essenceCost: await costosEsencia(db),
-            containers: envases.map((e) => ({ ...e, unitCost: Number(e.unitCost) || 0, stock: Number(e.stock) || 0, ml: Number((/(\d+)\s*ml/i.exec(e.name) || [])[1]) || null }))
+            // decant: los envases de decant (categoría Decants) solo cuentan para la receta de decant
+            containers: envases.map(({ categoria, ...e }) => ({ ...e, unitCost: Number(e.unitCost) || 0, stock: Number(e.stock) || 0,
+                ml: Number((/(\d+)\s*ml/i.exec(e.name) || [])[1]) || null, decant: categoria === CATEGORIA_DECANTS })),
+            decants: esquema.decants
         });
     } catch (error) { next(error); }
 });
@@ -445,11 +449,12 @@ app.put('/api/recipes', async (req, res, next) => {
     const lineas = Array.isArray(req.body.lines) ? req.body.lines : [];
     const limpias = [];
     for (const [i, l] of lineas.entries()) {
-        const ambito = l.scope === 'pedido' ? 'pedido' : 'tamano';
-        const ml = ambito === 'tamano' ? parseInt(l.ml, 10) : null;
+        const ambito = ['pedido', 'decant'].includes(l.scope) ? l.scope : 'tamano';
+        if (ambito === 'decant' && !esquema.decants) return res.status(400).json({ error: 'Los decants aún no están disponibles (migración 014 pendiente)' });
+        const ml = ambito === 'pedido' ? null : parseInt(l.ml, 10);
         const rol = ['esencia', 'envase', 'insumo'].includes(l.role) ? l.role : 'insumo';
         const cantidad = Number(l.quantity);
-        if (ambito === 'tamano' && !(ml > 0 && ml <= 1000)) return res.status(400).json({ error: 'Cada tamaño debe tener ml válidos' });
+        if (ambito !== 'pedido' && !(ml > 0 && ml <= 1000)) return res.status(400).json({ error: 'Cada tamaño debe tener ml válidos' });
         if (ambito === 'pedido' && rol !== 'insumo') return res.status(400).json({ error: 'El empaque por pedido solo lleva insumos' });
         if (!(cantidad >= 0)) return res.status(400).json({ error: 'Las cantidades no pueden ser negativas' });
         const itemId = rol === 'insumo' ? parseInt(l.itemId, 10) : null;
@@ -470,6 +475,13 @@ app.put('/api/recipes', async (req, res, next) => {
     } finally {
         if (connection) connection.release();
     }
+});
+
+// Decants: cuántos decants alcanzan con cada esencia y cada envase (para el panel)
+app.get('/api/decants', async (req, res, next) => {
+    try {
+        res.json(await catalogoDecants(db));
+    } catch (error) { next(error); }
 });
 
 app.get('/api/kits', async (req, res, next) => {
@@ -821,6 +833,8 @@ app.delete('/api/sales/:id', async (req, res, next) => {
         await connection.beginTransaction();
         
         await devolverDetalles(connection, id, 'Venta eliminada', req.user?.id);
+        // Decants vendidos: devolver lo que descontó su receta
+        await devolverConsumos(connection, id, 'Venta eliminada', req.user?.id);
         await connection.query('DELETE FROM venta_detalles WHERE venta_id = ?', [id]);
         await connection.query('DELETE FROM pagos WHERE venta_id = ?', [id]);
         await connection.query('DELETE FROM ventas WHERE id = ?', [id]);

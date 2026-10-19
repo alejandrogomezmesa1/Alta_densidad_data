@@ -13,6 +13,7 @@ import { esquema } from './estado.js';
 import { moverVenta, componentesDe, resumenKits } from './inventario.js';
 import { leerConfiguraciones, guardarConfiguraciones, definicionesPublicas } from './configuraciones.js';
 import { insertarPago } from './catalogos.js';
+import { catalogoDecants, consumoDeReceta, venderReceta, devolverConsumos } from './recetas.js';
 
 const MAX_SKEW_MS = 60 * 1000;
 const NONCE_TTL_MS = 2 * MAX_SKEW_MS;
@@ -93,6 +94,13 @@ const crearRouter = (db) => {
         } catch (error) { next(error); }
     });
 
+    // Decants: receta resumida, esencias y envases de decant con stock y costo (la tienda pone el precio)
+    router.get('/v1/decants', async (req, res, next) => {
+        try {
+            res.json(await catalogoDecants(db));
+        } catch (error) { next(error); }
+    });
+
     // Configuraciones que la tienda puede ver y editar desde su panel (web: true en configuraciones.js)
     router.get('/v1/settings', async (req, res, next) => {
         try {
@@ -111,11 +119,24 @@ const crearRouter = (db) => {
     router.post('/v1/inventory/check', async (req, res, next) => {
         try {
             const pedidos = new Map();
+            // Decants: { recipe: { scope: 'decant', essenceId, containerId }, quantity } → lo que consume su receta
+            const porReceta = new Map();
             for (const it of Array.isArray(req.body?.items) ? req.body.items : []) {
-                const id = parseInt(it.inventoryId, 10);
                 const qty = parseInt(it.quantity, 10);
-                if (!id || !qty || qty < 1) continue;
+                if (!qty || qty < 1) continue;
+                if (it.recipe) {
+                    for (const c of await consumoDeReceta(db, it.recipe, qty)) porReceta.set(c.inventarioId, (porReceta.get(c.inventarioId) || 0) + c.cantidad);
+                    continue;
+                }
+                const id = parseInt(it.inventoryId, 10);
+                if (!id) continue;
                 pedidos.set(id, (pedidos.get(id) || 0) + qty);
+            }
+            if (porReceta.size) {
+                const [rows] = await db.query('SELECT id, nombre, stock FROM inventario WHERE id IN (?)', [[...porReceta.keys()]]);
+                const cortos = rows.filter((r) => (Number(r.stock) || 0) + 1e-9 < porReceta.get(r.id))
+                    .map((r) => ({ inventoryId: r.id, name: r.nombre, requested: porReceta.get(r.id), available: Math.max(0, Number(r.stock) || 0), recipe: true }));
+                if (cortos.length) return res.json({ ok: false, faltantes: cortos });
             }
             if (pedidos.size === 0) return res.json({ ok: true, faltantes: [] });
 
@@ -178,6 +199,7 @@ const crearRouter = (db) => {
             }
 
             const lineas = items.map(it => ({
+                recipe: it.recipe && typeof it.recipe === 'object' ? it.recipe : null,
                 inventoryId: parseInt(it.inventoryId, 10) || null,
                 quantity: Math.max(1, parseInt(it.quantity, 10) || 1),
                 unitPrice: Math.max(0, parseFloat(it.unitPrice) || 0),
@@ -210,7 +232,12 @@ const crearRouter = (db) => {
             for (const l of lineas) {
                 let costo = 0;
                 let inventarioId = null;
-                if (l.inventoryId) {
+                if (l.recipe) {
+                    // Decant: descuenta su receta (esencia, envase e insumos) y la deja registrada
+                    const r = await venderReceta(connection, { ventaId, recipe: l.recipe, cantidad: l.quantity, motivo: `Pedido web ${ref}`, descripcion: l.description });
+                    costo = r.costoUnitario;
+                    sinStock.push(...r.negativos);
+                } else if (l.inventoryId) {
                     const [inv] = await connection.query('SELECT id FROM inventario WHERE id = ?', [l.inventoryId]);
                     if (inv.length) {
                         inventarioId = inv[0].id;
@@ -258,6 +285,7 @@ const crearRouter = (db) => {
                         origenTipo: 'venta', origenId: ventaId, motivo: `Reembolso del pedido web ${ref}` });
                 }
             }
+            await devolverConsumos(connection, ventaId, `Reembolso del pedido web ${ref}`);
             await connection.query('DELETE FROM venta_detalles WHERE venta_id = ?', [ventaId]);
             await connection.query('DELETE FROM pagos WHERE venta_id = ?', [ventaId]);
             await connection.query('DELETE FROM ventas WHERE id = ?', [ventaId]);

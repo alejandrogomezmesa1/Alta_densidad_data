@@ -10,7 +10,8 @@ export const esquema = {
     kits: false,             // 010: kits compuestos
     configuraciones: false,  // 011: módulo Configuraciones
     claseEsencia: false,     // 012: esencia árabe / tradicional
-    recetas: false           // 013: recetas de preparado y empaque
+    recetas: false,          // 013: recetas de preparado y empaque
+    decants: false           // 014: decants (receta, envases y consumos por venta)
 };
 
 export const actualizarEsquema = (aplicadas) => {
@@ -24,4 +25,5 @@ export const actualizarEsquema = (aplicadas) => {
     esquema.configuraciones = aplicadas.has('011');
     esquema.claseEsencia = aplicadas.has('012');
     esquema.recetas = aplicadas.has('013');
+    esquema.decants = aplicadas.has('014');
 };
