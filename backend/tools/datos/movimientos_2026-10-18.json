@@ -1,0 +1,21 @@
+{
+    "_descripcion": "Tercer conteo físico (texto.txt subido al Drive el 18-10-2026) comparado con el del 03-10 ya cargado. Solo cambian perfumes 1.1 y los Yum Yum mini; esencias, envases negros y esencias 1.1 iguales. Decisiones del usuario (19-10): las salidas son ventas en efectivo a precio de lista, salvo Valentino Green Stravaganza (ajuste, sin precio en DATA); Eros Flame +1 es compra al costo actual; del Kit Yum Yum quedan 2 minis sueltos.",
+    "fecha": "2026-10-18 18:00:00",
+    "motivo": "Conteo físico 18-10-2026",
+    "ventas": [
+        { "id": 24, "nombre": "Bharara King", "cantidad": 1, "precio": 110000, "metodo": "Efectivo" },
+        { "id": 37, "nombre": "Valentino Donna", "cantidad": 1, "precio": 85000, "metodo": "Efectivo" },
+        { "id": 9, "nombre": "Lacoste Blanca", "cantidad": 1, "precio": 65000, "metodo": "Efectivo" },
+        { "id": 239, "nombre": "Lacoste Roja 125 ml", "cantidad": 1, "precio": 80000, "metodo": "Efectivo" },
+        { "id": 8, "nombre": "Ombre Nomada", "cantidad": 1, "precio": 90000, "metodo": "Efectivo" },
+        { "id": 1, "nombre": "Santal 33", "cantidad": 1, "precio": 75000, "metodo": "Efectivo" },
+        { "id": 71, "nombre": "Valentino Uomo", "cantidad": 1, "precio": 85000, "metodo": "Efectivo" }
+    ],
+    "compras": [
+        { "id": 26, "nombre": "Eros Flame", "cantidad": 1, "costo": 29500 }
+    ],
+    "ajustes": [
+        { "id": 234, "nombre": "Valentino Green Stravaganza", "stock": 0 },
+        { "id": 50, "nombre": "Yum Yum Mini", "stock": 2 }
+    ]
+}
