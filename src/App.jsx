@@ -9,6 +9,9 @@ import { CONFIG_DEFECTO } from './utils/inventario';
 import Transactions from './components/Transactions';
 import CashRegister from './components/CashRegister';
 import Collections from './components/Collections';
+import Vender from './components/Vender';
+import Recibir from './components/Recibir';
+import Consultar from './components/Consultar';
 import Suppliers from './components/Suppliers';
 import Clients from './components/Clients';
 import Login from './components/Login';
@@ -153,6 +156,12 @@ function App() {
     const commonProps = { notify, confirm: requestConfirm, config };
     
     switch(activeTab) {
+      case 'vender':
+        return <Vender {...commonProps} products={inventory} customers={customers} onDone={fetchData} />;
+      case 'recibir':
+        return <Recibir {...commonProps} products={inventory} suppliers={suppliers} onDone={fetchData} />;
+      case 'consultar':
+        return <Consultar {...commonProps} />;
       case 'dashboard':
         return <Dashboard {...commonProps} sales={sales} inventory={inventory} purchases={purchases} expenses={expenses} setActiveTab={setActiveTab} />;
       case 'inventory':

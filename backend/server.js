@@ -965,7 +965,8 @@ app.get('/api/purchases', async (req, res, next) => {
     try {
         const [rows] = await db.query(`SELECT co.id, co.inventario_id as productId, co.proveedor_id as supplierId, co.cantidad, co.monto as amount, co.precio_unitario as unitPrice, co.fecha as date, pr.nombre as productName, prve.nombre as supplierName
             ${esquema.caja ? ', mp.nombre as method, mp.es_efectivo as isCash' : ''}
-            FROM compras co LEFT JOIN inventario pr ON co.inventario_id = pr.id LEFT JOIN proveedores prve ON co.proveedor_id = prve.id
+            ${esquema.recepciones ? ', co.recepcion_id as receptionId, rc.factura as invoice' : ''}
+            FROM compras co ${esquema.recepciones ? 'LEFT JOIN recepciones rc ON rc.id = co.recepcion_id' : ''} LEFT JOIN inventario pr ON co.inventario_id = pr.id LEFT JOIN proveedores prve ON co.proveedor_id = prve.id
             ${esquema.caja ? 'LEFT JOIN metodos_pago mp ON mp.id = co.metodo_pago_id WHERE co.anulada_en IS NULL' : ''}
             ORDER BY co.fecha DESC`);
         res.json(rows || []);
@@ -1085,6 +1086,143 @@ app.delete('/api/purchases/:id', async (req, res, next) => {
             await dineroCompra(connection, id, 0, compra.metodo_pago_id, `anulada (${await nombreItem(connection, compra.inventario_id)})`, req.user?.id);
         });
         res.json({ message: esquema.caja ? 'Compra anulada: stock y caja ajustados' : 'Purchase deleted and stock adjusted' });
+    } catch (error) { next(error); }
+});
+
+// --- RECEPCIONES DE MERCANCÍA (migración 017) ---
+// Una factura de proveedor con varias líneas, en una sola transacción: o entra todo o nada.
+// Cada línea es una compra: suma stock, recalcula el costo promedio y sale de la caja con el método elegido.
+const sinRecepciones = (res) => res.status(503).json({ error: 'Las recepciones aún no están disponibles (migración 017 pendiente)' });
+
+app.post('/api/receptions', async (req, res, next) => {
+    if (!esquema.recepciones) return sinRecepciones(res);
+    const lineas = (Array.isArray(req.body.lines) ? req.body.lines : []).map((l) => datosCompra({ ...l, date: req.body.date, method: req.body.method, supplierId: req.body.supplierId }));
+    if (!lineas.length) return res.status(400).json({ error: 'La recepción necesita al menos un producto' });
+    const malas = lineas.map(errorCompra).filter(Boolean);
+    if (malas.length) return res.status(400).json({ error: malas[0] });
+    try {
+        const fecha = fechaDocumento(req.body.date, { campo: 'La fecha de la recepción' });
+        const factura = req.body.invoice ? String(req.body.invoice).trim().substring(0, 60) : null;
+        const r = await transaccion(async (connection) => {
+            const metodoId = await metodoPagoId(connection, req.body.method, { crear: false });
+            const proveedor = Number.parseInt(req.body.supplierId, 10) || null;
+            if (proveedor) {
+                const [[p]] = await connection.query('SELECT id FROM proveedores WHERE id = ?', [proveedor]);
+                if (!p) throw Object.assign(new Error('El proveedor no existe'), { status: 400 });
+            }
+            const [rec] = await connection.query('INSERT INTO recepciones (proveedor_id, factura, fecha, metodo_pago_id, notas, usuario_id) VALUES (?, ?, ?, ?, ?, ?)',
+                [proveedor, factura, fecha, metodoId, req.body.notes ? String(req.body.notes).substring(0, 500) : null, req.user?.id || null]);
+            let total = 0;
+            for (const c of lineas) {
+                await validarItemCompra(connection, c.invId);
+                const [compra] = await connection.query(
+                    'INSERT INTO compras (inventario_id, proveedor_id, cantidad, monto, precio_unitario, fecha, metodo_pago_id, recepcion_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                    [c.invId, proveedor, c.cantidad, c.monto, c.precioUnitario, fecha, metodoId, rec.insertId]);
+                await entradaCompra(connection, compra.insertId, c, req.user?.id);
+                await dineroCompra(connection, compra.insertId, c.monto, metodoId, `${await nombreItem(connection, c.invId)}${factura ? ` (factura ${factura})` : ''}`, req.user?.id);
+                total += c.monto;
+            }
+            return { id: rec.insertId, total: redondear2(total), lines: lineas.length };
+        });
+        res.status(201).json(r);
+    } catch (error) { next(error); }
+});
+
+app.get('/api/receptions', async (req, res, next) => {
+    if (!esquema.recepciones) return sinRecepciones(res);
+    try {
+        const [rows] = await db.query(`SELECT r.id, r.factura AS invoice, r.fecha AS date, p.nombre AS supplierName, m.nombre AS method, u.username AS user,
+                COUNT(c.id) AS lineCount, COALESCE(SUM(IF(c.anulada_en IS NULL, c.monto, 0)), 0) AS total, SUM(c.anulada_en IS NULL) AS activeLines
+            FROM recepciones r LEFT JOIN proveedores p ON p.id = r.proveedor_id LEFT JOIN metodos_pago m ON m.id = r.metodo_pago_id
+            LEFT JOIN usuarios u ON u.id = r.usuario_id LEFT JOIN compras c ON c.recepcion_id = r.id
+            GROUP BY r.id ORDER BY r.id DESC LIMIT 100`);
+        res.json(rows.map((r) => ({ ...r, total: Number(r.total), lineCount: Number(r.lineCount), voided: Number(r.activeLines) === 0 })));
+    } catch (error) { next(error); }
+});
+
+// Anular una recepción completa: cada línea vigente se anula como una compra
+app.delete('/api/receptions/:id', async (req, res, next) => {
+    if (!esquema.recepciones) return sinRecepciones(res);
+    const motivo = String(req.query.reason || `Recepción #${req.params.id} anulada`).substring(0, 255);
+    try {
+        const n = await transaccion(async (connection) => {
+            const [lineas] = await connection.query('SELECT id, inventario_id, metodo_pago_id FROM compras WHERE recepcion_id = ? AND anulada_en IS NULL FOR UPDATE', [req.params.id]);
+            if (!lineas.length) throw Object.assign(new Error('La recepción no existe o ya está anulada'), { status: 400 });
+            for (const l of lineas) {
+                await reversaCompra(connection, l.id, motivo, req.user?.id);
+                await connection.query('UPDATE compras SET anulada_en = NOW(), anulada_por = ?, motivo_anulacion = ? WHERE id = ?', [req.user?.id || null, motivo, l.id]);
+                await dineroCompra(connection, l.id, 0, l.metodo_pago_id, `anulada (${await nombreItem(connection, l.inventario_id)})`, req.user?.id);
+            }
+            return lineas.length;
+        });
+        res.json({ message: `Recepción anulada: ${n} línea(s)` });
+    } catch (error) { next(error); }
+});
+
+// --- CONTEO FÍSICO MASIVO ---
+// { reason, lines: [{ productId, counted }] }: cada diferencia queda como ajuste con el motivo del conteo
+app.post('/api/inventory/count', async (req, res, next) => {
+    const lineas = Array.isArray(req.body.lines) ? req.body.lines : [];
+    if (!lineas.length) return res.status(400).json({ error: 'El conteo no trae productos' });
+    const motivo = `Conteo físico ${fechaDocumento(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })).slice(0, 10)}${req.body.reason ? `: ${String(req.body.reason).trim()}` : ''}`;
+    try {
+        const ajustes = await transaccion(async (connection) => {
+            const hechos = [];
+            const vistos = new Set();
+            for (const l of lineas) {
+                const id = Number.parseInt(l.productId, 10);
+                const contado = num(l.counted);
+                if (!id || contado === null || !(contado >= 0)) throw Object.assign(new Error('Cada línea del conteo necesita un producto y una cantidad de 0 o más'), { status: 400 });
+                if (vistos.has(id)) throw Object.assign(new Error('Un producto aparece dos veces en el conteo'), { status: 400 });
+                vistos.add(id);
+                if ((await componentesDe(connection, id)).length) throw Object.assign(new Error('Los kits no se cuentan: cuenta sus componentes'), { status: 400 });
+                const [[item]] = await connection.query('SELECT nombre, stock FROM inventario WHERE id = ? FOR UPDATE', [id]);
+                if (!item) throw Object.assign(new Error(`El producto ${id} no existe`), { status: 400 });
+                const diferencia = redondear2(contado - Number(item.stock));
+                if (!diferencia) continue;
+                await moverStock(connection, { inventarioId: id, cantidad: diferencia, tipo: 'ajuste', origenTipo: 'ajuste', motivo, usuarioId: req.user?.id });
+                hechos.push({ productId: id, name: item.nombre, before: Number(item.stock), counted: contado, difference: diferencia });
+            }
+            return hechos;
+        });
+        res.status(201).json({ adjusted: ajustes.length, unchanged: lineas.length - ajustes.length, adjustments: ajustes });
+    } catch (error) { next(error); }
+});
+
+// --- CONSULTA DE EXISTENCIAS ---
+// Liviana (sin ventas, compras ni clientes): lo que hay, cuánto alcanza y qué lo limita
+app.get('/api/stock', async (req, res, next) => {
+    try {
+        const [rows] = await db.query(`SELECT ${COLS_PRODUCTO()} FROM inventario ${esquema.inventarioTipos ? 'WHERE activo = 1' : ''} ORDER BY nombre ASC`);
+        const porId = new Map(rows.map((r) => [r.id, r]));
+        const kits = await resumenKits(db);
+        // Componente que limita cada kit (el que alcanza para menos)
+        const limita = new Map();
+        if (esquema.kits) {
+            const [comps] = await db.query('SELECT kit_id, componente_id, cantidad FROM kit_componentes');
+            for (const c of comps) {
+                const item = porId.get(c.componente_id);
+                const alcanza = item ? Math.floor(Number(item.stock) / Number(c.cantidad) + 1e-9) : 0;
+                const actual = limita.get(c.kit_id);
+                if (!actual || alcanza < actual.alcanza) limita.set(c.kit_id, { alcanza, nombre: item?.name || `#${c.componente_id}` });
+            }
+        }
+        // Decants que salen de cada esencia según la receta de 10 ml
+        let mlDecant = 0;
+        if (esquema.decants) {
+            const [[r]] = await db.query("SELECT COALESCE(SUM(cantidad), 0) AS ml FROM recetas WHERE ambito = 'decant' AND rol = 'esencia'");
+            mlDecant = Number(r.ml) || 0;
+        }
+        res.json(rows.map((r) => {
+            const p = productoDesdeFila(r);
+            const k = kits.get(r.id);
+            return {
+                id: p.id, name: p.name, code: p.code || null, category: p.category, type: p.type || 'terminado', unit: p.unit || 'und',
+                stock: k ? k.stock : p.stock, minStock: p.minStock || 0, price: p.price, essenceClass: p.essenceClass || null,
+                ...(k ? { isKit: true, limitedBy: limita.get(r.id)?.nombre || null } : {}),
+                ...(p.type === 'esencia' && mlDecant > 0 ? { decants: Math.max(0, Math.floor(p.stock / mlDecant + 1e-9)) } : {})
+            };
+        }));
     } catch (error) { next(error); }
 });
 

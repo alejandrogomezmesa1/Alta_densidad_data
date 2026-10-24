@@ -35,3 +35,14 @@ export const nivelStock = (p, config) => {
   if (stock <= 0) return 'agotado';
   return stock <= limiteAdvertencia(p, config) ? 'advertencia' : 'disponible';
 };
+
+// Búsqueda sin tildes ni mayúsculas: «aventús» encuentra «Aventus»
+export const normalizar = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+export const coincide = (texto, consulta) => {
+  const palabras = normalizar(consulta).split(/\s+/).filter(Boolean);
+  const base = normalizar(texto);
+  return palabras.every((p) => base.includes(p));
+};
+
+export const pesos = (v) => `${Number(v) < 0 ? '-' : ''}$${Math.abs(Math.round(Number(v) || 0)).toLocaleString('es-CO')}`;
+export const hoyBogota = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });

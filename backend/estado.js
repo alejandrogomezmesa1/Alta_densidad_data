@@ -13,7 +13,8 @@ export const esquema = {
     recetas: false,          // 013: recetas de preparado y empaque
     decants: false,          // 014: decants (receta, envases y consumos por venta)
     blindaje: false,         // 015: cantidades decimales, cambio de costo y consumos por línea
-    caja: false              // 016: sesiones de caja, libro de dinero y anulaciones
+    caja: false,             // 016: sesiones de caja, libro de dinero y anulaciones
+    recepciones: false       // 017: recepciones de mercancía (factura con varias líneas)
 };
 
 export const actualizarEsquema = (aplicadas) => {
@@ -30,4 +31,5 @@ export const actualizarEsquema = (aplicadas) => {
     esquema.decants = aplicadas.has('014');
     esquema.blindaje = aplicadas.has('015');
     esquema.caja = aplicadas.has('016');
+    esquema.recepciones = aplicadas.has('017');
 };

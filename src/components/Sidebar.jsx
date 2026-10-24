@@ -15,20 +15,27 @@ import {
   ArrowUpRight,
   Gift,
   Settings,
-  X, FlaskConical } from 'lucide-react';
+  X, FlaskConical, ShoppingBag, PackagePlus, Search } from 'lucide-react';
 
 // Panel de administración de la tienda web (mismo sistema, otro sitio)
 const PANEL_TIENDA = import.meta.env.VITE_PAGE_ADMIN_URL || 'https://alta-densidad-page.vercel.app/admin';
 
+// Arriba lo de todos los días; abajo los registros y la administración
 const MENU = [
+  { title: 'Día a día', items: [
+    { id: 'vender', icon: ShoppingBag, label: 'Vender' },
+    { id: 'recibir', icon: PackagePlus, label: 'Recibir mercancía' },
+    { id: 'cash', icon: Wallet, label: 'Caja' },
+    { id: 'consultar', icon: Search, label: 'Consultar existencias' },
+  ]},
   { title: 'Resumen', items: [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   ]},
-  { title: 'Operación', items: [
+  { title: 'Registros', items: [
     { id: 'sales', icon: TrendingUp, label: 'Ventas' },
     { id: 'purchases', icon: ShoppingCart, label: 'Compras' },
     { id: 'expenses', icon: Receipt, label: 'Gastos' },
-    { id: 'cash', icon: Wallet, label: 'Caja' },
+    { id: 'collections', icon: Clock, label: 'Cartera' },
   ]},
   { title: 'Catálogo', items: [
     { id: 'inventory', icon: Package, label: 'Inventario' },
@@ -37,7 +44,6 @@ const MENU = [
   ]},
   { title: 'Relaciones', items: [
     { id: 'clients', icon: Users, label: 'Clientes' },
-    { id: 'collections', icon: Clock, label: 'Cartera' },
     { id: 'suppliers', icon: ShieldCheck, label: 'Proveedores' },
   ]},
   { title: 'Sistema', items: [

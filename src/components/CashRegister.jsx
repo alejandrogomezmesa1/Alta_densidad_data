@@ -166,7 +166,7 @@ const CashRegister = (props) => {
             </div>
             <Fila etiqueta="Base al abrir" valor={pesos(resumen.initialCash)} />
             <Fila etiqueta="Entró en efectivo" valor={conSigno(resumen.cashIn)} color="var(--success)" />
-            <Fila etiqueta="Salió en efectivo" valor={conSigno(-resumen.cashOut)} color="var(--error)" />
+            <Fila etiqueta="Salió en efectivo" valor={`−${pesos(resumen.cashOut)}`} color="var(--error)" />
             <div style={{ height: 1, background: 'var(--glass-border)', margin: '0.75rem 0' }} />
             <Fila etiqueta="Debe haber" valor={pesos(esperado)} color="var(--accent-primary)" fuerte />
 

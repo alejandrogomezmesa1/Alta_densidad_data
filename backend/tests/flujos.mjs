@@ -108,7 +108,12 @@ const perfume = await uno("SELECT id, precio FROM inventario WHERE activo=1 AND 
     const f = await call('GET', '/products?type=esencia');
     reg(G, 'filtro por tipo', f.body.every((p) => p.type === 'esencia'));
     reg(G, 'kárdex de un ítem', Array.isArray((await call('GET', `/products/${perfume.id}/movements`)).body));
-    reg(G, 'consulta liviana de existencias sin cargar ventas, compras y clientes', null, 'fase C: el panel trae todo para consultar stock');
+    const st = await call('GET', '/stock');
+    reg(G, 'consulta liviana de existencias (/api/stock)', st.status === 200 && st.body.length === r.body.length && !('costPrice' in st.body[0]));
+    if (kit) {
+        const k = st.body.find((p) => p.id === kit.id);
+        reg(G, 'la consulta dice qué componente limita un kit', k?.isKit && !!k.limitedBy, k?.limitedBy);
+    }
 }
 
 // ---------- 2. Ingreso al inventario ----------
@@ -149,7 +154,34 @@ let pid;
     reg(G, 'compra sin fecha rechazada con mensaje claro', sf.status === 400, sf.body.error);
     const fut = await call('POST', '/purchases', { productId: pid, quantity: 1, unitPrice: 30000, date: '2099-01-01' });
     reg(G, 'compra con fecha futura rechazada', fut.status === 400, fut.body.error);
-    reg(G, 'una factura de proveedor con varios productos', null, 'fase D: cada producto es una compra aparte');
+    // Recepción: factura con varias líneas, todo o nada
+    const prov = await call('POST', '/suppliers', { name: 'Proveedor Recepción' });
+    const sA = await stock(pid); const sE = await stock(esencia.id);
+    const rec = await call('POST', '/receptions', { supplierId: prov.body.id, invoice: 'F-001', date: hoy, method: 'Transferencia',
+        lines: [{ productId: pid, quantity: 3, unitPrice: 26000 }, { productId: esencia.id, quantity: 500.5, unitPrice: 240 }] });
+    reg(G, 'recepción con dos productos suma ambos stocks', rec.status === 201 && (await stock(pid)) === sA + 3 && (await stock(esencia.id)) === sE + 500.5, rec.body.error || '');
+    reg(G, 'la recepción totaliza la factura', rec.body.total === 78000 + 120120, String(rec.body.total));
+    const lineasRec = await q('SELECT COUNT(*) n FROM compras WHERE recepcion_id=?', [rec.body.id]);
+    reg(G, 'cada línea queda como compra de la recepción', Number(lineasRec[0].n) === 2);
+    const mala = await call('POST', '/receptions', { date: hoy, method: 'Efectivo', lines: [{ productId: pid, quantity: 2, unitPrice: 26000 }, { productId: pid, quantity: 1.5, unitPrice: 26000 }] });
+    reg(G, 'recepción con una línea inválida no deja entrar nada', mala.status === 400 && (await stock(pid)) === sA + 3, mala.body.error);
+    reg(G, 'recepción sin líneas rechazada', (await call('POST', '/receptions', { date: hoy, method: 'Efectivo', lines: [] })).status === 400);
+    const anulRec = await call('DELETE', `/receptions/${rec.body.id}`);
+    reg(G, 'anular la recepción saca todo lo que entró', anulRec.status === 200 && (await stock(pid)) === sA && (await stock(esencia.id)) === sE);
+    reg(G, 'una recepción no se anula dos veces', (await call('DELETE', `/receptions/${rec.body.id}`)).status === 400);
+    const enLista = (await call('GET', '/receptions')).body.find((x) => x.id === rec.body.id);
+    reg(G, 'la recepción anulada sigue en el historial como anulada', enLista?.voided === true && enLista.invoice === 'F-001');
+
+    // Conteo físico masivo
+    const sP = await stock(perfume.id);
+    const conteo = await call('POST', '/inventory/count', { reason: 'vitrina', lines: [{ productId: pid, counted: sA }, { productId: perfume.id, counted: sP + 1 }] });
+    reg(G, 'conteo masivo: ajusta solo lo que tiene diferencia', conteo.status === 201 && conteo.body.adjusted === 1 && conteo.body.unchanged === 1 && (await stock(perfume.id)) === sP + 1);
+    const mConteo = await uno("SELECT motivo FROM movimientos_inventario WHERE inventario_id=? ORDER BY id DESC LIMIT 1", [perfume.id]);
+    reg(G, 'el ajuste del conteo lleva su motivo', /^Conteo físico .*vitrina/.test(mConteo.motivo), mConteo.motivo);
+    if (kit) reg(G, 'el conteo no acepta kits', (await call('POST', '/inventory/count', { lines: [{ productId: kit.id, counted: 1 }] })).status === 400);
+    const malo = await call('POST', '/inventory/count', { lines: [{ productId: perfume.id, counted: sP }, { productId: pid, counted: 2.5 }] });
+    reg(G, 'conteo con una línea inválida no ajusta nada', malo.status === 400 && (await stock(perfume.id)) === sP + 1);
+    await call('POST', '/inventory/count', { lines: [{ productId: perfume.id, counted: sP }] });
 
     reg(G, 'ajuste sin motivo rechazado', (await call('POST', `/products/${pid}/adjustments`, { newStock: 3 })).status === 400);
     const aj = await call('POST', `/products/${pid}/adjustments`, { newStock: 7, reason: 'Conteo físico' });
