@@ -6,7 +6,7 @@
 // insumos fijos) y deja constancia en venta_consumos para devolver lo mismo si se anula.
 // ============================================================
 import { esquema } from './estado.js';
-import { moverStock } from './inventario.js';
+import { moverStock, moverVenta } from './inventario.js';
 
 export const CATEGORIA_DECANTS = 'Decants';
 export const ML_DECANT = 10;
@@ -66,15 +66,39 @@ export async function venderReceta(conn, { ventaId, recipe, cantidad, motivo, de
     return { costoUnitario: cantidad ? costoTotal / cantidad : 0, negativos };
 }
 
-// Devuelve al inventario todo lo que una venta consumió por receta (anulación o eliminación)
-export async function devolverConsumos(conn, ventaId, motivo, usuarioId) {
-    if (!esquema.decants) return;
-    const [rows] = await conn.query('SELECT inventario_id, cantidad FROM venta_consumos WHERE venta_id = ?', [ventaId]);
-    for (const r of rows) {
-        await moverStock(conn, { inventarioId: r.inventario_id, cantidad: Number(r.cantidad), tipo: 'anulacion_venta',
-            origenTipo: 'venta', origenId: Number(ventaId), motivo, usuarioId });
+// Lo que salió de los componentes de un kit vendido en una línea (moverVenta → consumos)
+export async function guardarConsumosKit(conn, { ventaId, detalleId, consumos, descripcion }) {
+    if (!esquema.blindaje || !consumos?.length) return;
+    await conn.query('INSERT INTO venta_consumos (venta_id, inventario_id, cantidad, costo_unitario, descripcion, venta_detalle_id) VALUES ?',
+        [consumos.map((c) => [ventaId, c.inventarioId, c.cantidad, c.costo || 0, descripcion ? String(descripcion).substring(0, 255) : null, detalleId])]);
+}
+
+/**
+ * Devuelve al inventario todo lo que salió con una venta (edición, anulación, eliminación o reembolso):
+ *   · lo registrado en venta_consumos (decants y kits), exactamente lo que salió;
+ *   · las líneas con ítem que no tienen consumos registrados (productos sueltos y kits vendidos
+ *     antes de la migración 015, que se devuelven con su composición vigente).
+ * Deja la venta sin consumos; las líneas (venta_detalles) las borra quien llama.
+ */
+export async function devolverVenta(conn, ventaId, motivo, usuarioId) {
+    const id = Number(ventaId);
+    const cubiertas = new Set();
+    if (esquema.decants) {
+        const [consumos] = await conn.query(
+            `SELECT inventario_id, cantidad${esquema.blindaje ? ', venta_detalle_id' : ', NULL AS venta_detalle_id'} FROM venta_consumos WHERE venta_id = ?`, [id]);
+        for (const c of consumos) {
+            if (c.venta_detalle_id) cubiertas.add(c.venta_detalle_id);
+            await moverStock(conn, { inventarioId: c.inventario_id, cantidad: Number(c.cantidad), tipo: 'anulacion_venta',
+                origenTipo: 'venta', origenId: id, motivo, usuarioId });
+        }
+        await conn.query('DELETE FROM venta_consumos WHERE venta_id = ?', [id]);
     }
-    await conn.query('DELETE FROM venta_consumos WHERE venta_id = ?', [ventaId]);
+    const [lineas] = await conn.query('SELECT id, inventario_id, cantidad FROM venta_detalles WHERE venta_id = ?', [id]);
+    for (const l of lineas) {
+        if (!l.inventario_id || cubiertas.has(l.id)) continue;
+        await moverVenta(conn, { inventarioId: l.inventario_id, cantidad: Number(l.cantidad), tipo: 'anulacion_venta',
+            origenTipo: 'venta', origenId: id, motivo, usuarioId });
+    }
 }
 
 // Lo que la tienda necesita para vender decants: receta resumida, esencias y envases con stock y

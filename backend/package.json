@@ -9,7 +9,8 @@
     "dev": "nodemon server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "migrate": "node migrate.js",
-    "migrate:status": "node migrate.js status"
+    "migrate:status": "node migrate.js status",
+    "test:flujos": "node tests/flujos.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

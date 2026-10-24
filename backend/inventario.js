@@ -25,7 +25,7 @@ export class StockInsuficienteError extends Error {
 const formatear = (n) => Number(n).toLocaleString('es-CO', { maximumFractionDigits: 2 });
 const redondear = (n) => Math.round(Number(n) * 100) / 100;
 
-export const TIPOS = ['inicial', 'compra', 'anulacion_compra', 'venta', 'anulacion_venta', 'ajuste', 'consumo_produccion', 'salida_produccion'];
+export const TIPOS = ['inicial', 'compra', 'anulacion_compra', 'venta', 'anulacion_venta', 'ajuste', 'consumo_produccion', 'salida_produccion', 'cambio_costo'];
 
 /**
  * @param conn conexión en transacción
@@ -47,13 +47,17 @@ export async function moverStock(conn, m) {
     if (!m.inventarioId || !cantidad) return null;
     if (!TIPOS.includes(m.tipo)) throw new Error(`Tipo de movimiento inválido: ${m.tipo}`);
 
-    const [rows] = await conn.query('SELECT id, nombre, stock, precio_costo FROM inventario WHERE id = ? FOR UPDATE', [m.inventarioId]);
+    const [rows] = await conn.query(`SELECT id, nombre, stock, precio_costo${esquema.inventarioTipos ? ', unidad' : ''} FROM inventario WHERE id = ? FOR UPDATE`, [m.inventarioId]);
     if (!rows.length) {
         const err = new Error(`El ítem de inventario ${m.inventarioId} no existe`);
         err.status = 400;
         throw err;
     }
     const item = rows[0];
+    // Lo que se cuenta por unidades no se mueve en fracciones (½ perfume); lo que va en ml sí
+    if (esquema.blindaje && item.unidad === 'und' && !Number.isInteger(cantidad)) {
+        throw Object.assign(new Error(`"${item.nombre}" se cuenta por unidades: la cantidad debe ser un número entero (llegó ${formatear(Math.abs(cantidad))})`), { status: 400 });
+    }
     const stockAnterior = Number(item.stock) || 0;
     const costoAnterior = Number(item.precio_costo) || 0;
     const stock = redondear(stockAnterior + cantidad);
@@ -131,13 +135,26 @@ export async function moverVenta(conn, m) {
     if (!componentes.length) return moverStock(conn, m);
     let costo = 0;
     let stock = Infinity;
+    // Lo que salió de cada componente: se guarda en venta_consumos para devolver exactamente eso
+    const consumos = [];
     for (const c of componentes) {
         const r = await moverStock(conn, { ...m, inventarioId: c.id, cantidad: m.cantidad * c.cantidad,
             motivo: m.motivo || `Componente de kit #${m.inventarioId}` });
         costo += c.cantidad * (r ? r.costo : c.costo);
         if (r) stock = Math.min(stock, r.stock);
+        consumos.push({ inventarioId: c.id, cantidad: Math.abs(m.cantidad * c.cantidad), costo: r ? r.costo : c.costo });
     }
-    return { stockAnterior: null, stock: stock === Infinity ? 0 : stock, costo, kit: true };
+    return { stockAnterior: null, stock: stock === Infinity ? 0 : stock, costo, kit: true, consumos };
+}
+
+// Cambio manual del costo: no mueve stock, pero queda en el kárdex con el costo anterior y el nuevo
+export async function registrarCambioCosto(conn, { inventarioId, stock, costoAnterior, costoNuevo, motivo, usuarioId }) {
+    if (!esquema.blindaje) return;
+    const pesos = (n) => `$${Number(n).toLocaleString('es-CO', { maximumFractionDigits: 4 })}`;
+    await conn.query(
+        `INSERT INTO movimientos_inventario (inventario_id, tipo, cantidad, stock_resultante, costo_unitario, origen_tipo, motivo, usuario_id)
+         VALUES (?, 'cambio_costo', 0, ?, ?, 'ajuste', ?, ?)`,
+        [inventarioId, stock, costoNuevo, `${motivo || 'Costo editado en la ficha'}: ${pesos(costoAnterior)} → ${pesos(costoNuevo)}`.substring(0, 255), usuarioId || null]);
 }
 
 // Pedido de ítems → cantidades por ítem real, con los kits reemplazados por sus componentes

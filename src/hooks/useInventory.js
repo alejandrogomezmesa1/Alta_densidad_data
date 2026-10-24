@@ -111,7 +111,8 @@ export const useInventory = (notify, isAuthenticated = true) => {
   const addPurchase = useCallback(async (purchase) => {
     try {
       const totalAmount = parseFloat(purchase.amount || purchase.total || 0);
-      const quantity = parseInt(purchase.quantity);
+      // Las esencias se compran por ml con decimales (250,5 ml)
+      const quantity = parseFloat(purchase.quantity);
       const unitPrice = parseFloat(purchase.unitPrice) || (totalAmount / (quantity || 1));
 
       await api.post('/purchases', { ...purchase, amount: totalAmount, unitPrice });
@@ -123,7 +124,7 @@ export const useInventory = (notify, isAuthenticated = true) => {
   const updatePurchase = useCallback(async (id, purchase) => {
     try {
       const totalAmount = parseFloat(purchase.amount || purchase.total || 0);
-      const quantity = parseInt(purchase.quantity);
+      const quantity = parseFloat(purchase.quantity);
       const unitPrice = parseFloat(purchase.unitPrice) || (totalAmount / (quantity || 1));
 
       await api.put(`/purchases/${id}`, { ...purchase, amount: totalAmount, unitPrice });

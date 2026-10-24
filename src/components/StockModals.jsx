@@ -12,7 +12,8 @@ const TIPOS_MOVIMIENTO = {
   anulacion_venta: 'Venta devuelta',
   ajuste: 'Ajuste',
   consumo_produccion: 'Consumo en producción',
-  salida_produccion: 'Salida de producción'
+  salida_produccion: 'Salida de producción',
+  cambio_costo: 'Cambio de costo'
 };
 
 const MOTIVOS = ['Conteo físico', 'Rotura', 'Vencimiento', 'Corrección de registro', 'Muestra o regalo', 'Otro'];

@@ -169,18 +169,19 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
       return;
     }
 
-    const anadir = () => {
+    const anadir = (allowBelowCost = false) => {
       setCart(prev => [...prev, {
         ...currentItem,
         productName: product.name,
-        costAtSale: product.costPrice || 0
+        costAtSale: product.costPrice || 0,
+        allowBelowCost
       }]);
       setCurrentItem({ productId: '', quantity: '1', unitPrice: '' });
     };
-    // Vender por debajo del costo es pérdida: se pide confirmación
+    // Vender por debajo del costo es pérdida: se pide confirmación (y el servidor exige esa marca)
     const costo = Number(product.costPrice) || 0;
     if (type === 'sales' && costo > 0 && parseFloat(currentItem.unitPrice) < costo) {
-      confirm?.(`${product.name} se vendería a ${pesos(currentItem.unitPrice)}, por debajo de su costo (${pesos(costo)}). ¿Añadir de todos modos?`, anadir);
+      confirm?.(`${product.name} se vendería a ${pesos(currentItem.unitPrice)}, por debajo de su costo (${pesos(costo)}). ¿Añadir de todos modos?`, () => anadir(true));
       return;
     }
     anadir();
@@ -277,7 +278,9 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
         productName: i.productName,
         quantity: String(i.quantity),
         unitPrice: String(i.unitPrice),
-        costAtSale: i.costAtSale
+        costAtSale: i.costAtSale,
+        // Líneas que ya estaban en la venta: su precio se aceptó al registrarla
+        allowBelowCost: true
       }));
     } else if (item.productId) {
       const product = productList.find(p => p.id === item.productId || p.id === item.inventario_id);
@@ -768,8 +771,9 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button className="btn-icon" onClick={() => setSelectedDetail(item)} title="Ver detalle" aria-label="Ver detalle"><Eye size={14} /></button>
-                        <button className="btn-icon" onClick={() => handleEdit(item)} title="Editar" aria-label="Editar"><Edit2 size={14} /></button>
-                        <button className="btn-icon danger" onClick={() => confirm('¿Eliminar registro?', () => onDelete(item.id))} title="Eliminar" aria-label="Eliminar"><Trash2 size={14} /></button>
+                        {/* Las ventas de la tienda web se anulan con el reembolso en Mercado Pago */}
+                        {item.origin !== 'web' && <button className="btn-icon" onClick={() => handleEdit(item)} title="Editar" aria-label="Editar"><Edit2 size={14} /></button>}
+                        {item.origin !== 'web' && <button className="btn-icon danger" onClick={() => confirm('¿Eliminar registro?', () => onDelete(item.id))} title="Eliminar" aria-label="Eliminar"><Trash2 size={14} /></button>}
                         {type === 'sales' && <button className="btn-icon" onClick={() => handlePrintReceipt(item)} title="Imprimir recibo" aria-label="Imprimir recibo"><Printer size={14} /></button>}
                         {type === 'sales' && balance > 0 && <button className="btn-secondary" onClick={() => setSelectedSale(item)} style={{ minHeight: 34, color: 'var(--accent-primary)', borderColor: 'var(--accent-primary)' }}>Abonar</button>}
                       </div>

@@ -9,9 +9,10 @@ import { iniciarServidorIntegracion } from './integration.js';
 import { ejecutarMigraciones } from './migrator.js';
 import { esquema, actualizarEsquema } from './estado.js';
 import { leerConfiguraciones, guardarConfiguraciones, definicionesPublicas } from './configuraciones.js';
-import { moverStock, moverVenta, auditarStock, componentesDe, resumenKits } from './inventario.js';
+import { moverStock, moverVenta, auditarStock, componentesDe, resumenKits, registrarCambioCosto } from './inventario.js';
 import { insertarPago, categoriaGastoId } from './catalogos.js';
-import { devolverConsumos, catalogoDecants, CATEGORIA_DECANTS } from './recetas.js';
+import { devolverVenta, guardarConsumosKit, catalogoDecants, CATEGORIA_DECANTS } from './recetas.js';
+import { fechaDocumento, resolverCliente, validarLineasVenta, validarItemCompra, redondear2 } from './validaciones.js';
 
 dotenv.config();
 
@@ -163,6 +164,8 @@ app.put('/api/suppliers/:id', async (req, res, next) => {
 
 app.delete('/api/suppliers/:id', async (req, res, next) => {
     try {
+        const [[{ n }]] = await db.query('SELECT COUNT(*) AS n FROM compras WHERE proveedor_id = ?', [req.params.id]);
+        if (Number(n) > 0) return res.status(400).json({ error: `Este proveedor tiene ${n} compra(s) registradas: no se puede eliminar` });
         await db.query('DELETE FROM proveedores WHERE id = ?', [req.params.id]);
         res.json({ message: 'Supplier deleted' });
     } catch (error) { next(error); }
@@ -288,26 +291,48 @@ app.put('/api/products/:id', async (req, res, next) => {
     try {
         connection = await db.getConnection();
         await connection.beginTransaction();
-        const [actual] = await connection.query('SELECT stock FROM inventario WHERE id = ? FOR UPDATE', [id]);
+        const [actual] = await connection.query(`SELECT stock, precio_costo${esquema.inventarioTipos ? ', unidad' : ''} FROM inventario WHERE id = ? FOR UPDATE`, [id]);
         if (!actual.length) {
             await connection.rollback();
             return res.status(404).json({ error: 'Producto no encontrado' });
+        }
+        const esKit = (await componentesDe(connection, Number(id))).length > 0;
+        const stockActual = Number(actual[0].stock) || 0;
+        const costoActual = Number(actual[0].precio_costo) || 0;
+        // El costo de un kit lo calculan sus componentes: el de su ficha no se toca
+        const costoNuevo = esKit ? costoActual : num(costPrice) || 0;
+        if (esquema.blindaje) {
+            // El stock solo cambia con un movimiento con motivo (Ajustar stock, compra, venta)
+            const pedido = num(req.body.stock);
+            if (pedido !== null && !esKit && Math.abs(pedido - stockActual) > 0.001) {
+                await connection.rollback();
+                return res.status(400).json({ error: 'El stock no se cambia desde la ficha: usa «Ajustar stock» y escribe el motivo' });
+            }
+            // 7 und no son 7 ml: cambiar la unidad exige dejar el stock en 0 primero
+            if (esquema.inventarioTipos && datosInventario(req.body).unidad !== actual[0].unidad && stockActual !== 0) {
+                await connection.rollback();
+                return res.status(400).json({ error: `Para cambiar la unidad (${actual[0].unidad} → ${datosInventario(req.body).unidad}) el stock debe estar en 0: ajústalo primero` });
+            }
         }
         if (esquema.inventarioTipos) {
             const d = datosInventario(req.body);
             await connection.query(
                 'UPDATE inventario SET nombre = ?, categoria = ?, precio = ?, precio_costo = ?, codigo = ?, tipo = ?, unidad = ?, stock_minimo = ?, unidad_compra = ?, factor_compra = ? WHERE id = ?',
-                [name, category, num(price) || 0, num(costPrice) || 0, d.codigo, d.tipo, d.unidad, d.stockMinimo, d.unidadCompra, d.factorCompra, id]
+                [name, category, num(price) || 0, costoNuevo, d.codigo, d.tipo, d.unidad, d.stockMinimo, d.unidadCompra, d.factorCompra, id]
             );
         } else {
             await connection.query('UPDATE inventario SET nombre = ?, categoria = ?, precio = ?, precio_costo = ? WHERE id = ?',
-                [name, category, num(price) || 0, num(costPrice) || 0, id]);
+                [name, category, num(price) || 0, costoNuevo, id]);
         }
         await guardarClaseEsencia(connection, Number(id), req.body);
-        // Un cambio de stock desde el formulario queda como ajuste en el libro (regla I-05)
+        // Un costo cambiado a mano queda en el kárdex (antes pisaba el promedio sin rastro)
+        if (Math.abs(costoNuevo - costoActual) > 0.00005) {
+            await registrarCambioCosto(connection, { inventarioId: Number(id), stock: stockActual, costoAnterior: costoActual, costoNuevo,
+                motivo: req.body.costReason || 'Costo editado en la ficha', usuarioId: req.user?.id });
+        }
+        // Sin la migración 015, un cambio de stock desde el formulario queda como ajuste en el libro (regla I-05)
         const nuevo = num(req.body.stock);
-        const esKit = (await componentesDe(connection, Number(id))).length > 0;
-        const diferencia = nuevo === null || esKit ? 0 : nuevo - (Number(actual[0].stock) || 0);
+        const diferencia = esquema.blindaje || nuevo === null || esKit ? 0 : nuevo - stockActual;
         if (diferencia) {
             await moverStock(connection, { inventarioId: Number(id), cantidad: diferencia, tipo: 'ajuste', origenTipo: 'ajuste',
                 motivo: req.body.adjustmentReason || 'Edición manual del stock', usuarioId: req.user?.id });
@@ -325,6 +350,17 @@ app.put('/api/products/:id', async (req, res, next) => {
 // Nada se borra si tiene historia: el producto se desactiva y deja de aparecer
 app.delete('/api/products/:id', async (req, res, next) => {
     try {
+        if (esquema.blindaje) {
+            // Desactivar con existencias las saca del inventario visible sin registrar a dónde fueron
+            const [[item]] = await db.query('SELECT nombre, stock, unidad FROM inventario WHERE id = ?', [req.params.id]);
+            if (!item) return res.status(404).json({ error: 'Producto no encontrado' });
+            if (Number(item.stock) !== 0) {
+                return res.status(400).json({ error: `«${item.nombre}» tiene ${Number(item.stock).toLocaleString('es-CO')}${item.unidad === 'ml' ? ' ml' : ' und'} en stock: ajústalo a 0 (con su motivo) antes de desactivarlo` });
+            }
+            const [kits] = await db.query(`SELECT i.nombre FROM kit_componentes kc JOIN inventario i ON i.id = kc.kit_id
+                WHERE kc.componente_id = ? AND i.activo = 1`, [req.params.id]);
+            if (kits.length) return res.status(400).json({ error: `«${item.nombre}» es componente de ${kits.map((k) => `«${k.nombre}»`).join(', ')}: quítalo del kit primero` });
+        }
         if (esquema.inventarioTipos) {
             await db.query('UPDATE inventario SET activo = 0 WHERE id = ?', [req.params.id]);
         } else {
@@ -590,6 +626,9 @@ app.put('/api/customers/:id', async (req, res, next) => {
 
 app.delete('/api/customers/:id', async (req, res, next) => {
     try {
+        // Con ventas, el cliente es parte de la historia (y quizá debe dinero): no se borra
+        const [[{ n }]] = await db.query('SELECT COUNT(*) AS n FROM ventas WHERE cliente_id = ?', [req.params.id]);
+        if (Number(n) > 0) return res.status(400).json({ error: `Este cliente tiene ${n} venta(s) registradas: no se puede eliminar` });
         await db.query('DELETE FROM clientes WHERE id = ?', [req.params.id]);
         res.json({ message: 'Customer deleted' });
     } catch (error) { next(error); }
@@ -604,12 +643,16 @@ const toNumber = (v) => Number.parseFloat(v) || 0;
 const normalizarItems = (items) => (Array.isArray(items) ? items : []).map(item => {
     const rawId = item.productId;
     const productId = rawId !== undefined && rawId !== null && rawId !== '' && rawId !== 'null' ? Number.parseInt(rawId, 10) : null;
+    // Con la migración 015 las cantidades llevan decimales (ml de esencia); antes se truncaban a entero
+    const cantidad = esquema.blindaje ? redondear2(toNumber(item.quantity)) : Math.max(1, Number.parseInt(item.quantity, 10) || 1);
     return {
         productId: Number.isInteger(productId) ? productId : null,
-        quantity: Math.max(1, Number.parseInt(item.quantity, 10) || 1),
+        quantity: cantidad,
         unitPrice: Math.max(0, toNumber(item.unitPrice)),
         costAtSale: Math.max(0, toNumber(item.costAtSale)),
-        description: item.productName ? String(item.productName).substring(0, 255) : null
+        description: item.productName ? String(item.productName).substring(0, 255) : null,
+        // El panel ya pidió confirmación de vender por debajo del costo
+        allowBelowCost: item.allowBelowCost === true
     };
 });
 
@@ -617,48 +660,49 @@ const normalizarItems = (items) => (Array.isArray(items) ? items : []).map(item 
 const errorItems = (items) => {
     if (!items.length) return 'La venta debe tener al menos un producto';
     if (items.some(i => !i.productId)) return 'Cada línea de la venta necesita un producto';
+    if (items.some(i => !(i.quantity > 0))) return 'La cantidad de cada producto debe ser mayor que 0';
     if (items.some(i => !(i.unitPrice > 0))) return 'Cada producto de la venta necesita un precio mayor que 0';
     return null;
 };
 
-const totalDeItems = (items) => items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
+const totalDeItems = (items) => redondear2(items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0));
 
 // Descuenta el stock y registra la línea con el costo real del momento (regla I-07)
 const insertarDetalle = async (connection, saleId, item, usuarioId) => {
     let costo = 0;
+    let movido = null;
     if (item.productId) {
-        const r = await moverVenta(connection, { inventarioId: item.productId, cantidad: -item.quantity, tipo: 'venta',
+        movido = await moverVenta(connection, { inventarioId: item.productId, cantidad: -item.quantity, tipo: 'venta',
             origenTipo: 'venta', origenId: saleId, usuarioId });
-        costo = r ? r.costo : 0;
+        costo = movido ? movido.costo : 0;
     }
+    let detalle;
     if (esquema.integracion) {
-        await connection.query(
+        [detalle] = await connection.query(
             'INSERT INTO venta_detalles (venta_id, inventario_id, cantidad, precio_unitario, costo_al_vender, descripcion) VALUES (?, ?, ?, ?, ?, ?)',
             [saleId, item.productId, item.quantity, item.unitPrice, costo, item.productId ? null : item.description]
         );
     } else {
-        await connection.query(
+        [detalle] = await connection.query(
             'INSERT INTO venta_detalles (venta_id, inventario_id, cantidad, precio_unitario, costo_al_vender) VALUES (?, ?, ?, ?, ?)',
             [saleId, item.productId, item.quantity, item.unitPrice, costo]
         );
     }
+    // Kit: queda lo que salió de cada componente, para devolver exactamente eso al anular
+    await guardarConsumosKit(connection, { ventaId: saleId, detalleId: detalle.insertId, consumos: movido?.consumos });
 };
 
-// Devuelve al inventario las líneas de una venta (edición o anulación)
-const devolverDetalles = async (connection, saleId, motivo, usuarioId) => {
-    const [oldItems] = await connection.query('SELECT inventario_id, cantidad FROM venta_detalles WHERE venta_id = ?', [saleId]);
-    for (const item of oldItems) {
-        if (item.inventario_id) {
-            await moverVenta(connection, { inventarioId: item.inventario_id, cantidad: Number(item.cantidad), tipo: 'anulacion_venta',
-                origenTipo: 'venta', origenId: Number(saleId), motivo, usuarioId });
-        }
-    }
+// Ventas de la tienda web: las registra y las anula la integración (pago y reembolso en Mercado Pago)
+const esVentaWeb = async (connection, id) => {
+    if (!esquema.integracion) return false;
+    const [r] = await connection.query("SELECT 1 FROM ventas WHERE id = ? AND origen = 'web'", [id]);
+    return r.length > 0;
 };
 
 app.get('/api/sales', async (req, res, next) => {
     try {
         const [sales] = await db.query(`
-            SELECT v.id, v.total, v.fecha as date, v.estado as status, v.metodo as method,
+            SELECT v.id, v.total, v.fecha as date, v.estado as status, v.metodo as method${esquema.integracion ? ', v.origen as origin' : ''},
                    c.id as customerId, c.nombre as customerName, c.telefono as phone,
                    c.cedula as idDocument, c.ciudad as city, c.direccion as address
             FROM ventas v
@@ -701,26 +745,33 @@ app.post('/api/sales', async (req, res, next) => {
 
     let connection;
     try {
+        const fecha = esquema.blindaje ? fechaDocumento(date) : date;
         connection = await db.getConnection();
         await connection.beginTransaction();
 
-        let finalCustomerId = customerId || null;
-        if (!finalCustomerId && customerName) {
-            const [clientResult] = await connection.query(
-                'INSERT INTO clientes (nombre, telefono, cedula, ciudad, direccion) VALUES (?, ?, ?, ?, ?)',
-                [customerName, phone || null, idDocument || null, city || null, address || null]
-            );
-            finalCustomerId = clientResult.insertId;
+        let finalCustomerId;
+        if (esquema.blindaje) {
+            await validarLineasVenta(connection, items);
+            finalCustomerId = await resolverCliente(connection, req.body);
+        } else {
+            finalCustomerId = customerId || null;
+            if (!finalCustomerId && customerName) {
+                const [clientResult] = await connection.query(
+                    'INSERT INTO clientes (nombre, telefono, cedula, ciudad, direccion) VALUES (?, ?, ?, ?, ?)',
+                    [customerName, phone || null, idDocument || null, city || null, address || null]
+                );
+                finalCustomerId = clientResult.insertId;
+            }
         }
 
         const [saleResult] = await connection.query(
             'INSERT INTO ventas (total, fecha, cliente_id, estado, metodo) VALUES (?, ?, ?, ?, ?)',
-            [total, date, finalCustomerId, status, method]
+            [total, fecha, finalCustomerId, status, method]
         );
         const saleId = saleResult.insertId;
 
         if (initialPayment > 0) {
-            await insertarPago(connection, { ventaId: saleId, monto: initialPayment, fecha: date, metodo: method });
+            await insertarPago(connection, { ventaId: saleId, monto: initialPayment, fecha, metodo: method, crear: !esquema.blindaje });
         }
 
         for (const item of items) await insertarDetalle(connection, saleId, item, req.user?.id);
@@ -743,6 +794,7 @@ app.post('/api/sales/:id/payments', async (req, res, next) => {
 
     let connection;
     try {
+        const fecha = esquema.blindaje ? fechaDocumento(date, { campo: 'La fecha del abono' }) : date;
         connection = await db.getConnection();
         await connection.beginTransaction();
 
@@ -760,7 +812,7 @@ app.post('/api/sales/:id/payments', async (req, res, next) => {
             return res.status(400).json({ error: `El abono supera el saldo pendiente ($${Math.round(saldo).toLocaleString('es-CO')})` });
         }
 
-        await insertarPago(connection, { ventaId: id, monto: amount, fecha: date, metodo: method });
+        await insertarPago(connection, { ventaId: id, monto: amount, fecha, metodo: method, crear: !esquema.blindaje });
         await connection.query('UPDATE ventas SET estado = ? WHERE id = ?', [saldo - amount <= 0.01 ? 'paid' : 'pending', id]);
 
         await connection.commit();
@@ -785,33 +837,51 @@ app.put('/api/sales/:id', async (req, res, next) => {
         connection = await db.getConnection();
         await connection.beginTransaction();
 
-        const [actual] = await connection.query('SELECT estado FROM ventas WHERE id = ? FOR UPDATE', [id]);
+        const [actual] = await connection.query('SELECT estado, fecha FROM ventas WHERE id = ? FOR UPDATE', [id]);
         if (!actual.length) {
             await connection.rollback();
             return res.status(404).json({ error: 'Venta no encontrada' });
         }
-
-        let finalCustomerId = customerId || null;
-        if (!finalCustomerId && customerName) {
-            const [clientResult] = await connection.query(
-                'INSERT INTO clientes (nombre, telefono, cedula, ciudad, direccion) VALUES (?, ?, ?, ?, ?)',
-                [customerName, phone || null, idDocument || null, city || null, address || null]
-            );
-            finalCustomerId = clientResult.insertId;
+        if (esquema.blindaje && await esVentaWeb(connection, id)) {
+            await connection.rollback();
+            return res.status(400).json({ error: 'Las ventas de la tienda web no se editan aquí: se anulan con el reembolso en Mercado Pago' });
         }
-
-        await devolverDetalles(connection, id, 'Edición de la venta', req.user?.id);
-        await connection.query('DELETE FROM venta_detalles WHERE venta_id = ?', [id]);
+        const fecha = esquema.blindaje ? fechaDocumento(date, { original: actual[0].fecha }) : date;
 
         // Editar productos o precios no debe cambiar un estado de pago ya real:
         // se recalcula con los abonos registrados. Sin abonos se conserva el estado anterior.
         const [pagos] = await connection.query('SELECT COUNT(*) as n, COALESCE(SUM(monto), 0) as totalPaid FROM pagos WHERE venta_id = ?', [id]);
+        const pagado = toNumber(pagos[0].totalPaid);
+        // Lo ya cobrado no desaparece: el total no puede quedar por debajo de lo pagado
+        if (esquema.blindaje && pagado - total > 0.01) {
+            await connection.rollback();
+            return res.status(400).json({ error: `Esta venta ya tiene $${Math.round(pagado).toLocaleString('es-CO')} pagados: el nuevo total ($${Math.round(total).toLocaleString('es-CO')}) no puede quedar por debajo. Para devolver dinero, elimina la venta y regístrala de nuevo.` });
+        }
         const status = Number(pagos[0].n) > 0
-            ? (toNumber(pagos[0].totalPaid) >= total - 0.01 ? 'paid' : 'pending')
+            ? (pagado >= total - 0.01 ? 'paid' : 'pending')
             : actual[0].estado;
 
+        let finalCustomerId;
+        if (esquema.blindaje) {
+            finalCustomerId = await resolverCliente(connection, req.body);
+        } else {
+            finalCustomerId = customerId || null;
+            if (!finalCustomerId && customerName) {
+                const [clientResult] = await connection.query(
+                    'INSERT INTO clientes (nombre, telefono, cedula, ciudad, direccion) VALUES (?, ?, ?, ?, ?)',
+                    [customerName, phone || null, idDocument || null, city || null, address || null]
+                );
+                finalCustomerId = clientResult.insertId;
+            }
+        }
+
+        // Primero vuelve lo que salió con la versión anterior; luego se validan y descuentan las líneas nuevas
+        await devolverVenta(connection, id, 'Edición de la venta', req.user?.id);
+        await connection.query('DELETE FROM venta_detalles WHERE venta_id = ?', [id]);
+        if (esquema.blindaje) await validarLineasVenta(connection, items);
+
         await connection.query('UPDATE ventas SET total = ?, fecha = ?, cliente_id = ?, estado = ?, metodo = ? WHERE id = ?',
-            [total, date, finalCustomerId, status, method, id]);
+            [total, fecha, finalCustomerId, status, method, id]);
 
         for (const item of items) await insertarDetalle(connection, id, item, req.user?.id);
 
@@ -831,10 +901,13 @@ app.delete('/api/sales/:id', async (req, res, next) => {
     try {
         connection = await db.getConnection();
         await connection.beginTransaction();
-        
-        await devolverDetalles(connection, id, 'Venta eliminada', req.user?.id);
-        // Decants vendidos: devolver lo que descontó su receta
-        await devolverConsumos(connection, id, 'Venta eliminada', req.user?.id);
+        if (esquema.blindaje && await esVentaWeb(connection, id)) {
+            await connection.rollback();
+            return res.status(400).json({ error: 'Las ventas de la tienda web no se eliminan aquí: se anulan con el reembolso en Mercado Pago' });
+        }
+
+        // Vuelve todo lo que salió: productos, componentes de kits y lo que descontó la receta de un decant
+        await devolverVenta(connection, id, 'Venta eliminada', req.user?.id);
         await connection.query('DELETE FROM venta_detalles WHERE venta_id = ?', [id]);
         await connection.query('DELETE FROM pagos WHERE venta_id = ?', [id]);
         await connection.query('DELETE FROM ventas WHERE id = ?', [id]);
@@ -856,14 +929,19 @@ app.get('/api/purchases', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
-const datosCompra = (body) => ({
-    invId: body.productId ? parseInt(body.productId, 10) : null,
-    suppId: body.supplierId ? parseInt(body.supplierId, 10) : null,
-    cantidad: Math.max(0, parseFloat(body.quantity) || 0),
-    precioUnitario: Math.max(0, parseFloat(body.unitPrice) || 0),
-    monto: parseFloat(body.amount || body.total || 0) || 0,
-    fecha: body.date
-});
+const datosCompra = (body) => {
+    const cantidad = redondear2(Math.max(0, parseFloat(body.quantity) || 0));
+    const precioUnitario = Math.max(0, parseFloat(body.unitPrice) || 0);
+    return {
+        invId: body.productId ? parseInt(body.productId, 10) : null,
+        suppId: body.supplierId ? parseInt(body.supplierId, 10) : null,
+        cantidad,
+        precioUnitario,
+        // El monto de la compra es cantidad × precio unitario (antes se guardaba el que llegara)
+        monto: esquema.blindaje ? redondear2(cantidad * precioUnitario) : parseFloat(body.amount || body.total || 0) || 0,
+        fecha: body.date
+    };
+};
 
 // Entrada de una compra: suma stock y recalcula el costo promedio (reglas I-02, I-03)
 const entradaCompra = (connection, compraId, c, usuarioId) => moverStock(connection, {
@@ -889,8 +967,10 @@ app.post('/api/purchases', async (req, res, next) => {
     if (!(c.precioUnitario > 0)) return res.status(400).json({ error: 'El precio unitario de la compra debe ser mayor que 0' });
     let connection;
     try {
+        if (esquema.blindaje) c.fecha = fechaDocumento(c.fecha, { campo: 'La fecha de la compra' });
         connection = await db.getConnection();
         await connection.beginTransaction();
+        if (esquema.blindaje) await validarItemCompra(connection, c.invId);
         const [result] = await connection.query(
             'INSERT INTO compras (inventario_id, proveedor_id, cantidad, monto, precio_unitario, fecha) VALUES (?, ?, ?, ?, ?, ?)',
             [c.invId, c.suppId, c.cantidad, c.monto, c.precioUnitario, c.fecha]
@@ -915,6 +995,11 @@ app.put('/api/purchases/:id', async (req, res, next) => {
     try {
         connection = await db.getConnection();
         await connection.beginTransaction();
+        if (esquema.blindaje) {
+            const [orig] = await connection.query('SELECT fecha FROM compras WHERE id = ?', [id]);
+            c.fecha = fechaDocumento(c.fecha, { original: orig[0]?.fecha, campo: 'La fecha de la compra' });
+            await validarItemCompra(connection, c.invId);
+        }
         if (!(await reversaCompra(connection, id, 'Edición de la compra', req.user?.id))) {
             await connection.rollback();
             return res.status(404).json({ error: 'Compra no encontrada' });
@@ -961,10 +1046,11 @@ app.get('/api/expenses', async (req, res, next) => {
 });
 
 app.post('/api/expenses', async (req, res, next) => {
-    const { description, amount, category, date } = req.body;
+    const { description, amount, category } = req.body;
     if (!String(description || '').trim() || !(Number(amount) > 0)) return res.status(400).json({ error: 'La descripción y un monto mayor que 0 son obligatorios' });
     try {
-        const categoriaId = await categoriaGastoId(db, category);
+        const date = esquema.blindaje ? fechaDocumento(req.body.date, { campo: 'La fecha del gasto' }) : req.body.date;
+        const categoriaId = await categoriaGastoId(db, category, { crear: !esquema.blindaje });
         const [result] = esquema.categoriasGasto
             ? await db.query('INSERT INTO gastos (descripcion, monto, categoria, categoria_id, fecha) VALUES (?, ?, ?, ?, ?)', [description, amount, category || 'Otros', categoriaId, date])
             : await db.query('INSERT INTO gastos (descripcion, monto, categoria, fecha) VALUES (?, ?, ?, ?)', [description, amount, category, date]);
@@ -974,10 +1060,16 @@ app.post('/api/expenses', async (req, res, next) => {
 
 app.put('/api/expenses/:id', async (req, res, next) => {
     const { id } = req.params;
-    const { description, amount, category, date } = req.body;
+    const { description, amount, category } = req.body;
     if (!String(description || '').trim() || !(Number(amount) > 0)) return res.status(400).json({ error: 'La descripción y un monto mayor que 0 son obligatorios' });
     try {
-        const categoriaId = await categoriaGastoId(db, category);
+        let date = req.body.date;
+        if (esquema.blindaje) {
+            const [orig] = await db.query('SELECT fecha FROM gastos WHERE id = ?', [id]);
+            if (!orig.length) return res.status(404).json({ error: 'Gasto no encontrado' });
+            date = fechaDocumento(date, { original: orig[0].fecha, campo: 'La fecha del gasto' });
+        }
+        const categoriaId = await categoriaGastoId(db, category, { crear: !esquema.blindaje });
         if (esquema.categoriasGasto) {
             await db.query('UPDATE gastos SET descripcion = ?, monto = ?, categoria = ?, categoria_id = ?, fecha = ? WHERE id = ?', [description, amount, category || 'Otros', categoriaId, date, id]);
         } else {

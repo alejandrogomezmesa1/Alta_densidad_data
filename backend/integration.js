@@ -13,7 +13,8 @@ import { esquema } from './estado.js';
 import { moverVenta, componentesDe, resumenKits } from './inventario.js';
 import { leerConfiguraciones, guardarConfiguraciones, definicionesPublicas } from './configuraciones.js';
 import { insertarPago } from './catalogos.js';
-import { catalogoDecants, consumoDeReceta, venderReceta, devolverConsumos } from './recetas.js';
+import { catalogoDecants, consumoDeReceta, venderReceta, devolverVenta, guardarConsumosKit } from './recetas.js';
+import { fechaLocal, redondear2 } from './validaciones.js';
 
 const MAX_SKEW_MS = 60 * 1000;
 const NONCE_TTL_MS = 2 * MAX_SKEW_MS;
@@ -23,17 +24,10 @@ const notFound = (res) => res.status(404).json({ error: 'Not found' });
 
 const sha256Hex = (buf) => crypto.createHash('sha256').update(buf || '').digest('hex');
 
-// Fecha local de Medellín en el formato que usa el resto del sistema (DATETIME)
-const fechaLocal = () => {
-    const parts = Object.fromEntries(
-        new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'America/Bogota', hour12: false,
-            year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit', second: '2-digit'
-        }).formatToParts(new Date()).map(p => [p.type, p.value])
-    );
-    const hour = parts.hour === '24' ? '00' : parts.hour;
-    return `${parts.year}-${parts.month}-${parts.day} ${hour}:${parts.minute}:${parts.second}`;
+// Cantidad de una línea: unidades o ml (con la migración 015 admite decimales)
+const cantidadLinea = (v) => {
+    const q = esquema.blindaje ? redondear2(parseFloat(v)) : parseInt(v, 10);
+    return q > 0 ? q : 0;
 };
 
 const verificarFirma = (secret) => (req, res, next) => {
@@ -122,8 +116,8 @@ const crearRouter = (db) => {
             // Decants: { recipe: { scope: 'decant', essenceId, containerId }, quantity } → lo que consume su receta
             const porReceta = new Map();
             for (const it of Array.isArray(req.body?.items) ? req.body.items : []) {
-                const qty = parseInt(it.quantity, 10);
-                if (!qty || qty < 1) continue;
+                const qty = cantidadLinea(it.quantity);
+                if (!qty) continue;
                 if (it.recipe) {
                     for (const c of await consumoDeReceta(db, it.recipe, qty)) porReceta.set(c.inventarioId, (porReceta.get(c.inventarioId) || 0) + c.cantidad);
                     continue;
@@ -201,11 +195,11 @@ const crearRouter = (db) => {
             const lineas = items.map(it => ({
                 recipe: it.recipe && typeof it.recipe === 'object' ? it.recipe : null,
                 inventoryId: parseInt(it.inventoryId, 10) || null,
-                quantity: Math.max(1, parseInt(it.quantity, 10) || 1),
+                quantity: cantidadLinea(it.quantity) || 1,
                 unitPrice: Math.max(0, parseFloat(it.unitPrice) || 0),
                 description: texto(it.description, 255)
             }));
-            const total = lineas.reduce((s, l) => s + l.quantity * l.unitPrice, 0);
+            const total = redondear2(lineas.reduce((s, l) => s + l.quantity * l.unitPrice, 0));
             const fecha = fechaLocal();
             const metodo = texto(method, 50) || 'Mercado Pago (Web)';
 
@@ -232,6 +226,7 @@ const crearRouter = (db) => {
             for (const l of lineas) {
                 let costo = 0;
                 let inventarioId = null;
+                let consumosKit = null;
                 if (l.recipe) {
                     // Decant: descuenta su receta (esencia, envase e insumos) y la deja registrada
                     const r = await venderReceta(connection, { ventaId, recipe: l.recipe, cantidad: l.quantity, motivo: `Pedido web ${ref}`, descripcion: l.description });
@@ -245,13 +240,15 @@ const crearRouter = (db) => {
                         const r = await moverVenta(connection, { inventarioId, cantidad: -l.quantity, tipo: 'venta', origenTipo: 'venta', origenId: ventaId,
                             motivo: `Pedido web ${ref}`, permitirNegativo: true });
                         costo = r.costo;
+                        consumosKit = r.consumos;
                         if (r.stock < 0) sinStock.push(inventarioId);
                     }
                 }
-                await connection.query(
+                const [detalle] = await connection.query(
                     'INSERT INTO venta_detalles (venta_id, inventario_id, cantidad, precio_unitario, costo_al_vender, descripcion) VALUES (?, ?, ?, ?, ?, ?)',
                     [ventaId, inventarioId, l.quantity, l.unitPrice, costo, l.description]
                 );
+                await guardarConsumosKit(connection, { ventaId, detalleId: detalle.insertId, consumos: consumosKit, descripcion: l.description });
             }
 
             await connection.commit();
@@ -278,14 +275,8 @@ const crearRouter = (db) => {
                 return res.json({ cancelled: false, notFound: true });
             }
             const ventaId = ventas[0].id;
-            const [detalles] = await connection.query('SELECT inventario_id, cantidad FROM venta_detalles WHERE venta_id = ?', [ventaId]);
-            for (const d of detalles) {
-                if (d.inventario_id) {
-                    await moverVenta(connection, { inventarioId: d.inventario_id, cantidad: Number(d.cantidad), tipo: 'anulacion_venta',
-                        origenTipo: 'venta', origenId: ventaId, motivo: `Reembolso del pedido web ${ref}` });
-                }
-            }
-            await devolverConsumos(connection, ventaId, `Reembolso del pedido web ${ref}`);
+            // Productos, componentes de kits y lo que descontó la receta de cada decant
+            await devolverVenta(connection, ventaId, `Reembolso del pedido web ${ref}`);
             await connection.query('DELETE FROM venta_detalles WHERE venta_id = ?', [ventaId]);
             await connection.query('DELETE FROM pagos WHERE venta_id = ?', [ventaId]);
             await connection.query('DELETE FROM ventas WHERE id = ?', [ventaId]);
