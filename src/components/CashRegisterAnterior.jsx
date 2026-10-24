@@ -1,0 +1,472 @@
+// Cierre de caja del sistema anterior (calculado en el navegador). Solo se usa si el servidor aún no
+// tiene la migración 016 (caja por sesiones); se retira cuando todo esté desplegado.
+import React, { useMemo, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Wallet, ArrowDownCircle, ArrowUpCircle, Calculator, CheckCircle, Save, History, DollarSign, Trash2, X } from 'lucide-react';
+import { api } from '../services/api';
+
+// Montos con signo correcto: "+$1.000" / "-$1.000" (antes salía "+$-1.000")
+const conSigno = (v) => `${v < 0 ? '-' : '+'}$${Math.abs(Math.round(Number(v) || 0)).toLocaleString('es-CO')}`;
+const monto = (v) => `${v < 0 ? '-' : ''}$${Math.abs(Math.round(Number(v) || 0)).toLocaleString('es-CO')}`;
+const colorSigno = (v) => (v < 0 ? 'var(--error)' : 'var(--success)');
+
+const CashRegisterAnterior = ({ sales, purchases, expenses, notify, confirm }) => {
+  const [closingHistory, setClosingHistory] = useState([]);
+  const [selectedHistory, setSelectedHistory] = useState(null);
+  // Marca local heredada (versiones anteriores solo guardaban el cierre en este navegador)
+  const [localIds, setLocalIds] = useState(() => {
+    try {
+      const stored = localStorage.getItem('alta_densidad_closed_ids');
+      return stored ? JSON.parse(stored) : { payment: 0, expense: 0, purchase: 0 };
+    } catch {
+      return { payment: 0, expense: 0, purchase: 0 };
+    }
+  });
+
+  const fetchData = React.useCallback(async () => {
+    try {
+      const data = await api.get('/cash-closings');
+      setClosingHistory(data.map(h => {
+        let movements = [];
+        try {
+          movements = h.notes ? JSON.parse(h.notes) : [];
+        } catch (e) {
+          console.error("Error parsing movements JSON:", e);
+        }
+        return {
+          ...h,
+          movements
+        };
+      }));
+    } catch (error) {
+      console.error("Error fetching cash closings:", error);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+
+  // Hasta dónde llegó el último cierre: se toma del servidor (compartido entre equipos)
+  const closedIds = useMemo(() => {
+    const fromServer = closingHistory.reduce((acc, h) => ({
+      payment: Math.max(acc.payment, Number(h.lastPaymentId) || 0),
+      expense: Math.max(acc.expense, Number(h.lastExpenseId) || 0),
+      purchase: Math.max(acc.purchase, Number(h.lastPurchaseId) || 0)
+    }), { payment: 0, expense: 0, purchase: 0 });
+    return {
+      payment: Math.max(fromServer.payment, Number(localIds.payment) || 0),
+      expense: Math.max(fromServer.expense, Number(localIds.expense) || 0),
+      purchase: Math.max(fromServer.purchase, Number(localIds.purchase) || 0)
+    };
+  }, [closingHistory, localIds]);
+
+  const dailyStats = useMemo(() => {
+    // Safely handle inputs
+    const salesArr = Array.isArray(sales) ? sales : [];
+    const expensesArr = Array.isArray(expenses) ? expenses : [];
+    const purchasesArr = Array.isArray(purchases) ? purchases : [];
+
+    // Only count transactions AFTER the last closing
+    const activeExpenses = expensesArr.filter(e => {
+      const eDate = e.date ? e.date.split(/T| /)[0] : '';
+      return eDate === today && e.id > closedIds.expense;
+    });
+    const totalExpenses = activeExpenses.reduce((acc, e) => acc + (parseFloat(e.amount) || 0), 0);
+
+    const activePurchases = purchasesArr.filter(p => {
+      const pDate = p.date ? p.date.split(/T| /)[0] : (p.fecha ? p.fecha.split(/T| /)[0] : '');
+      return pDate === today && p.id > closedIds.purchase;
+    });
+    const totalPurchases = activePurchases.reduce((acc, p) => acc + (parseFloat(p.total) || parseFloat(p.amount) || 0), 0);
+    
+    // Ingresos de la sesión: el efectivo va a la caja física; transferencias, Nequi o
+    // Mercado Pago se reportan aparte (no están en el cajón). Pagos sin método = efectivo.
+    let cashSales = 0;
+    let otherSales = 0;
+    const esEfectivo = (p) => p.isCash === undefined || p.isCash === null || Number(p.isCash) === 1;
+    let totalProfitFromSales = 0;
+    const movements = [];
+    let currentMaxPaymentId = closedIds.payment;
+
+    salesArr.forEach(s => {
+      // Sin marca de cierre conocida, solo se cuentan los abonos de hoy (nunca toda la historia)
+      const paymentsThisSession = (s.payments || []).filter(p => {
+        if (!(p.id > closedIds.payment)) return false;
+        if (closedIds.payment > 0) return true;
+        return (p.date ? p.date.split(/T| /)[0] : '') === today;
+      });
+      if (paymentsThisSession.length > 0) {
+        const paidThisSession = paymentsThisSession.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+        paymentsThisSession.forEach(p => {
+          if (esEfectivo(p)) cashSales += parseFloat(p.amount) || 0;
+          else otherSales += parseFloat(p.amount) || 0;
+        });
+        
+        paymentsThisSession.forEach(p => {
+            if (p.id > currentMaxPaymentId) currentMaxPaymentId = p.id;
+        });
+
+        const totalPaidAllTime = (s.payments || []).reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+        const totalAmount = parseFloat(s.total) || 0;
+        const balance = totalAmount - totalPaidAllTime;
+
+        let pNames = '';
+        if (s.items && s.items.length > 0) {
+           pNames = s.items.map(i => i.productName).join(', ');
+        } else {
+           pNames = s.productName;
+        }
+
+        // Calculate profit for this specific movement
+        let cost = 0;
+        if (s.items && s.items.length > 0) {
+           cost = s.items.reduce((sum, i) => sum + ((parseFloat(i.costAtSale) || 0) * parseInt(i.quantity || 1)), 0);
+        } else {
+           cost = (parseFloat(s.costAtSale) || 0) * (parseInt(s.quantity) || 1);
+        }
+        const saleProfit = totalAmount - cost;
+        const recognizedProfit = totalAmount > 0 ? (paidThisSession / totalAmount) * saleProfit : 0;
+        totalProfitFromSales += recognizedProfit;
+
+        movements.push({
+          type: 'sale',
+          id: s.id,
+          customer: s.customerName || 'Cliente General',
+          product: pNames,
+          paid: paidThisSession,
+          total: totalAmount,
+          balance: balance,
+          isFull: balance <= 0,
+          profit: recognizedProfit
+        });
+      }
+    });
+
+    activeExpenses.forEach(e => {
+      movements.push({
+        type: 'expense',
+        id: e.id,
+        description: e.description || 'Gasto Operativo',
+        category: e.categoria || 'Gasto',
+        amount: parseFloat(e.amount) || 0
+      });
+    });
+
+    activePurchases.forEach(p => {
+      let pNames = '';
+      if (p.items && p.items.length > 0) {
+         pNames = p.items.map(i => i.productName).join(', ');
+      } else {
+         pNames = p.productName;
+      }
+      movements.push({
+        type: 'purchase',
+        id: p.id,
+        supplier: p.supplierName || 'Proveedor',
+        product: pNames,
+        amount: parseFloat(p.total) || parseFloat(p.amount) || 0
+      });
+    });
+
+    const maxExpenseId = activeExpenses.reduce((max, e) => Math.max(max, e.id), closedIds.expense);
+    const maxPurchaseId = activePurchases.reduce((max, p) => Math.max(max, p.id), closedIds.purchase);
+    
+    return {
+      salesCount: movements.length,
+      cashIn: cashSales,
+      otherIn: otherSales,
+      cashOut: totalExpenses + totalPurchases,
+      expensesTotal: totalExpenses,
+      purchasesTotal: totalPurchases,
+      profit: totalProfitFromSales - totalExpenses, 
+      net: cashSales - (totalExpenses + totalPurchases),
+      movements: movements,
+      newClosedIds: {
+        payment: currentMaxPaymentId,
+        expense: maxExpenseId,
+        purchase: maxPurchaseId
+      }
+    };
+  }, [sales, expenses, purchases, today, closedIds]);
+
+  const handleCloseDay = () => {
+    if (dailyStats.salesCount === 0 && dailyStats.cashIn === 0 && dailyStats.otherIn === 0 && dailyStats.cashOut === 0) {
+      notify('No hay movimientos nuevos para cerrar.', 'info');
+      return;
+    }
+
+    confirm('¿Estás seguro de cerrar la caja actual? El resumen se reiniciará para nuevos movimientos.', async () => {
+      const newClosing = {
+        date: today,
+        initialCash: 0,
+        finalCash: dailyStats.net,
+        difference: 0,
+        salesTotal: dailyStats.cashIn + dailyStats.otherIn,
+        purchasesTotal: dailyStats.purchasesTotal,
+        expensesTotal: dailyStats.expensesTotal,
+        profit: dailyStats.profit,
+        notes: JSON.stringify(dailyStats.movements),
+        lastPaymentId: dailyStats.newClosedIds.payment,
+        lastExpenseId: dailyStats.newClosedIds.expense,
+        lastPurchaseId: dailyStats.newClosedIds.purchase
+      };
+      
+      try {
+        await api.post('/cash-closings', newClosing);
+
+        setLocalIds(dailyStats.newClosedIds);
+        localStorage.setItem('alta_densidad_closed_ids', JSON.stringify(dailyStats.newClosedIds));
+        // Clean up old corrupt id
+        localStorage.removeItem('alta_densidad_last_closing_id');
+        fetchData();
+        notify('Cierre de caja guardado con éxito.', 'success');
+      } catch (error) {
+        console.error("Error al cerrar caja:", error);
+        notify(`Error al guardar: ${error.message}`, 'error');
+      }
+    });
+  };
+
+  const deleteHistoryItem = (id) => {
+    confirm('¿Eliminar este registro del historial?', async () => {
+      try {
+        await api.delete(`/cash-closings/${id}`);
+        fetchData();
+        notify('Registro eliminado.', 'info');
+      } catch (error) {
+        notify('Error al eliminar registro.', 'error');
+      }
+    });
+  };
+
+  return (
+    <div className="main-content">
+      <header className="page-header">
+        <div>
+          <h2 className="title-gradient" style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Cierre de Caja</h2>
+          <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Control de flujo de efectivo diario y auditoría.</p>
+        </div>
+      </header>
+
+      <div className="stat-card-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '2rem' }}>
+        {/* Daily Summary */}
+        <div>
+          <div className="premium-card" style={{ marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2.5rem' }}>
+              <div style={{ padding: '0.75rem', borderRadius: 0, background: 'rgba(201, 169, 97, 0.1)', color: 'var(--accent-primary)' }}>
+                <Calculator size={24} />
+              </div>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 500 }}>RESUMEN DE HOY</h3>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                  <ArrowUpCircle size={16} color="var(--success)" />
+                  Ingresos en efectivo (ventas y abonos)
+                </div>
+                <div style={{ fontWeight: 500, color: 'var(--success)' }}>+${dailyStats.cashIn.toLocaleString('es-CO')}</div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                  <ArrowUpCircle size={16} color="var(--info)" />
+                  Otros medios (transferencia, Nequi, web)
+                </div>
+                <div style={{ fontWeight: 500, color: 'var(--info)' }}>+${dailyStats.otherIn.toLocaleString('es-CO')}</div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                  <ArrowDownCircle size={16} color="var(--error)" />
+                  Egresos (Gastos y Compras)
+                </div>
+                <div style={{ fontWeight: 500, color: 'var(--error)' }}>-${dailyStats.cashOut.toLocaleString('es-CO')}</div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', borderRadius: 0, background: 'rgba(47, 158, 110,0.05)' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--success)' }}>GANANCIA ESTIMADA</div>
+                <div style={{ fontWeight: 500, color: colorSigno(dailyStats.profit) }}>{conSigno(dailyStats.profit)}</div>
+              </div>
+
+              <div style={{ height: '1px', background: 'var(--glass-border)', margin: '0.5rem 0' }} />
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>EFECTIVO EN CAJA</div>
+                <div style={{ fontWeight: 500, fontSize: '1.8rem', color: dailyStats.net < 0 ? 'var(--error)' : 'var(--accent-primary)' }}>{monto(dailyStats.net)}</div>
+              </div>
+            </div>
+
+            <button 
+              onClick={handleCloseDay}
+              className="btn-primary" 
+              style={{ width: '100%', marginTop: '2.5rem', height: '56px', fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}
+            >
+              <Save size={20} />
+              CERRAR CAJA DE HOY
+            </button>
+          </div>
+          
+          <div className="premium-card" style={{ background: 'rgba(47, 158, 110,0.05)', border: '1px solid rgba(47, 158, 110,0.1)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--success)' }}>
+              <CheckCircle size={18} />
+              <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>CAJA BALANCEADA Y AUDITADA</span>
+            </div>
+          </div>
+        </div>
+
+        {/* History */}
+        <div className="premium-card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
+            <div style={{ padding: '0.75rem', borderRadius: 0, background: 'rgba(255,255,255,0.03)', color: 'var(--text-muted)' }}>
+              <History size={24} />
+            </div>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 500 }}>HISTORIAL DE CIERRES</h3>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {closingHistory.length > 0 ? closingHistory.map((h, i) => (
+              <div 
+                key={i}
+                onClick={() => setSelectedHistory(h)}
+                style={{ 
+                  padding: '1.25rem', 
+                  borderRadius: 0, 
+                  background: 'rgba(255,255,255,0.01)', 
+                  border: '1px solid var(--glass-border)',
+                  display: 'grid',
+                  gridTemplateColumns: '1.2fr 1fr 1fr 1fr',
+                  gap: '1rem',
+                  alignItems: 'center',
+                  cursor: 'pointer'
+                }}
+                className="hover-glow"
+              >
+                <div>
+                  <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{h.date}</div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{new Date(h.createdAt).toLocaleTimeString()}</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Egresos Totales</div>
+                  <div style={{ fontWeight: 500, color: 'var(--error)', fontSize: '0.85rem' }}>-${Math.round(Number(h.expensesTotal || 0) + Number(h.purchasesTotal || 0)).toLocaleString('es-CO')}</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Ganancia</div>
+                  <div style={{ fontWeight: 500, color: colorSigno(Number(h.profit || 0)), fontSize: '0.85rem' }}>{conSigno(Number(h.profit || 0))}</div>
+                </div>
+                <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '1rem' }}>
+                  <div>
+                    <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Saldo Final</div>
+                    <div style={{ fontWeight: 500, fontSize: '1rem', color: 'var(--accent-primary)' }}>{monto(Number(h.initialCash || 0) + Number(h.salesTotal || 0) - Number(h.expensesTotal || 0) - Number(h.purchasesTotal || 0))}</div>
+                  </div>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); deleteHistoryItem(h.id); }}
+                    className="btn-icon danger" title="Eliminar" aria-label="Eliminar"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            )) : (
+              <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
+                <Wallet size={48} style={{ margin: '0 auto 1.5rem', opacity: 0.2 }} />
+                <p>No hay cierres de caja registrados aún.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      {/* Modal Detalles de Cierre */}
+      <AnimatePresence>
+        {selectedHistory && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, padding: '2rem' }}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="premium-card" style={{ maxWidth: '500px', width: '100%' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.5rem', color: 'var(--accent-primary)' }}>DETALLE DE CIERRE</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{selectedHistory.date} • {new Date(selectedHistory.createdAt).toLocaleTimeString()}</p>
+                </div>
+                <button onClick={() => setSelectedHistory(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={24} /></button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '2rem' }}>
+                <div className="glass" style={{ padding: '1.5rem', borderRadius: 0, textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Movimientos</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 500 }}>{selectedHistory.movements.length}</div>
+                </div>
+                <div className="glass" style={{ padding: '1.5rem', borderRadius: 0, textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Efectivo Total</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 500, color: 'var(--accent-primary)' }}>{monto(Number(selectedHistory.initialCash || 0) + Number(selectedHistory.salesTotal || 0) - Number(selectedHistory.expensesTotal || 0) - Number(selectedHistory.purchasesTotal || 0))}</div>
+                </div>
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 0, padding: '1.5rem', border: '1px solid var(--glass-border)', marginBottom: '2rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.2rem' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Ingresos (Ventas/Abonos)</span>
+                  <span style={{ fontWeight: 500, color: 'var(--success)' }}>+${Math.round(Number(selectedHistory.salesTotal || 0)).toLocaleString('es-CO')}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.2rem' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Egresos (Gastos)</span>
+                  <span style={{ fontWeight: 500, color: 'var(--error)' }}>-${Math.round(Number(selectedHistory.expensesTotal || 0)).toLocaleString('es-CO')}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.2rem' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Egresos (Compras)</span>
+                  <span style={{ fontWeight: 500, color: 'var(--error)' }}>-${Math.round(Number(selectedHistory.purchasesTotal || 0)).toLocaleString('es-CO')}</span>
+                </div>
+                <div style={{ height: '1px', background: 'var(--glass-border)', margin: '1.2rem 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontWeight: 500 }}>GANANCIA REAL</span>
+                  <span style={{ fontWeight: 500, color: colorSigno(Number(selectedHistory.profit || 0)), fontSize: '1.2rem' }}>{conSigno(Number(selectedHistory.profit || 0))}</span>
+                </div>
+              </div>
+
+              {selectedHistory.movements && selectedHistory.movements.length > 0 && (
+                <div style={{ marginTop: '1.5rem' }}>
+                  <h4 style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '1rem', letterSpacing: '1px' }}>Detalle de Movimientos</h4>
+                  <div style={{ maxHeight: '200px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                    {selectedHistory.movements.map((m, idx) => (
+                      <div key={idx} style={{ padding: '0.75rem', borderRadius: 0, background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.03)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>
+                            {m.type === 'expense' ? `Gasto: ${m.description}` : 
+                             m.type === 'purchase' ? `Compra: ${m.supplier}` : 
+                             m.customer}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            {m.type === 'expense' ? m.category : m.product}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 500, color: m.type === 'expense' || m.type === 'purchase' ? 'var(--error)' : 'var(--success)' }}>
+                            {m.type === 'expense' || m.type === 'purchase' ? `-$${m.amount.toLocaleString('es-CO')}` : `+$${(m.paid || 0).toLocaleString('es-CO')}`}
+                          </div>
+                          {(m.type === 'sale' || !m.type) ? (
+                            <>
+                              {m.balance > 0 ? (
+                                <div style={{ fontSize: '0.65rem', color: 'var(--warning)', fontWeight: 500 }}>Debe: ${Math.round(m.balance).toLocaleString('es-CO')}</div>
+                              ) : (
+                                <div style={{ fontSize: '0.65rem', color: 'var(--success)', fontWeight: 500, textTransform: 'uppercase' }}>PAGADA</div>
+                              )}
+                              <div style={{ fontSize: '0.65rem', color: 'var(--success)', marginTop: '0.1rem', fontWeight: 500 }}>Ganancia: {conSigno(m.profit || 0)}</div>
+                            </>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button onClick={() => setSelectedHistory(null)} className="btn-primary" style={{ width: '100%', marginTop: '2.5rem', height: '50px' }}>CERRAR DETALLE</button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+export default CashRegisterAnterior;

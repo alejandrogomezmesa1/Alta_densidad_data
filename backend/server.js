@@ -10,7 +10,9 @@ import { ejecutarMigraciones } from './migrator.js';
 import { esquema, actualizarEsquema } from './estado.js';
 import { leerConfiguraciones, guardarConfiguraciones, definicionesPublicas } from './configuraciones.js';
 import { moverStock, moverVenta, auditarStock, componentesDe, resumenKits, registrarCambioCosto } from './inventario.js';
-import { insertarPago, categoriaGastoId } from './catalogos.js';
+import { insertarPago, categoriaGastoId, metodoPagoId } from './catalogos.js';
+import { sincronizarDinero, sesionAbierta, resumenSesion, sesionPublica, cerrarSesion, movimientoManual, auditarDinero } from './caja.js';
+import { anularVenta, ventaAnulada } from './anulaciones.js';
 import { devolverVenta, guardarConsumosKit, catalogoDecants, CATEGORIA_DECANTS } from './recetas.js';
 import { fechaDocumento, resolverCliente, validarLineasVenta, validarItemCompra, redondear2 } from './validaciones.js';
 
@@ -129,6 +131,22 @@ try {
 } catch (error) {
     console.error('CRITICAL: Could not connect to MySQL. Application will start but API calls will fail.');
     console.error(error.message);
+}
+
+// Ejecuta fn(conexión) en una transacción: commit si termina, rollback si lanza
+async function transaccion(fn) {
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        const resultado = await fn(connection);
+        await connection.commit();
+        return resultado;
+    } catch (error) {
+        await connection.rollback().catch(() => {});
+        throw error;
+    } finally {
+        connection.release();
+    }
 }
 
 // --- PROVEEDORES (Suppliers) ---
@@ -707,13 +725,14 @@ app.get('/api/sales', async (req, res, next) => {
                    c.cedula as idDocument, c.ciudad as city, c.direccion as address
             FROM ventas v
             LEFT JOIN clientes c ON v.cliente_id = c.id
+            ${esquema.caja ? 'WHERE v.anulada_en IS NULL' : ''}
             ORDER BY v.fecha DESC
         `);
         if (!sales.length) return res.json([]);
 
         // Dos consultas en total (antes eran 2 por cada venta)
         const [payments] = await db.query(esquema.metodosPago
-            ? 'SELECT p.id, p.venta_id as saleId, p.monto as amount, p.fecha as date, COALESCE(m.nombre, p.metodo) as method, COALESCE(m.es_efectivo, 1) as isCash FROM pagos p LEFT JOIN metodos_pago m ON m.id = p.metodo_pago_id ORDER BY p.id ASC'
+            ? `SELECT p.id, p.venta_id as saleId, p.monto as amount, p.fecha as date, COALESCE(m.nombre, p.metodo) as method, COALESCE(m.es_efectivo, 1) as isCash FROM pagos p LEFT JOIN metodos_pago m ON m.id = p.metodo_pago_id ${esquema.caja ? 'WHERE p.anulada_en IS NULL' : ''} ORDER BY p.id ASC`
             : 'SELECT id, venta_id as saleId, monto as amount, fecha as date, metodo as method, 1 as isCash FROM pagos ORDER BY id ASC');
         const [items] = await db.query(`SELECT vd.id, vd.venta_id as saleId, vd.inventario_id as productId, vd.cantidad as quantity, vd.precio_unitario as unitPrice, vd.costo_al_vender as costAtSale, ${esquema.integracion ? 'COALESCE(p.nombre, vd.descripcion)' : 'p.nombre'} as productName FROM venta_detalles vd LEFT JOIN inventario p ON vd.inventario_id = p.id ORDER BY vd.id ASC`);
 
@@ -753,6 +772,11 @@ app.post('/api/sales', async (req, res, next) => {
         if (esquema.blindaje) {
             await validarLineasVenta(connection, items);
             finalCustomerId = await resolverCliente(connection, req.body);
+            // De contado puede ser «Consumidor final»; a crédito hay que saber quién debe
+            if (esquema.caja && !finalCustomerId && initialPayment < total) {
+                await connection.rollback();
+                return res.status(400).json({ error: 'Una venta a crédito necesita el nombre del cliente' });
+            }
         } else {
             finalCustomerId = customerId || null;
             if (!finalCustomerId && customerName) {
@@ -771,7 +795,7 @@ app.post('/api/sales', async (req, res, next) => {
         const saleId = saleResult.insertId;
 
         if (initialPayment > 0) {
-            await insertarPago(connection, { ventaId: saleId, monto: initialPayment, fecha, metodo: method, crear: !esquema.blindaje });
+            await insertarPago(connection, { ventaId: saleId, monto: initialPayment, fecha, metodo: method, crear: !esquema.blindaje, usuarioId: req.user?.id });
         }
 
         for (const item of items) await insertarDetalle(connection, saleId, item, req.user?.id);
@@ -803,8 +827,12 @@ app.post('/api/sales/:id/payments', async (req, res, next) => {
             await connection.rollback();
             return res.status(404).json({ error: 'Venta no encontrada' });
         }
+        if (await ventaAnulada(connection, id)) {
+            await connection.rollback();
+            return res.status(400).json({ error: 'La venta está anulada: no recibe abonos' });
+        }
         const total = toNumber(saleRows[0].total);
-        const [paidRows] = await connection.query('SELECT COALESCE(SUM(monto), 0) as totalPaid FROM pagos WHERE venta_id = ?', [id]);
+        const [paidRows] = await connection.query(`SELECT COALESCE(SUM(monto), 0) as totalPaid FROM pagos WHERE venta_id = ?${esquema.caja ? ' AND anulada_en IS NULL' : ''}`, [id]);
         const saldo = total - toNumber(paidRows[0].totalPaid);
 
         if (amount - saldo > 0.01) {
@@ -812,7 +840,7 @@ app.post('/api/sales/:id/payments', async (req, res, next) => {
             return res.status(400).json({ error: `El abono supera el saldo pendiente ($${Math.round(saldo).toLocaleString('es-CO')})` });
         }
 
-        await insertarPago(connection, { ventaId: id, monto: amount, fecha, metodo: method, crear: !esquema.blindaje });
+        await insertarPago(connection, { ventaId: id, monto: amount, fecha, metodo: method, crear: !esquema.blindaje, usuarioId: req.user?.id });
         await connection.query('UPDATE ventas SET estado = ? WHERE id = ?', [saldo - amount <= 0.01 ? 'paid' : 'pending', id]);
 
         await connection.commit();
@@ -846,16 +874,20 @@ app.put('/api/sales/:id', async (req, res, next) => {
             await connection.rollback();
             return res.status(400).json({ error: 'Las ventas de la tienda web no se editan aquí: se anulan con el reembolso en Mercado Pago' });
         }
+        if (await ventaAnulada(connection, id)) {
+            await connection.rollback();
+            return res.status(400).json({ error: 'La venta está anulada: no se puede editar' });
+        }
         const fecha = esquema.blindaje ? fechaDocumento(date, { original: actual[0].fecha }) : date;
 
         // Editar productos o precios no debe cambiar un estado de pago ya real:
         // se recalcula con los abonos registrados. Sin abonos se conserva el estado anterior.
-        const [pagos] = await connection.query('SELECT COUNT(*) as n, COALESCE(SUM(monto), 0) as totalPaid FROM pagos WHERE venta_id = ?', [id]);
+        const [pagos] = await connection.query(`SELECT COUNT(*) as n, COALESCE(SUM(monto), 0) as totalPaid FROM pagos WHERE venta_id = ?${esquema.caja ? ' AND anulada_en IS NULL' : ''}`, [id]);
         const pagado = toNumber(pagos[0].totalPaid);
         // Lo ya cobrado no desaparece: el total no puede quedar por debajo de lo pagado
         if (esquema.blindaje && pagado - total > 0.01) {
             await connection.rollback();
-            return res.status(400).json({ error: `Esta venta ya tiene $${Math.round(pagado).toLocaleString('es-CO')} pagados: el nuevo total ($${Math.round(total).toLocaleString('es-CO')}) no puede quedar por debajo. Para devolver dinero, elimina la venta y regístrala de nuevo.` });
+            return res.status(400).json({ error: `Esta venta ya tiene $${Math.round(pagado).toLocaleString('es-CO')} pagados: el nuevo total ($${Math.round(total).toLocaleString('es-CO')}) no puede quedar por debajo. Para devolver dinero, anula la venta y regístrala de nuevo.` });
         }
         const status = Number(pagos[0].n) > 0
             ? (pagado >= total - 0.01 ? 'paid' : 'pending')
@@ -905,6 +937,12 @@ app.delete('/api/sales/:id', async (req, res, next) => {
             await connection.rollback();
             return res.status(400).json({ error: 'Las ventas de la tienda web no se eliminan aquí: se anulan con el reembolso en Mercado Pago' });
         }
+        // Con la caja por sesiones nada se borra: se anula y el dinero vuelve en la caja abierta
+        if (esquema.caja) {
+            const r = await anularVenta(connection, id, { motivo: req.query.reason || 'Venta anulada desde el panel', usuarioId: req.user?.id });
+            await connection.commit();
+            return res.json({ message: 'Venta anulada: inventario devuelto y devolución registrada en la caja', ...r });
+        }
 
         // Vuelve todo lo que salió: productos, componentes de kits y lo que descontó la receta de un decant
         await devolverVenta(connection, id, 'Venta eliminada', req.user?.id);
@@ -922,9 +960,14 @@ app.delete('/api/sales/:id', async (req, res, next) => {
 });
 
 // --- COMPRAS (Purchases) ---
+// Con la migración 016 las anuladas no se listan ni cuentan (quedan como historia)
 app.get('/api/purchases', async (req, res, next) => {
     try {
-        const [rows] = await db.query(`SELECT co.id, co.inventario_id as productId, co.proveedor_id as supplierId, co.cantidad, co.monto as amount, co.precio_unitario as unitPrice, co.fecha as date, pr.nombre as productName, prve.nombre as supplierName FROM compras co LEFT JOIN inventario pr ON co.inventario_id = pr.id LEFT JOIN proveedores prve ON co.proveedor_id = prve.id ORDER BY co.fecha DESC`);
+        const [rows] = await db.query(`SELECT co.id, co.inventario_id as productId, co.proveedor_id as supplierId, co.cantidad, co.monto as amount, co.precio_unitario as unitPrice, co.fecha as date, pr.nombre as productName, prve.nombre as supplierName
+            ${esquema.caja ? ', mp.nombre as method, mp.es_efectivo as isCash' : ''}
+            FROM compras co LEFT JOIN inventario pr ON co.inventario_id = pr.id LEFT JOIN proveedores prve ON co.proveedor_id = prve.id
+            ${esquema.caja ? 'LEFT JOIN metodos_pago mp ON mp.id = co.metodo_pago_id WHERE co.anulada_en IS NULL' : ''}
+            ORDER BY co.fecha DESC`);
         res.json(rows || []);
     } catch (error) { next(error); }
 });
@@ -939,8 +982,15 @@ const datosCompra = (body) => {
         precioUnitario,
         // El monto de la compra es cantidad × precio unitario (antes se guardaba el que llegara)
         monto: esquema.blindaje ? redondear2(cantidad * precioUnitario) : parseFloat(body.amount || body.total || 0) || 0,
-        fecha: body.date
+        fecha: body.date,
+        metodo: body.method
     };
+};
+
+const errorCompra = (c) => {
+    if (!c.invId || !c.cantidad) return 'Producto y cantidad son obligatorios';
+    if (!(c.precioUnitario > 0)) return 'El precio unitario de la compra debe ser mayor que 0';
+    return null;
 };
 
 // Entrada de una compra: suma stock y recalcula el costo promedio (reglas I-02, I-03)
@@ -949,9 +999,9 @@ const entradaCompra = (connection, compraId, c, usuarioId) => moverStock(connect
     origenTipo: 'compra', origenId: compraId, usuarioId
 });
 
-// Reversa de una compra (edición o eliminación). Si esas unidades ya se vendieron, no se permite.
+// Reversa de una compra (edición o anulación). Si esas unidades ya se vendieron, no se permite.
 const reversaCompra = async (connection, compraId, motivo, usuarioId) => {
-    const [rows] = await connection.query('SELECT inventario_id, cantidad, precio_unitario FROM compras WHERE id = ?', [compraId]);
+    const [rows] = await connection.query('SELECT inventario_id, cantidad, precio_unitario FROM compras WHERE id = ? FOR UPDATE', [compraId]);
     if (rows.length && rows[0].inventario_id) {
         await moverStock(connection, {
             inventarioId: rows[0].inventario_id, cantidad: -Number(rows[0].cantidad), tipo: 'anulacion_compra',
@@ -961,100 +1011,120 @@ const reversaCompra = async (connection, compraId, motivo, usuarioId) => {
     return rows.length > 0;
 };
 
+// Un documento anulado ya no se edita ni se vuelve a anular
+async function exigirVigente(connection, tabla, id, etiqueta) {
+    const [[fila]] = await connection.query(`SELECT ${esquema.caja ? 'anulada_en' : 'NULL AS anulada_en'}, fecha FROM ${tabla} WHERE id = ? FOR UPDATE`, [id]);
+    if (!fila) throw Object.assign(new Error(`${etiqueta} no encontrada`), { status: 404 });
+    if (fila.anulada_en) throw Object.assign(new Error(`${etiqueta} está anulada`), { status: 400 });
+    return fila;
+}
+
+// Lo que salió de la caja por una compra (con su método); 0 si se anuló
+const dineroCompra = (connection, id, monto, metodoPagoId, nombre, usuarioId) => sincronizarDinero(connection, {
+    origenTipo: 'compra', origenId: Number(id), tipo: 'compra', monto: -monto, metodoPagoId, descripcion: `Compra #${id}: ${nombre}`, usuarioId });
+
+const nombreItem = async (connection, id) => (await connection.query('SELECT nombre FROM inventario WHERE id = ?', [id]))[0][0]?.nombre || `#${id}`;
+
 app.post('/api/purchases', async (req, res, next) => {
     const c = datosCompra(req.body);
-    if (!c.invId || !c.cantidad) return res.status(400).json({ error: 'Producto y cantidad son obligatorios' });
-    if (!(c.precioUnitario > 0)) return res.status(400).json({ error: 'El precio unitario de la compra debe ser mayor que 0' });
-    let connection;
+    if (errorCompra(c)) return res.status(400).json({ error: errorCompra(c) });
     try {
         if (esquema.blindaje) c.fecha = fechaDocumento(c.fecha, { campo: 'La fecha de la compra' });
-        connection = await db.getConnection();
-        await connection.beginTransaction();
-        if (esquema.blindaje) await validarItemCompra(connection, c.invId);
-        const [result] = await connection.query(
-            'INSERT INTO compras (inventario_id, proveedor_id, cantidad, monto, precio_unitario, fecha) VALUES (?, ?, ?, ?, ?, ?)',
-            [c.invId, c.suppId, c.cantidad, c.monto, c.precioUnitario, c.fecha]
-        );
-        await entradaCompra(connection, result.insertId, c, req.user?.id);
-        await connection.commit();
-        res.status(201).json({ id: result.insertId, ...req.body });
-    } catch (error) {
-        if (connection) await connection.rollback();
-        next(error);
-    } finally {
-        if (connection) connection.release();
-    }
+        const id = await transaccion(async (connection) => {
+            if (esquema.blindaje) await validarItemCompra(connection, c.invId);
+            const metodoId = esquema.caja ? await metodoPagoId(connection, c.metodo, { crear: false }) : null;
+            const [result] = await connection.query(
+                `INSERT INTO compras (inventario_id, proveedor_id, cantidad, monto, precio_unitario, fecha${esquema.caja ? ', metodo_pago_id' : ''}) VALUES (?, ?, ?, ?, ?, ?${esquema.caja ? ', ?' : ''})`,
+                [c.invId, c.suppId, c.cantidad, c.monto, c.precioUnitario, c.fecha, ...(esquema.caja ? [metodoId] : [])]
+            );
+            await entradaCompra(connection, result.insertId, c, req.user?.id);
+            await dineroCompra(connection, result.insertId, c.monto, metodoId, await nombreItem(connection, c.invId), req.user?.id);
+            return result.insertId;
+        });
+        res.status(201).json({ id, ...req.body, amount: c.monto });
+    } catch (error) { next(error); }
 });
 
 app.put('/api/purchases/:id', async (req, res, next) => {
     const { id } = req.params;
     const c = datosCompra(req.body);
-    if (!c.invId || !c.cantidad) return res.status(400).json({ error: 'Producto y cantidad son obligatorios' });
-    if (!(c.precioUnitario > 0)) return res.status(400).json({ error: 'El precio unitario de la compra debe ser mayor que 0' });
-    let connection;
+    if (errorCompra(c)) return res.status(400).json({ error: errorCompra(c) });
     try {
-        connection = await db.getConnection();
-        await connection.beginTransaction();
-        if (esquema.blindaje) {
-            const [orig] = await connection.query('SELECT fecha FROM compras WHERE id = ?', [id]);
-            c.fecha = fechaDocumento(c.fecha, { original: orig[0]?.fecha, campo: 'La fecha de la compra' });
-            await validarItemCompra(connection, c.invId);
-        }
-        if (!(await reversaCompra(connection, id, 'Edición de la compra', req.user?.id))) {
-            await connection.rollback();
-            return res.status(404).json({ error: 'Compra no encontrada' });
-        }
-        await connection.query('UPDATE compras SET inventario_id = ?, proveedor_id = ?, cantidad = ?, monto = ?, precio_unitario = ?, fecha = ? WHERE id = ?',
-            [c.invId, c.suppId, c.cantidad, c.monto, c.precioUnitario, c.fecha, id]);
-        await entradaCompra(connection, Number(id), c, req.user?.id);
-        await connection.commit();
-        res.json({ id, ...req.body });
-    } catch (error) {
-        if (connection) await connection.rollback();
-        next(error);
-    } finally {
-        if (connection) connection.release();
-    }
+        await transaccion(async (connection) => {
+            const orig = await exigirVigente(connection, 'compras', id, 'La compra');
+            if (esquema.blindaje) {
+                c.fecha = fechaDocumento(c.fecha, { original: orig.fecha, campo: 'La fecha de la compra' });
+                await validarItemCompra(connection, c.invId);
+            }
+            const metodoId = esquema.caja ? await metodoPagoId(connection, c.metodo, { crear: false }) : null;
+            await reversaCompra(connection, id, 'Edición de la compra', req.user?.id);
+            await connection.query(`UPDATE compras SET inventario_id = ?, proveedor_id = ?, cantidad = ?, monto = ?, precio_unitario = ?, fecha = ?${esquema.caja ? ', metodo_pago_id = ?' : ''} WHERE id = ?`,
+                [c.invId, c.suppId, c.cantidad, c.monto, c.precioUnitario, c.fecha, ...(esquema.caja ? [metodoId] : []), id]);
+            await entradaCompra(connection, Number(id), c, req.user?.id);
+            // Si cambió el monto o el método, la diferencia queda en la caja abierta
+            await dineroCompra(connection, id, c.monto, metodoId, await nombreItem(connection, c.invId), req.user?.id);
+        });
+        res.json({ id, ...req.body, amount: c.monto });
+    } catch (error) { next(error); }
 });
 
+// Anular una compra: sale del inventario lo que entró y el dinero vuelve en la caja abierta
 app.delete('/api/purchases/:id', async (req, res, next) => {
     const { id } = req.params;
-    let connection;
+    const motivo = String(req.query.reason || 'Compra anulada').substring(0, 255);
     try {
-        connection = await db.getConnection();
-        await connection.beginTransaction();
-        await reversaCompra(connection, id, 'Compra eliminada', req.user?.id);
-        await connection.query('DELETE FROM compras WHERE id = ?', [id]);
-        await connection.commit();
-        res.json({ message: 'Purchase deleted and stock adjusted' });
-    } catch (error) {
-        if (connection) await connection.rollback();
-        next(error);
-    } finally {
-        if (connection) connection.release();
-    }
+        await transaccion(async (connection) => {
+            await exigirVigente(connection, 'compras', id, 'La compra');
+            await reversaCompra(connection, id, motivo, req.user?.id);
+            if (!esquema.caja) {
+                await connection.query('DELETE FROM compras WHERE id = ?', [id]);
+                return;
+            }
+            const [[compra]] = await connection.query('SELECT inventario_id, metodo_pago_id FROM compras WHERE id = ?', [id]);
+            await connection.query('UPDATE compras SET anulada_en = NOW(), anulada_por = ?, motivo_anulacion = ? WHERE id = ?', [req.user?.id || null, motivo, id]);
+            await dineroCompra(connection, id, 0, compra.metodo_pago_id, `anulada (${await nombreItem(connection, compra.inventario_id)})`, req.user?.id);
+        });
+        res.json({ message: esquema.caja ? 'Compra anulada: stock y caja ajustados' : 'Purchase deleted and stock adjusted' });
+    } catch (error) { next(error); }
 });
 
 // --- GASTOS (Expenses) ---
 app.get('/api/expenses', async (req, res, next) => {
     try {
         const [rows] = await db.query(esquema.categoriasGasto
-            ? 'SELECT g.id, g.descripcion as description, g.monto as amount, COALESCE(c.nombre, g.categoria) as category, g.fecha as date FROM gastos g LEFT JOIN categorias_gasto c ON c.id = g.categoria_id ORDER BY g.fecha DESC'
+            ? `SELECT g.id, g.descripcion as description, g.monto as amount, COALESCE(c.nombre, g.categoria) as category, g.fecha as date
+                ${esquema.caja ? ', mp.nombre as method, mp.es_efectivo as isCash' : ''}
+               FROM gastos g LEFT JOIN categorias_gasto c ON c.id = g.categoria_id
+               ${esquema.caja ? 'LEFT JOIN metodos_pago mp ON mp.id = g.metodo_pago_id WHERE g.anulada_en IS NULL' : ''}
+               ORDER BY g.fecha DESC`
             : 'SELECT id, descripcion as description, monto as amount, categoria as category, fecha as date FROM gastos ORDER BY fecha DESC');
         res.json(rows);
     } catch (error) { next(error); }
 });
+
+const dineroGasto = (connection, id, monto, metodoPagoId, descripcion, usuarioId) => sincronizarDinero(connection, {
+    origenTipo: 'gasto', origenId: Number(id), tipo: 'gasto', monto: -monto, metodoPagoId, descripcion: `Gasto #${id}: ${descripcion}`, usuarioId });
 
 app.post('/api/expenses', async (req, res, next) => {
     const { description, amount, category } = req.body;
     if (!String(description || '').trim() || !(Number(amount) > 0)) return res.status(400).json({ error: 'La descripción y un monto mayor que 0 son obligatorios' });
     try {
         const date = esquema.blindaje ? fechaDocumento(req.body.date, { campo: 'La fecha del gasto' }) : req.body.date;
-        const categoriaId = await categoriaGastoId(db, category, { crear: !esquema.blindaje });
-        const [result] = esquema.categoriasGasto
-            ? await db.query('INSERT INTO gastos (descripcion, monto, categoria, categoria_id, fecha) VALUES (?, ?, ?, ?, ?)', [description, amount, category || 'Otros', categoriaId, date])
-            : await db.query('INSERT INTO gastos (descripcion, monto, categoria, fecha) VALUES (?, ?, ?, ?)', [description, amount, category, date]);
-        res.status(201).json({ id: result.insertId, ...req.body });
+        const monto = redondear2(amount);
+        const id = await transaccion(async (connection) => {
+            const categoriaId = await categoriaGastoId(connection, category, { crear: !esquema.blindaje });
+            if (!esquema.categoriasGasto) {
+                const [r] = await connection.query('INSERT INTO gastos (descripcion, monto, categoria, fecha) VALUES (?, ?, ?, ?)', [description, monto, category, date]);
+                return r.insertId;
+            }
+            const metodoId = esquema.caja ? await metodoPagoId(connection, req.body.method, { crear: false }) : null;
+            const [r] = await connection.query(
+                `INSERT INTO gastos (descripcion, monto, categoria, categoria_id, fecha${esquema.caja ? ', metodo_pago_id' : ''}) VALUES (?, ?, ?, ?, ?${esquema.caja ? ', ?' : ''})`,
+                [description, monto, category || 'Otros', categoriaId, date, ...(esquema.caja ? [metodoId] : [])]);
+            await dineroGasto(connection, r.insertId, monto, metodoId, description, req.user?.id);
+            return r.insertId;
+        });
+        res.status(201).json({ id, ...req.body });
     } catch (error) { next(error); }
 });
 
@@ -1063,26 +1133,39 @@ app.put('/api/expenses/:id', async (req, res, next) => {
     const { description, amount, category } = req.body;
     if (!String(description || '').trim() || !(Number(amount) > 0)) return res.status(400).json({ error: 'La descripción y un monto mayor que 0 son obligatorios' });
     try {
-        let date = req.body.date;
-        if (esquema.blindaje) {
-            const [orig] = await db.query('SELECT fecha FROM gastos WHERE id = ?', [id]);
-            if (!orig.length) return res.status(404).json({ error: 'Gasto no encontrado' });
-            date = fechaDocumento(date, { original: orig[0].fecha, campo: 'La fecha del gasto' });
-        }
-        const categoriaId = await categoriaGastoId(db, category, { crear: !esquema.blindaje });
-        if (esquema.categoriasGasto) {
-            await db.query('UPDATE gastos SET descripcion = ?, monto = ?, categoria = ?, categoria_id = ?, fecha = ? WHERE id = ?', [description, amount, category || 'Otros', categoriaId, date, id]);
-        } else {
-            await db.query('UPDATE gastos SET descripcion = ?, monto = ?, categoria = ?, fecha = ? WHERE id = ?', [description, amount, category, date, id]);
-        }
+        const monto = redondear2(amount);
+        await transaccion(async (connection) => {
+            const orig = await exigirVigente(connection, 'gastos', id, 'El gasto');
+            const date = esquema.blindaje ? fechaDocumento(req.body.date, { original: orig.fecha, campo: 'La fecha del gasto' }) : req.body.date;
+            const categoriaId = await categoriaGastoId(connection, category, { crear: !esquema.blindaje });
+            if (!esquema.categoriasGasto) {
+                await connection.query('UPDATE gastos SET descripcion = ?, monto = ?, categoria = ?, fecha = ? WHERE id = ?', [description, monto, category, date, id]);
+                return;
+            }
+            const metodoId = esquema.caja ? await metodoPagoId(connection, req.body.method, { crear: false }) : null;
+            await connection.query(`UPDATE gastos SET descripcion = ?, monto = ?, categoria = ?, categoria_id = ?, fecha = ?${esquema.caja ? ', metodo_pago_id = ?' : ''} WHERE id = ?`,
+                [description, monto, category || 'Otros', categoriaId, date, ...(esquema.caja ? [metodoId] : []), id]);
+            await dineroGasto(connection, id, monto, metodoId, description, req.user?.id);
+        });
         res.json({ id, ...req.body });
     } catch (error) { next(error); }
 });
 
 app.delete('/api/expenses/:id', async (req, res, next) => {
+    const { id } = req.params;
+    const motivo = String(req.query.reason || 'Gasto anulado').substring(0, 255);
     try {
-        await db.query('DELETE FROM gastos WHERE id = ?', [req.params.id]);
-        res.json({ message: 'Expense deleted' });
+        await transaccion(async (connection) => {
+            await exigirVigente(connection, 'gastos', id, 'El gasto');
+            if (!esquema.caja) {
+                await connection.query('DELETE FROM gastos WHERE id = ?', [id]);
+                return;
+            }
+            const [[g]] = await connection.query('SELECT descripcion, metodo_pago_id FROM gastos WHERE id = ?', [id]);
+            await connection.query('UPDATE gastos SET anulada_en = NOW(), anulada_por = ?, motivo_anulacion = ? WHERE id = ?', [req.user?.id || null, motivo, id]);
+            await dineroGasto(connection, id, 0, g.metodo_pago_id, `anulado (${g.descripcion})`, req.user?.id);
+        });
+        res.json({ message: esquema.caja ? 'Gasto anulado: la caja se ajustó' : 'Expense deleted' });
     } catch (error) { next(error); }
 });
 
@@ -1103,7 +1186,70 @@ app.get('/api/expense-categories', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
-// --- CIERRES DE CAJA (Cash Closings) ---
+// --- CAJA POR SESIONES (migración 016) ---
+const sinCaja = (res) => res.status(503).json({ error: 'La caja por sesiones aún no está disponible (migración 016 pendiente)' });
+
+// Sesión abierta con su resumen en vivo y sus movimientos
+app.get('/api/cash/current', async (req, res, next) => {
+    if (!esquema.caja) return sinCaja(res);
+    try {
+        const sesion = await sesionAbierta(db);
+        res.json({ session: sesionPublica(sesion), summary: await resumenSesion(db, sesion, { conMovimientos: true }) });
+    } catch (error) { next(error); }
+});
+
+// Historial de sesiones cerradas (la más reciente primero)
+app.get('/api/cash/sessions', async (req, res, next) => {
+    if (!esquema.caja) return sinCaja(res);
+    try {
+        const [rows] = await db.query(`SELECT s.*, ua.username AS abrio, uc.username AS cerro FROM sesiones_caja s
+            LEFT JOIN usuarios ua ON ua.id = s.abierta_por LEFT JOIN usuarios uc ON uc.id = s.cerrada_por
+            WHERE s.abierta IS NULL ORDER BY s.id DESC LIMIT 200`);
+        res.json(rows.map((s) => {
+            let resumen = null;
+            try { resumen = s.resumen ? JSON.parse(s.resumen) : null; } catch { /* resumen ilegible: se muestra sin él */ }
+            return { ...sesionPublica(s), openedBy: s.abrio, closedBy: s.cerro, summary: resumen };
+        }));
+    } catch (error) { next(error); }
+});
+
+app.get('/api/cash/sessions/:id', async (req, res, next) => {
+    if (!esquema.caja) return sinCaja(res);
+    try {
+        const [[s]] = await db.query('SELECT * FROM sesiones_caja WHERE id = ?', [req.params.id]);
+        if (!s) return res.status(404).json({ error: 'Sesión no encontrada' });
+        res.json({ session: sesionPublica(s), summary: await resumenSesion(db, s, { conMovimientos: true }) });
+    } catch (error) { next(error); }
+});
+
+// Ingreso o retiro manual de efectivo: { type: 'ingreso' | 'retiro', amount, reason }
+app.post('/api/cash/movements', async (req, res, next) => {
+    if (!esquema.caja) return sinCaja(res);
+    try {
+        await transaccion((c) => movimientoManual(c, { tipo: req.body.type, monto: req.body.amount, motivo: req.body.reason, usuarioId: req.user?.id }));
+        res.status(201).json({ ok: true });
+    } catch (error) { next(error); }
+});
+
+// Cerrar la caja: { sessionId, countedCash, withdrawn, notes }. El servidor calcula lo esperado.
+app.post('/api/cash/close', async (req, res, next) => {
+    if (!esquema.caja) return sinCaja(res);
+    try {
+        const r = await transaccion((c) => cerrarSesion(c, { sesionId: req.body.sessionId, contado: req.body.countedCash,
+            retirado: req.body.withdrawn, notas: req.body.notes, usuarioId: req.user?.id }));
+        res.status(201).json(r);
+    } catch (error) { next(error); }
+});
+
+// Verificación: documentos cuyo libro de dinero no suma su monto vigente
+app.get('/api/cash/audit', async (req, res, next) => {
+    if (!esquema.caja) return res.json({ disponible: false, diferencias: [] });
+    try {
+        res.json({ disponible: true, diferencias: await auditarDinero(db) });
+    } catch (error) { next(error); }
+});
+
+// --- CIERRES DE CAJA DEL SISTEMA ANTERIOR (solo lectura desde la migración 016) ---
 app.get('/api/cash-closings', async (req, res, next) => {
     try {
         const [rows] = await db.query(`
@@ -1118,6 +1264,7 @@ app.get('/api/cash-closings', async (req, res, next) => {
 });
 
 app.post('/api/cash-closings', async (req, res, next) => {
+    if (esquema.caja) return res.status(410).json({ error: 'El cierre de caja ahora se hace por sesiones: recarga el panel' });
     const { date, initialCash, finalCash, difference, salesTotal, purchasesTotal, expensesTotal, profit, notes,
             lastPaymentId, lastExpenseId, lastPurchaseId } = req.body;
     try {
@@ -1137,6 +1284,7 @@ app.post('/api/cash-closings', async (req, res, next) => {
 });
 
 app.delete('/api/cash-closings/:id', async (req, res, next) => {
+    if (esquema.caja) return res.status(410).json({ error: 'Los cierres son historia: no se borran' });
     try {
         await db.query('DELETE FROM cierres_caja WHERE id = ?', [req.params.id]);
         res.json({ message: 'Cash closing deleted' });
@@ -1148,6 +1296,8 @@ app.use((err, req, res, next) => {
     // Errores de negocio (stock insuficiente, datos inválidos) se explican al usuario
     if (err.status && err.status < 500) return res.status(err.status).json({ error: err.message });
     if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Ya existe un registro con ese dato único (código o cédula)' });
+    // Dos operaciones cruzadas (p. ej. dos cierres de caja a la vez): MySQL revierte una; nada quedó a medias
+    if (err.code === 'ER_LOCK_DEADLOCK') return res.status(409).json({ error: 'Otra operación se cruzó con esta y no se guardó: recarga e intenta de nuevo' });
     console.error('API Error:', err.message);
     res.status(500).json({ error: 'Internal Server Error' });
 });

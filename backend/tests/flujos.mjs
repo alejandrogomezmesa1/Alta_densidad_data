@@ -3,7 +3,8 @@
 // ------------------------------------------------------------
 // Recorre de punta a punta los flujos del negocio contra un backend corriendo sobre una COPIA local
 // de la base: consultar existencias, ingresar inventario (crear, comprar, ajustar), vender (contado,
-// crédito, kits, ml, edición, anulación), ventas web, gastos, caja e integridad referencial.
+// crédito, kits, ml, edición, anulación), ventas web, gastos, caja por sesiones (libro de dinero,
+// arqueo, anulaciones) e integridad referencial.
 // Después de cada bloque verifica que el libro de inventario cuadre con el stock.
 //
 //   1. Cargar un respaldo en un MySQL local, en una base cuyo nombre termine en _test.
@@ -274,9 +275,21 @@ let pid;
     reg(G, 'editar una venta (más unidades) mueve el stock y la deja pendiente', mas.status === 200 && (await stock(pid)) === 7 && mas.body.status === 'pending');
     reg(G, 'editar no crea otro cliente', Number((await uno('SELECT COUNT(*) n FROM clientes')).n) === nC);
     reg(G, 'editar conserva la fecha y hora original', (await uno('SELECT fecha FROM ventas WHERE id=?', [v4.body.id])).fecha === f4);
-    reg(G, 'eliminar una venta pagada deja la anulación en la caja', null, `fase B: hoy se borran sus pagos`);
     await call('DELETE', `/sales/${v4.body.id}`);
-    reg(G, 'eliminar la venta devuelve el stock', (await stock(pid)) === 10);
+    reg(G, 'anular la venta devuelve el stock', (await stock(pid)) === 10);
+    const anulada = await uno('SELECT anulada_en, (SELECT COUNT(*) FROM pagos WHERE venta_id = ventas.id AND anulada_en IS NOT NULL) AS pagos FROM ventas WHERE id=?', [v4.body.id]);
+    reg(G, 'la venta anulada queda como historia con sus pagos anulados', !!anulada?.anulada_en && Number(anulada.pagos) === 1);
+    reg(G, 'la venta anulada ya no aparece en la lista', !(await call('GET', '/sales')).body.some((x) => x.id === v4.body.id));
+    reg(G, 'una venta anulada no se edita', (await call('PUT', `/sales/${v4.body.id}`, { date: hoy, customerName: 'Cliente Edición', method: 'Efectivo', items: [{ productId: pid, quantity: 1, unitPrice: 50000 }] })).status === 400);
+    reg(G, 'una venta anulada no recibe abonos', (await call('POST', `/sales/${v4.body.id}/payments`, { amount: 1000, date: hoy, method: 'Efectivo' })).status === 400);
+    reg(G, 'una venta no se anula dos veces', (await call('DELETE', `/sales/${v4.body.id}`)).status === 400 && (await stock(pid)) === 10);
+
+    // Consumidor final: de contado sin cliente sí; a crédito no
+    const cf = await call('POST', '/sales', { date: hoy, method: 'Efectivo', initialPayment: 50000, items: [{ productId: pid, quantity: 1, unitPrice: 50000 }] });
+    reg(G, 'venta de contado sin cliente (Consumidor final)', cf.status === 201 && (await uno('SELECT cliente_id c FROM ventas WHERE id=?', [cf.body.id])).c === null);
+    await call('DELETE', `/sales/${cf.body.id}`);
+    const cred = await call('POST', '/sales', { date: hoy, method: 'Efectivo', initialPayment: 10000, items: [{ productId: pid, quantity: 1, unitPrice: 50000 }] });
+    reg(G, 'venta a crédito sin cliente rechazada', cred.status === 400 && (await stock(pid)) === 10, cred.body.error);
 
     reg(G, 'venta sin fecha rechazada con mensaje claro', (await venta([{ productId: pid, quantity: 1, unitPrice: 50000 }], { date: undefined })).status === 400);
     reg(G, 'venta con fecha futura rechazada', (await venta([{ productId: pid, quantity: 1, unitPrice: 50000 }], { date: '2099-01-01' })).status === 400);
@@ -299,6 +312,9 @@ let pid;
     reg(G, 'el panel sabe que la venta es web', lista?.origin === 'web');
     const c = await integ('POST', `/internal/v1/sales/${ref}/cancel`);
     reg(G, 'reembolso web devuelve el stock', c.body?.cancelled && (await stock(pid)) === s0);
+    reg(G, 'la venta web reembolsada queda anulada (no se borra)', !!(await uno('SELECT anulada_en FROM ventas WHERE id=?', [w1.body.saleId]))?.anulada_en);
+    const c2 = await integ('POST', `/internal/v1/sales/${ref}/cancel`);
+    reg(G, 'repetir el reembolso no devuelve dos veces', c2.body?.cancelled && (await stock(pid)) === s0);
 
     // Insumo por ml desde la web (esencia suelta)
     const e0 = await stock(esencia.id);
@@ -335,18 +351,95 @@ let pid;
     reg(G, 'categoría inexistente rechazada', inv.status === 400 && Number((await uno("SELECT COUNT(*) n FROM categorias_gasto WHERE nombre='Categoría Inventada'")).n) === 0, inv.body.error);
     reg(G, 'gasto sin fecha rechazado', (await call('POST', '/expenses', { description: 'X', amount: 1000, category: 'Otros' })).status === 400);
     reg(G, 'gasto con fecha futura rechazado', (await call('POST', '/expenses', { description: 'X', amount: 1000, category: 'Otros', date: '2099-01-01' })).status === 400);
-    reg(G, 'el gasto registra con qué se pagó', null, 'fase B: la caja descuenta todo gasto del efectivo');
+    reg(G, 'gasto con método inexistente rechazado', (await call('POST', '/expenses', { description: 'X', amount: 1000, category: 'Otros', date: hoy, method: 'Bitcoin' })).status === 400);
     await call('DELETE', `/expenses/${g.body.id}`);
+    reg(G, 'el gasto anulado deja de listarse', !(await call('GET', '/expenses')).body.some((x) => x.id === g.body.id));
 }
 
-// ---------- 6. Caja (fase B) ----------
+// ---------- 6. Caja por sesiones ----------
 {
     const G = 'Caja';
-    reg(G, 'el servidor calcula el cierre y pide el efectivo contado', null, 'fase B: hoy guarda las cifras que manda el navegador, sin arqueo');
-    const sinCerrar = await q('SELECT id FROM pagos WHERE id > (SELECT COALESCE(MAX(ultimo_pago_id),0) FROM cierres_caja) AND DATE(fecha) < ?', [hoy]);
-    reg(G, 'ningún pago de días anteriores queda fuera de los cierres', sinCerrar.length === 0 ? true : null, sinCerrar.length ? `fase B: ${sinCerrar.length} pagos sin cerrar` : '');
-    reg(G, 'movimientos con fecha anterior registrados hoy entran al cierre', null, 'fase B: la caja filtra gastos y compras por fecha = hoy');
-    reg(G, 'cierres inmutables y uno a la vez', null, 'fase B: se pueden borrar y dos simultáneos pasan');
+    const actual = async () => (await call('GET', '/cash/current')).body;
+    const esperado = async () => (await actual()).summary.expectedCash;
+    const audit = async () => (await call('GET', '/cash/audit')).body.diferencias || [];
+    const cerca = (a, b) => Math.abs(a - b) < 0.01;
+
+    const c0 = await actual();
+    reg(G, 'hay una sesión de caja abierta', c0.session?.open === true);
+    const reg0 = (await call('GET', '/cash/sessions')).body.find((h) => h.type === 'regularizacion');
+    reg(G, 'los movimientos anteriores quedaron en una sesión de regularización', !!reg0, reg0?.notes?.slice(0, 80));
+    reg(G, 'el libro de dinero cuadra con pagos, gastos y compras', (await audit()).length === 0, JSON.stringify((await audit()).slice(0, 3)));
+
+    const e0 = await esperado();
+    await call('POST', '/cash/movements', { type: 'ingreso', amount: 100000, reason: 'Base del cajón' });
+    reg(G, 'ingreso de efectivo suma al esperado', cerca(await esperado(), e0 + 100000));
+    reg(G, 'movimiento sin motivo rechazado', (await call('POST', '/cash/movements', { type: 'retiro', amount: 1000, reason: '' })).status === 400);
+
+    const ve = await venta([{ productId: pid, quantity: 1, unitPrice: 50000 }], { initialPayment: 50000 });
+    reg(G, 'venta en efectivo suma al cajón', cerca(await esperado(), e0 + 150000));
+    const vn = await venta([{ productId: pid, quantity: 1, unitPrice: 50000 }], { method: 'Nequi', initialPayment: 50000 });
+    const nequi = (await actual()).summary.byMethod.find((m) => m.method === 'Nequi');
+    reg(G, 'venta por Nequi no entra al cajón y se ve aparte', cerca(await esperado(), e0 + 150000) && nequi?.total >= 50000);
+
+    const g1 = await call('POST', '/expenses', { description: 'Bolsas', amount: 8000, category: 'Otros', date: hoy, method: 'Efectivo' });
+    reg(G, 'gasto en efectivo resta del cajón', cerca(await esperado(), e0 + 142000));
+    const g2 = await call('POST', '/expenses', { description: 'Pauta', amount: 30000, category: 'Publicidad', date: hoy, method: 'Transferencia' });
+    reg(G, 'gasto por transferencia no resta del cajón', cerca(await esperado(), e0 + 142000));
+    await call('PUT', `/expenses/${g1.body.id}`, { description: 'Bolsas', amount: 10000, category: 'Otros', date: hoy, method: 'Efectivo' });
+    reg(G, 'corregir el monto de un gasto ajusta la diferencia', cerca(await esperado(), e0 + 140000));
+    await call('PUT', `/expenses/${g1.body.id}`, { description: 'Bolsas', amount: 10000, category: 'Otros', date: hoy, method: 'Transferencia' });
+    reg(G, 'cambiar el método de un gasto a transferencia lo saca del cajón', cerca(await esperado(), e0 + 150000));
+    const gAyer = await call('POST', '/expenses', { description: 'Olvidado de ayer', amount: 5000, category: 'Otros', date: ayer, method: 'Efectivo' });
+    reg(G, 'un gasto con fecha de ayer registrado hoy entra a la caja abierta', cerca(await esperado(), e0 + 145000));
+
+    const cp = await call('POST', '/purchases', { productId: pid, quantity: 1, unitPrice: 20000, date: hoy, method: 'Efectivo' });
+    reg(G, 'compra en efectivo resta del cajón', cerca(await esperado(), e0 + 125000));
+    const ct = await call('POST', '/purchases', { productId: pid, quantity: 1, unitPrice: 20000, date: hoy, method: 'Transferencia' });
+    reg(G, 'compra por transferencia no resta del cajón', cerca(await esperado(), e0 + 125000));
+
+    await call('DELETE', `/sales/${ve.body.id}`);
+    reg(G, 'anular una venta en efectivo registra la devolución', cerca(await esperado(), e0 + 75000));
+    await call('POST', '/cash/movements', { type: 'retiro', amount: 20000, reason: 'Consignación' });
+    reg(G, 'retiro de efectivo resta', cerca(await esperado(), e0 + 55000));
+    reg(G, 'el libro de dinero sigue cuadrando', (await audit()).length === 0);
+
+    // Cierre con faltante (con base suficiente para retirar 30.000)
+    const previo = await esperado();
+    if (previo < 100000) await call('POST', '/cash/movements', { type: 'ingreso', amount: Math.ceil(100000 - previo), reason: 'Base para la prueba de cierre' });
+    const antes = await actual();
+    const debe = antes.summary.expectedCash;
+    const cierre = await call('POST', '/cash/close', { sessionId: antes.session.id, countedCash: debe - 5000, withdrawn: 30000, notes: 'Prueba' });
+    reg(G, 'cerrar calcula la diferencia en el servidor', cierre.status === 201 && cerca(cierre.body.difference, -5000), JSON.stringify(cierre.body));
+    const nueva = await actual();
+    reg(G, 'la siguiente sesión arranca con lo que quedó en el cajón', nueva.session.id !== antes.session.id && cerca(nueva.session.initialCash, debe - 5000 - 30000));
+    reg(G, 'cerrar otra vez la misma sesión rechazado', (await call('POST', '/cash/close', { sessionId: antes.session.id, countedCash: 0 })).status === 409);
+    reg(G, 'retirar más de lo contado rechazado', (await call('POST', '/cash/close', { sessionId: nueva.session.id, countedCash: 1000, withdrawn: 2000 })).status === 400);
+
+    // Anular algo de una sesión cerrada: la corrección cae en la abierta y la cerrada no cambia
+    await call('DELETE', `/expenses/${gAyer.body.id}`);
+    const cerrada = (await call('GET', `/cash/sessions/${antes.session.id}`)).body;
+    reg(G, 'una sesión cerrada no cambia aunque se anule algo suyo', cerca(cerrada.summary.expectedCash, debe) && cerca(cerrada.session.difference, -5000));
+    reg(G, 'la anulación queda en la sesión abierta', cerca(await esperado(), nueva.session.initialCash + 5000));
+
+    // Dos cierres simultáneos
+    const sid = (await actual()).session.id;
+    const dos = await Promise.all([1, 2].map(() => call('POST', '/cash/close', { sessionId: sid, countedCash: 0 })));
+    reg(G, 'dos cierres simultáneos: solo uno pasa', dos.filter((d) => d.status === 201).length === 1, dos.map((d) => d.status).join('/'));
+    reg(G, 'siempre hay exactamente una sesión abierta', Number((await uno('SELECT COUNT(*) n FROM sesiones_caja WHERE abierta = 1')).n) === 1);
+
+    // Web: entra como Mercado Pago (no efectivo) y el reembolso lo devuelve
+    const e1 = await esperado();
+    const ref = 'TESTCAJA' + Date.now();
+    await integ('POST', '/internal/v1/sales', { externalReference: ref, customer: { name: 'Web Caja' }, items: [{ inventoryId: pid, quantity: 1, unitPrice: 50000 }] });
+    const mp = () => actual().then((a) => a.summary.byMethod.find((m) => m.method === 'Mercado Pago (Web)')?.total || 0);
+    const mp1 = await mp();
+    await integ('POST', `/internal/v1/sales/${ref}/cancel`);
+    reg(G, 'venta web entra como Mercado Pago y su reembolso la devuelve, sin tocar el cajón', mp1 >= 50000 && cerca(await mp(), mp1 - 50000) && cerca(await esperado(), e1));
+
+    reg(G, 'el sistema anterior ya no crea cierres', (await call('POST', '/cash-closings', { date: hoy, finalCash: 99999999 })).status === 410);
+    reg(G, 'el sistema anterior ya no borra cierres', (await call('DELETE', '/cash-closings/1')).status === 410);
+    for (const x of [vn, g2, g1, cp, ct]) if (x.body?.id) await call('DELETE', `/${x === vn ? 'sales' : x === cp || x === ct ? 'purchases' : 'expenses'}/${x.body.id}`);
+    reg(G, 'el libro de dinero cuadra al final', (await audit()).length === 0, JSON.stringify((await audit()).slice(0, 3)));
 }
 
 // ---------- 7. Integridad referencial ----------
@@ -357,7 +450,8 @@ let pid;
     const del = await call('DELETE', `/customers/${cli.body.id}`);
     reg(G, 'no se borra un cliente con ventas', del.status === 400 && (await uno('SELECT cliente_id c FROM ventas WHERE id=?', [v.body.id])).c === cli.body.id, del.body.error);
     await call('DELETE', `/sales/${v.body.id}`);
-    reg(G, 'un cliente sin ventas sí se borra', (await call('DELETE', `/customers/${cli.body.id}`)).status === 200);
+    const libre = await call('POST', '/customers', { nombre: 'Sin Ventas Prueba' });
+    reg(G, 'un cliente sin ventas sí se borra', (await call('DELETE', `/customers/${libre.body.id}`)).status === 200);
     const prov = await call('POST', '/suppliers', { name: 'Prov Prueba' });
     const cp = await call('POST', '/purchases', { productId: pid, supplierId: prov.body.id, quantity: 1, unitPrice: 25000, date: hoy });
     reg(G, 'no se borra un proveedor con compras', (await call('DELETE', `/suppliers/${prov.body.id}`)).status === 400);
@@ -365,7 +459,8 @@ let pid;
     await call('DELETE', `/suppliers/${prov.body.id}`);
     const fk = await q("SELECT 1 FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND CONSTRAINT_NAME='fk_venta_consumos_venta'");
     reg(G, 'venta_consumos con llave foránea a ventas', fk.length === 1);
-    reg(G, 'documentos anulados en vez de borrados', null, 'fase B');
+    const borrados = await uno(`SELECT (SELECT COUNT(*) FROM ventas WHERE anulada_en IS NOT NULL) v, (SELECT COUNT(*) FROM compras WHERE anulada_en IS NOT NULL) c, (SELECT COUNT(*) FROM gastos WHERE anulada_en IS NOT NULL) g`);
+    reg(G, 'ventas, compras y gastos se anulan en vez de borrarse', Number(borrados.v) > 0 && Number(borrados.c) > 0 && Number(borrados.g) > 0, `${borrados.v} ventas, ${borrados.c} compras, ${borrados.g} gastos anulados`);
 
     await call('POST', `/products/${pid}/adjustments`, { newStock: 0, reason: 'Corrección de registro' });
     reg(G, 'desactivar un ítem en 0 sí se permite', (await call('DELETE', `/products/${pid}`)).status === 200);

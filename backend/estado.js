@@ -12,7 +12,8 @@ export const esquema = {
     claseEsencia: false,     // 012: esencia árabe / tradicional
     recetas: false,          // 013: recetas de preparado y empaque
     decants: false,          // 014: decants (receta, envases y consumos por venta)
-    blindaje: false          // 015: cantidades decimales, cambio de costo y consumos por línea
+    blindaje: false,         // 015: cantidades decimales, cambio de costo y consumos por línea
+    caja: false              // 016: sesiones de caja, libro de dinero y anulaciones
 };
 
 export const actualizarEsquema = (aplicadas) => {
@@ -28,4 +29,5 @@ export const actualizarEsquema = (aplicadas) => {
     esquema.recetas = aplicadas.has('013');
     esquema.decants = aplicadas.has('014');
     esquema.blindaje = aplicadas.has('015');
+    esquema.caja = aplicadas.has('016');
 };

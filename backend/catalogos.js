@@ -2,6 +2,7 @@
 // Los formularios envían el nombre; aquí se traduce a su ID. Desde el panel solo valen los que
 // existen y están activos (crear: false); la integración web y los scripts los crean si son nuevos.
 import { esquema } from './estado.js';
+import { sincronizarDinero } from './caja.js';
 
 const limpiar = (v) => String(v || '').trim().substring(0, 60);
 const err400 = (mensaje) => Object.assign(new Error(mensaje), { status: 400 });
@@ -26,13 +27,16 @@ export async function categoriaGastoId(conn, nombre, { crear = true } = {}) {
     return r.insertId;
 }
 
-// Inserta un pago con su método (texto y, si existe la tabla, su ID)
-export async function insertarPago(conn, { ventaId, monto, fecha, metodo, crear = true }) {
+// Inserta un pago con su método (texto y, si existe la tabla, su ID) y lo registra en la caja abierta
+export async function insertarPago(conn, { ventaId, monto, fecha, metodo, crear = true, usuarioId = null }) {
     const nombre = limpiar(metodo) || 'Efectivo';
     if (esquema.metodosPago) {
         const id = await metodoPagoId(conn, nombre, { crear });
-        await conn.query('INSERT INTO pagos (venta_id, monto, fecha, metodo, metodo_pago_id) VALUES (?, ?, ?, ?, ?)', [ventaId, monto, fecha, nombre, id]);
-    } else {
-        await conn.query('INSERT INTO pagos (venta_id, monto, fecha, metodo) VALUES (?, ?, ?, ?)', [ventaId, monto, fecha, nombre]);
+        const [r] = await conn.query('INSERT INTO pagos (venta_id, monto, fecha, metodo, metodo_pago_id) VALUES (?, ?, ?, ?, ?)', [ventaId, monto, fecha, nombre, id]);
+        await sincronizarDinero(conn, { origenTipo: 'pago', origenId: r.insertId, tipo: 'cobro', monto: Number(monto), metodoPagoId: id,
+            descripcion: `Pago de la venta #${ventaId}`, usuarioId });
+        return r.insertId;
     }
+    const [r] = await conn.query('INSERT INTO pagos (venta_id, monto, fecha, metodo) VALUES (?, ?, ?, ?)', [ventaId, monto, fecha, nombre]);
+    return r.insertId;
 }

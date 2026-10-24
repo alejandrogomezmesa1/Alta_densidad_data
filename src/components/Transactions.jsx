@@ -9,6 +9,13 @@ import autoTable from 'jspdf-autotable';
 import { paidAmount, balanceOf } from '../utils/sales';
 import { api } from '../services/api';
 
+// Nada se borra: anular devuelve el inventario y registra el dinero en la caja abierta
+const MENSAJE_ANULAR = {
+  sales: '¿Anular esta venta? El inventario vuelve y, si tenía pagos, la devolución queda en la caja abierta.',
+  purchases: '¿Anular esta compra? Sale del inventario lo que entró y el dinero vuelve a la caja abierta.',
+  expenses: '¿Anular este gasto? El dinero vuelve a la caja abierta.'
+};
+
 const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, onUpdate, onAddPayment, notify, confirm, suppliers = [], mostFrequentSupplierId }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -21,7 +28,8 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
   const [metodos, setMetodos] = useState([{ name: 'Efectivo' }, { name: 'Transferencia' }]);
   const [categorias, setCategorias] = useState([]);
   useEffect(() => {
-    if (type === 'sales') api.get('/payment-methods').then(l => Array.isArray(l) && l.length && setMetodos(l)).catch(() => {});
+    // Ventas, compras y gastos registran con qué se pagó (la caja separa el efectivo del resto)
+    api.get('/payment-methods').then(l => Array.isArray(l) && l.length && setMetodos(l)).catch(() => {});
     if (type === 'expenses') api.get('/expense-categories').then(l => Array.isArray(l) && setCategorias(l)).catch(() => {});
   }, [type]);
   const [dateFilter, setDateFilter] = useState('all');
@@ -216,8 +224,9 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
         notify?.('Tienes un producto seleccionado sin añadir: pulsa «Añadir» o quítalo antes de registrar.', 'warning');
         return;
       }
-      if (!String(formData.customerName || '').trim()) {
-        notify?.('El nombre del cliente es obligatorio.', 'warning');
+      // Sin nombre es «Consumidor final»: solo de contado (a crédito hay que saber quién debe)
+      if (!String(formData.customerName || '').trim() && (parseFloat(formData.initialPayment) || 0) < calculatedTotal) {
+        notify?.('Sin cliente la venta debe pagarse completa: escribe el pago por el total o el nombre del cliente.', 'warning');
         return;
       }
       payload = {
@@ -511,8 +520,8 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                   </div>
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>NOMBRE (Obligatorio)</label>
-                  <input required type="text" readOnly={!!formData.customerId} value={formData.customerName} onChange={e => setFormData({...formData, customerName: e.target.value})} placeholder="Nombre del cliente" style={{ width: '100%', opacity: formData.customerId ? 0.7 : 1 }} />
+                  <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>NOMBRE (obligatorio si queda debiendo)</label>
+                  <input type="text" readOnly={!!formData.customerId} value={formData.customerName} onChange={e => setFormData({...formData, customerName: e.target.value})} placeholder="Vacío = Consumidor final" style={{ width: '100%', opacity: formData.customerId ? 0.7 : 1 }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>CÉDULA / NIT</label>
@@ -561,9 +570,10 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
               <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>FECHA</label>
               <input required type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} style={{ width: '100%' }} />
             </div>
-            {type === 'sales' && (
+            {(
+
               <div>
-                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>MÉTODO DE PAGO</label>
+                <label style={{ display: 'block', marginBottom: '0.6rem', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>{type === 'sales' ? 'MÉTODO DE PAGO' : '¿CON QUÉ SE PAGÓ?'}</label>
                 <select required value={formData.method} onChange={e => setFormData({...formData, method: e.target.value})} style={{ width: '100%', height: '45px' }}>
                   {metodos.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}
                 </select>
@@ -744,7 +754,7 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <span className="mobile-label">Fecha / Cliente</span>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.date}</div>
-                      <div style={{ fontWeight: 500 }}>{item.customerName || (type === 'purchases' ? 'Compra' : 'General')}</div>
+                      <div style={{ fontWeight: 500 }}>{item.customerName || (type === 'purchases' ? 'Compra' : type === 'sales' ? 'Consumidor final' : 'General')}</div>
                     </td>
                     <td style={{ padding: '1.25rem 2rem' }}>
                       <span className="mobile-label">Concepto</span>
@@ -757,7 +767,7 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                       <span className="mobile-label">Estado</span>
                       {type === 'sales' ? (
                         <span style={{ fontSize: '0.7rem', fontWeight: 500, color: item.status === 'paid' ? 'var(--success)' : 'var(--warning)' }}>{item.status === 'paid' ? 'PAGADA' : 'PENDIENTE'}</span>
-                      ) : <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>CONTADO</span>}
+                      ) : <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{(item.method || 'Contado').toUpperCase()}</span>}
                     </td>
                     <td style={{ padding: '1.25rem 2rem', fontWeight: 500 }}>
                       <span className="mobile-label">Total</span>
@@ -773,7 +783,7 @@ const Transactions = ({ type, data, products, customers = [], onAdd, onDelete, o
                         <button className="btn-icon" onClick={() => setSelectedDetail(item)} title="Ver detalle" aria-label="Ver detalle"><Eye size={14} /></button>
                         {/* Las ventas de la tienda web se anulan con el reembolso en Mercado Pago */}
                         {item.origin !== 'web' && <button className="btn-icon" onClick={() => handleEdit(item)} title="Editar" aria-label="Editar"><Edit2 size={14} /></button>}
-                        {item.origin !== 'web' && <button className="btn-icon danger" onClick={() => confirm('¿Eliminar registro?', () => onDelete(item.id))} title="Eliminar" aria-label="Eliminar"><Trash2 size={14} /></button>}
+                        {item.origin !== 'web' && <button className="btn-icon danger" onClick={() => confirm(MENSAJE_ANULAR[type], () => onDelete(item.id))} title="Anular" aria-label="Anular"><Trash2 size={14} /></button>}
                         {type === 'sales' && <button className="btn-icon" onClick={() => handlePrintReceipt(item)} title="Imprimir recibo" aria-label="Imprimir recibo"><Printer size={14} /></button>}
                         {type === 'sales' && balance > 0 && <button className="btn-secondary" onClick={() => setSelectedSale(item)} style={{ minHeight: 34, color: 'var(--accent-primary)', borderColor: 'var(--accent-primary)' }}>Abonar</button>}
                       </div>

@@ -15,6 +15,7 @@ import { leerConfiguraciones, guardarConfiguraciones, definicionesPublicas } fro
 import { insertarPago } from './catalogos.js';
 import { catalogoDecants, consumoDeReceta, venderReceta, devolverVenta, guardarConsumosKit } from './recetas.js';
 import { fechaLocal, redondear2 } from './validaciones.js';
+import { anularVenta } from './anulaciones.js';
 
 const MAX_SKEW_MS = 60 * 1000;
 const NONCE_TTL_MS = 2 * MAX_SKEW_MS;
@@ -269,12 +270,18 @@ const crearRouter = (db) => {
         try {
             connection = await db.getConnection();
             await connection.beginTransaction();
-            const [ventas] = await connection.query("SELECT id FROM ventas WHERE referencia_externa = ? AND origen = 'web' FOR UPDATE", [ref]);
+            const [ventas] = await connection.query(`SELECT id${esquema.caja ? ', anulada_en' : ''} FROM ventas WHERE referencia_externa = ? AND origen = 'web' FOR UPDATE`, [ref]);
             if (!ventas.length) {
                 await connection.rollback();
                 return res.json({ cancelled: false, notFound: true });
             }
             const ventaId = ventas[0].id;
+            // Con la caja por sesiones el reembolso anula la venta (queda como historia) y devuelve el dinero en la caja abierta
+            if (esquema.caja) {
+                if (!ventas[0].anulada_en) await anularVenta(connection, ventaId, { motivo: `Reembolso del pedido web ${ref}` });
+                await connection.commit();
+                return res.json({ cancelled: true, saleId: ventaId });
+            }
             // Productos, componentes de kits y lo que descontó la receta de cada decant
             await devolverVenta(connection, ventaId, `Reembolso del pedido web ${ref}`);
             await connection.query('DELETE FROM venta_detalles WHERE venta_id = ?', [ventaId]);

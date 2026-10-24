@@ -103,8 +103,8 @@ export const useInventory = (notify, isAuthenticated = true) => {
     try {
       await api.delete(`/sales/${saleId}`);
       fetchData();
-      notify?.('Venta eliminada y stock revertido', 'info'); return true;
-    } catch (error) { notify?.(error.message || 'Error al eliminar venta', 'error'); return false; }
+      notify?.('Venta anulada: el inventario volvió', 'info'); return true;
+    } catch (error) { notify?.(error.message || 'Error al anular la venta', 'error'); return false; }
   }, [fetchData, notify]);
 
   // --- PURCHASES LOGIC ---
@@ -137,7 +137,7 @@ export const useInventory = (notify, isAuthenticated = true) => {
     try {
       await api.delete(`/purchases/${purchaseId}`);
       fetchData();
-      notify?.('Compra eliminada y stock ajustado', 'info'); return true;
+      notify?.('Compra anulada y stock ajustado', 'info'); return true;
     } catch (error) { notify?.(error.message || 'Error al eliminar compra', 'error'); return false; }
   }, [fetchData, notify]);
 
@@ -162,7 +162,7 @@ export const useInventory = (notify, isAuthenticated = true) => {
     try {
       await api.delete(`/expenses/${expenseId}`);
       fetchData();
-      notify?.('Gasto eliminado', 'info'); return true;
+      notify?.('Gasto anulado', 'info'); return true;
     } catch (error) { notify?.(error.message || 'Error al eliminar gasto', 'error'); return false; }
   }, [fetchData, notify]);
 
