@@ -1324,3 +1324,18 @@ button, a, input, select {
     display: none;
   }
 }
+
+/* Dashboard: columnas fijas para que ninguna fila quede a medias (4 → 2 → 1, 3 → 1, 2 → 1) */
+.dash-grid { display: grid; gap: 1.25rem; }
+.dash-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.dash-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.dash-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 1180px) {
+  .dash-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .dash-2, .dash-3 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .dash-4 { grid-template-columns: minmax(0, 1fr); }
+}

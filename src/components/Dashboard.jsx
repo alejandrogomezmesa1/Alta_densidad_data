@@ -209,7 +209,8 @@ const Dashboard = ({ sales, inventory, expenses, setActiveTab }) => {
       </header>
 
       {/* ── Inventario ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '1.25rem' }}>
+      {/* Cuadrículas con columnas fijas (4 · 2×2 · 3): nunca queda una tarjeta sola en su fila */}
+      <div className="dash-grid dash-4" style={{ marginBottom: '1.25rem' }}>
         <Tarjeta titulo="Dinero en inventario (a costo)" valor={pesos(inv.costoTotal)} icono={Wallet}
           detalle={`${inv.referencias} referencias con existencias`}
           onClick={() => abrir('Inventario valorizado a costo', [...items].filter((p) => !p.isKit && Number(p.stock) > 0).sort((a, b) => inv.valor(b) - inv.valor(a)), 'Existencias × costo. Los kits compuestos no se suman: su valor ya está en sus componentes.')} />
@@ -229,7 +230,7 @@ const Dashboard = ({ sales, inventory, expenses, setActiveTab }) => {
           })} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: '1.25rem', marginBottom: '1.25rem' }}>
+      <div className="dash-grid dash-2" style={{ marginBottom: '1.25rem' }}>
         <Panel titulo="Dónde está el dinero" icono={Package} alto={300}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={inv.porTipo} margin={{ left: 10 }}>
@@ -269,11 +270,12 @@ const Dashboard = ({ sales, inventory, expenses, setActiveTab }) => {
         </Panel>
         <Panel titulo="Esencias por clase" icono={FlaskConical}>
           {inv.porClase.length ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', alignItems: 'center', gap: '1rem' }}>
-              <div style={{ height: 240, position: 'relative' }}>
+            // El anillo se dibuja en un cuadro fijo y con radios relativos: nunca se recorta; la leyenda baja si no cabe al lado
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '1.5rem', minHeight: 300 }}>
+              <div style={{ width: 240, height: 240, position: 'relative', flex: '0 0 240px' }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={inv.porClase} dataKey="value" nameKey="nombre" innerRadius={68} outerRadius={100} paddingAngle={3}>
+                    <Pie data={inv.porClase} dataKey="value" nameKey="nombre" innerRadius="70%" outerRadius="96%" paddingAngle={3} stroke="none">
                       {inv.porClase.map((_, i) => <Cell key={i} fill={PALETA[i % PALETA.length]} />)}
                     </Pie>
                     <Tooltip {...tooltip} formatter={(v, n, it) => [`${pesos(v)} · ${formatoCantidad(it.payload.ml, 'ml')}`, n]} />
@@ -283,7 +285,7 @@ const Dashboard = ({ sales, inventory, expenses, setActiveTab }) => {
                   <div><b style={{ fontFamily: 'var(--f-display)', fontSize: '1.3rem', fontWeight: 400 }}>{formatoCantidad(inv.ml, 'ml')}</b><div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>de esencia</div></div>
                 </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', flex: '1 1 180px', maxWidth: 280 }}>
                 {inv.porClase.map((c, i) => (
                   <div key={c.nombre} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                     <i style={{ width: 10, height: 10, marginTop: 5, background: PALETA[i % PALETA.length], flex: 'none' }} />
@@ -325,12 +327,12 @@ const Dashboard = ({ sales, inventory, expenses, setActiveTab }) => {
           ))}
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem', marginBottom: '1.25rem' }}>
+      <div className="dash-grid dash-3" style={{ marginBottom: '1.25rem' }}>
         <Tarjeta titulo="Vendido" valor={pesos(vt.total)} icono={DollarSign} detalle={`${vt.n} ventas · ticket ${pesos(vt.ticket)}`} onClick={() => setActiveTab?.('sales')} />
         <Tarjeta titulo="Utilidad bruta" valor={pesos(vt.utilidadBruta)} icono={TrendingUp} color="var(--success)" detalle={`Margen ${vt.total > 0 ? ((vt.utilidadBruta / vt.total) * 100).toFixed(1) : 0}%`} />
         <Tarjeta titulo="Utilidad después de gastos" valor={pesos(vt.utilidadNeta)} icono={Receipt} color={vt.utilidadNeta >= 0 ? 'var(--success)' : 'var(--error)'} detalle={`Gastos ${pesos(vt.gastoPeriodo)}`} onClick={() => setActiveTab?.('expenses')} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: '1.25rem' }}>
+      <div className="dash-grid dash-2">
         <Panel titulo="Ventas y utilidad" icono={TrendingUp} alto={280}>
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={vt.serie}>
