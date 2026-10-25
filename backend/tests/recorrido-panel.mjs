@@ -32,8 +32,8 @@ async function pagina(ancho, alto) {
 }
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 async function ir(p, etiqueta) {
-    const abrir = await p.$('.mobile-top-toggle');
-    if (abrir && await abrir.boundingBox()) { await abrir.click(); await esperar(400); }
+    // En celular el menú es un panel deslizable: se abre con ☰ (en escritorio ☰ lo pliega, no hace falta)
+    if (await p.evaluate(() => window.innerWidth <= 1024)) { await p.click('.top-toggle'); await esperar(400); }
     await p.evaluate((t) => [...document.querySelectorAll('.side-item')].find((b) => b.textContent.trim() === t)?.click(), etiqueta);
     await esperar(900);
 }

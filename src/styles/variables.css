@@ -44,6 +44,7 @@
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --t-1:  0.25s;
   --side-w: 256px;
+  --side-w-c: 72px;   /* menú plegado (solo íconos) */
   --top-h:  64px;
 
   /* ── Alias usados por los componentes ────────────────────────────────── */

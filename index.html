@@ -11,6 +11,12 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet" />
     <title>Alta Densidad · Gestión</title>
+    <script>
+      // Menú lateral plegado (solo íconos) si así se dejó: se aplica antes de pintar para que no parpadee
+      try {
+        if (localStorage.getItem("data_sidebar") === "compacto") document.documentElement.classList.add("side-compacto");
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

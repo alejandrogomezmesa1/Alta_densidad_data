@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
+import { MENU } from './utils/menu';
 import Dashboard from './components/Dashboard';
 import Inventory from './components/Inventory';
 import Kits from './components/Kits';
@@ -69,9 +70,43 @@ const ConfirmModal = ({ isOpen, message, onConfirm, onCancel }) => (
   </AnimatePresence>
 );
 
+// Escritorio: el menú lateral se pliega a solo íconos; en móvil/tablet es un panel deslizable
+const ESCRITORIO = '(min-width: 1025px)';
+
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [compacto, setCompacto] = useState(() => document.documentElement.classList.contains('side-compacto'));
+
+  // Pasar de escritorio a móvil (o al revés) cierra el panel móvil; Escape también lo cierra
+  useEffect(() => {
+    const mq = window.matchMedia(ESCRITORIO);
+    const cambio = () => setIsSidebarOpen(false);
+    mq.addEventListener('change', cambio);
+    return () => mq.removeEventListener('change', cambio);
+  }, []);
+  useEffect(() => {
+    if (!isSidebarOpen) return undefined;
+    const esc = (e) => { if (e.key === 'Escape') setIsSidebarOpen(false); };
+    document.addEventListener('keydown', esc);
+    return () => document.removeEventListener('keydown', esc);
+  }, [isSidebarOpen]);
+
+  const alternarMenu = () => {
+    if (window.matchMedia(ESCRITORIO).matches) {
+      const nuevo = !compacto;
+      document.documentElement.classList.toggle('side-compacto', nuevo);
+      try { localStorage.setItem('data_sidebar', nuevo ? 'compacto' : 'expandido'); } catch { /* sin almacenamiento */ }
+      setCompacto(nuevo);
+      // Los gráficos del Dashboard recalculan su ancho tras la transición
+      setTimeout(() => window.dispatchEvent(new Event('resize')), 320);
+    } else {
+      setIsSidebarOpen((a) => !a);
+    }
+  };
+  const grupoActual = MENU.find((g) => g.items.some((i) => i.id === activeTab)) || MENU[0];
+  const seccionActual = grupoActual.items.find((i) => i.id === activeTab) || grupoActual.items[0];
+  const fechaHoy = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
   const [notifications, setNotifications] = useState([]);
   const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, message: '', onConfirm: () => {} });
   const [auth, setAuth] = useState({ 
@@ -286,18 +321,19 @@ function App() {
         username={auth.username}
       />
       
-      {/* Barra superior móvil */}
-      <div className="mobile-only mobile-top">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span className="side-brand-mark" style={{ width: 30, height: 30, fontSize: 13 }}>AD</span>
-          <span className="side-brand-name" style={{ fontSize: 11 }}>Alta Densidad</span>
-        </div>
-        <button className="mobile-top-toggle" onClick={() => setIsSidebarOpen(true)} aria-label="Abrir menú">
-          <Menu size={18} />
-        </button>
-      </div>
-
-      <div style={{ flex: 1, width: '100%' }}>
+      <div className="content-shell">
+        {/* Barra superior (como el panel de la tienda): plegar el menú, sección actual y fecha */}
+        <header className="top-bar">
+          <button className="top-toggle" onClick={alternarMenu} aria-label="Mostrar u ocultar menú"
+            aria-expanded={isSidebarOpen || !compacto}>
+            <Menu size={18} />
+          </button>
+          <div className="top-crumb">
+            <span className="top-crumb-kicker">{grupoActual.title}</span>
+            <h1 className="top-crumb-title">{seccionActual.label}</h1>
+          </div>
+          <span className="top-date">{fechaHoy}</span>
+        </header>
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}

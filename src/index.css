@@ -282,12 +282,75 @@ tbody tr:hover {
 /* ==========================================================
    ESTRUCTURA: sidebar + contenido
    ========================================================== */
-.main-content {
+.content-shell {
+  flex: 1;
+  min-width: 0;
   margin-left: var(--side-w);
+  transition: margin-left var(--t-1) var(--ease);
+}
+
+.main-content {
   padding: 2.5rem 2.25rem 3rem;
-  min-height: 100vh;
-  max-width: calc(1480px + var(--side-w));
+  min-height: calc(100vh - var(--top-h));
+  max-width: 1480px;
   animation: fadeIn 0.5s var(--ease);
+}
+
+/* Barra superior (igual a la del panel de la tienda) */
+.top-bar {
+  position: sticky;
+  top: 0;
+  z-index: 900;
+  height: var(--top-h);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 2.25rem;
+  background: color-mix(in srgb, var(--c-bg) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: var(--bw) solid var(--c-line);
+}
+
+.top-toggle {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: var(--bw) solid var(--c-line);
+  color: var(--c-ink);
+  transition: border-color var(--t-1), color var(--t-1);
+}
+
+.top-toggle:hover {
+  border-color: var(--c-accent);
+  color: var(--c-accent);
+}
+
+.top-crumb {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.top-crumb-kicker {
+  font-size: 9px;
+  letter-spacing: var(--ls-ui);
+  text-transform: uppercase;
+  color: var(--c-accent);
+}
+
+.top-crumb-title {
+  font: 300 26px/1.1 var(--f-display);
+  margin: 0;
+}
+
+.top-date {
+  margin-left: auto;
+  font-size: 10px;
+  letter-spacing: var(--ls-ui);
+  text-transform: uppercase;
+  color: var(--c-mute);
 }
 
 @keyframes fadeIn {
@@ -343,7 +406,13 @@ tbody tr:hover {
   display: flex;
   flex-direction: column;
   z-index: 1000;
-  transition: transform 0.4s var(--ease);
+  overflow: hidden;
+  transition: width var(--t-1) var(--ease), transform 0.4s var(--ease);
+}
+
+.side-brand-txt {
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .side-brand {
@@ -526,28 +595,56 @@ a.side-item {
   z-index: 999;
 }
 
-/* Barra superior móvil */
-.mobile-top {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 60px;
-  padding: 0 1rem;
-  align-items: center;
-  justify-content: space-between;
-  z-index: 900;
-  background: color-mix(in srgb, var(--c-bg) 92%, transparent);
-  backdrop-filter: blur(8px);
-  border-bottom: var(--bw) solid var(--c-line);
-}
-
-.mobile-top-toggle {
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border: var(--bw) solid var(--c-line);
+/* ---- Escritorio: menú plegado (solo íconos), como el panel de la tienda ---- */
+@media (min-width: 1025px) {
+  html.side-compacto .sidebar {
+    width: var(--side-w-c);
+    overflow: visible;
+  }
+  html.side-compacto .side-brand {
+    padding: 0 17px;
+  }
+  html.side-compacto .side-brand-txt,
+  html.side-compacto .side-item span,
+  html.side-compacto .side-item .side-ext,
+  html.side-compacto .side-user,
+  html.side-compacto .side-logout {
+    display: none;
+  }
+  html.side-compacto .side-group-title {
+    visibility: hidden;
+    height: 8px;
+    padding: 0;
+  }
+  html.side-compacto .side-nav {
+    overflow: visible;
+  }
+  html.side-compacto .side-item {
+    justify-content: center;
+    padding: 0;
+  }
+  html.side-compacto .side-foot {
+    justify-content: center;
+    padding: 12px 0;
+  }
+  /* Nombre flotante al pasar el cursor */
+  html.side-compacto .side-item:hover::after {
+    content: attr(data-label);
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--c-ink);
+    color: var(--c-bg);
+    padding: 5px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 5;
+  }
+  html.side-compacto .content-shell {
+    margin-left: var(--side-w-c);
+  }
 }
 
 /* Notificaciones (como .alerta del panel web) */
@@ -590,10 +687,16 @@ a.side-item {
    RESPONSIVE
    ========================================================== */
 @media (max-width: 1024px) {
-  .main-content {
+  .content-shell {
     margin-left: 0;
+  }
+
+  .main-content {
     padding: 1.5rem 1rem;
-    padding-top: 5rem;
+  }
+
+  .top-bar {
+    padding: 0 1rem;
   }
 
   .sidebar {
@@ -1214,4 +1317,10 @@ button, a, input, select {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; padding: 1rem 1.25rem;
   justify-content: space-between; align-items: center; gap: 1rem;
   background: var(--accent-primary); color: var(--bg-main); font-size: 0.95rem;
+}
+
+@media (max-width: 640px) {
+  .top-date {
+    display: none;
+  }
 }
