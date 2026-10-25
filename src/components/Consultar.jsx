@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Search, RotateCcw, FileDown } from 'lucide-react';
+import { Search, RotateCcw } from 'lucide-react';
 import { api } from '../services/api';
 import { MovimientosModal } from './StockModals';
-import ListaRevendedores from './ListaRevendedores';
 import { coincide, formatoCantidad, nivelStock, NIVELES_STOCK, pesos, TIPOS_INVENTARIO } from '../utils/inventario';
 
 // Consultar existencias: solo lectura y liviana (/api/stock, sin ventas ni clientes).
@@ -14,7 +13,6 @@ const Consultar = ({ notify, config }) => {
   const [tipo, setTipo] = useState('all');
   const [nivel, setNivel] = useState('all');
   const [historial, setHistorial] = useState(null);
-  const [verLista, setVerLista] = useState(false);
   const buscador = useRef(null);
 
   // Si el servidor aún no tiene /api/stock, se usa la lista completa de productos
@@ -41,10 +39,7 @@ const Consultar = ({ notify, config }) => {
             {items ? `${items.length} ítems · ${conteo.agotado} agotados · ${conteo.advertencia} por acabarse` : 'Cargando…'}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <button className="btn-secondary" onClick={cargar} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}><RotateCcw size={15} /> Actualizar</button>
-          <button className="btn-primary" onClick={() => setVerLista(true)} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}><FileDown size={15} /> PDF para revendedores</button>
-        </div>
+        <button className="btn-secondary" onClick={cargar} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}><RotateCcw size={15} /> Actualizar</button>
       </header>
 
       <div className="premium-card" style={{ padding: 0 }}>
@@ -88,7 +83,6 @@ const Consultar = ({ notify, config }) => {
       </div>
 
       {historial && <MovimientosModal producto={historial} onClose={() => setHistorial(null)} />}
-      <ListaRevendedores abierta={verLista} onCerrar={() => setVerLista(false)} notify={notify} config={config} />
     </div>
   );
 };

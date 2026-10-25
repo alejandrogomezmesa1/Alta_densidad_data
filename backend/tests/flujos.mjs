@@ -368,6 +368,20 @@ let pid;
         await call('PUT', `/kits/${kit.id}/components`, { components: comps.map((x) => ({ productId: x.id, quantity: Number(x.cantidad) })) });
     }
 
+    // Precio mayorista: descuento fijo por rango y piso de costo + 15 %
+    const may = await integ('GET', '/internal/v1/wholesale-prices');
+    const esperado = (pub, costo) => {
+        let pr = pub - (pub <= 75000 ? 10000 : pub <= 95000 ? 15000 : 20000);
+        if (costo > 0) { const piso = Math.ceil(costo * 1.15 / 1000) * 1000; if (piso >= pub) return null; pr = Math.max(pr, piso); }
+        return pr;
+    };
+    const items11 = await q("SELECT id, precio, precio_costo FROM inventario WHERE activo=1 AND tipo='terminado' AND categoria='1.1' AND precio > 0 AND id NOT IN (SELECT kit_id FROM kit_componentes)");
+    const porIdMay = new Map((may.body?.items || []).map((x) => [x.inventoryId, x]));
+    const malos = items11.filter((r) => (porIdMay.get(r.id)?.wholesalePrice ?? null) !== esperado(Number(r.precio), Number(r.precio_costo)));
+    reg(G, 'precio mayorista por rango (10/15/20 mil) con piso de costo + 15 %', may.status === 200 && malos.length === 0 && items11.length > 0,
+        malos.length ? JSON.stringify(malos.slice(0, 3)) : `${items11.length} perfumes 1.1`);
+    reg(G, 'el precio mayorista no expone el costo', !JSON.stringify(may.body).includes('cost"') && !JSON.stringify(may.body).includes('precio_costo'));
+
     const rec = await q("SELECT rol, cantidad FROM recetas WHERE ambito='decant'");
     const ml = rec.filter((r) => r.rol === 'esencia').reduce((s, r) => s + Number(r.cantidad), 0);
     reg(G, 'receta de decant con ml de esencia', ml > 0 ? true : null, ml > 0 ? `${ml} ml` : 'dato pendiente del usuario: hoy un decant solo descuenta el envase');

@@ -16,6 +16,7 @@ import { insertarPago } from './catalogos.js';
 import { catalogoDecants, consumoDeReceta, venderReceta, devolverVenta, guardarConsumosKit } from './recetas.js';
 import { fechaLocal, redondear2 } from './validaciones.js';
 import { anularVenta } from './anulaciones.js';
+import { preciosMayoristas } from './revendedores.js';
 
 const MAX_SKEW_MS = 60 * 1000;
 const NONCE_TTL_MS = 2 * MAX_SKEW_MS;
@@ -93,6 +94,13 @@ const crearRouter = (db) => {
     router.get('/v1/decants', async (req, res, next) => {
         try {
             res.json(await catalogoDecants(db));
+        } catch (error) { next(error); }
+    });
+
+    // Precio mayorista de cada producto (la regla y el costo viven aquí; a la tienda solo llega el resultado)
+    router.get('/v1/wholesale-prices', async (req, res, next) => {
+        try {
+            res.json(await preciosMayoristas(db));
         } catch (error) { next(error); }
     });
 
