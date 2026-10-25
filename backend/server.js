@@ -15,6 +15,8 @@ import { sincronizarDinero, sesionAbierta, resumenSesion, sesionPublica, cerrarS
 import { anularVenta, ventaAnulada } from './anulaciones.js';
 import { devolverVenta, guardarConsumosKit, catalogoDecants, CATEGORIA_DECANTS } from './recetas.js';
 import { fechaDocumento, resolverCliente, validarLineasVenta, validarItemCompra, redondear2 } from './validaciones.js';
+import { auditar, usuarioDe, fila, documentoVenta } from './auditoria.js';
+import { exigirPeriodoAbierto, resultados, salud, listarPeriodos, cerrarPeriodo, reabrirPeriodo, limitesPeriodo, exportarLibro, librosDisponibles, respaldoCompleto } from './contabilidad.js';
 
 dotenv.config();
 
@@ -160,11 +162,12 @@ app.get('/api/suppliers', async (req, res, next) => {
 app.post('/api/suppliers', async (req, res, next) => {
     const { name, phone, email, address } = req.body;
     try {
-        const [result] = await db.query(
-            'INSERT INTO proveedores (nombre, telefono, email, direccion) VALUES (?, ?, ?, ?)',
-            [name, phone, email, address]
-        );
-        res.status(201).json({ id: result.insertId, ...req.body });
+        const id = await transaccion(async (c) => {
+            const [result] = await c.query('INSERT INTO proveedores (nombre, telefono, email, direccion) VALUES (?, ?, ?, ?)', [name, phone, email, address]);
+            await auditar(c, { accion: 'crear', entidad: 'proveedor', entidadId: result.insertId, resumen: `Proveedor ${name}`, despues: await fila(c, 'proveedores', result.insertId), usuario: usuarioDe(req) });
+            return result.insertId;
+        });
+        res.status(201).json({ id, ...req.body });
     } catch (error) { next(error); }
 });
 
@@ -172,10 +175,11 @@ app.put('/api/suppliers/:id', async (req, res, next) => {
     const { id } = req.params;
     const { name, phone, email, address } = req.body;
     try {
-        await db.query(
-            'UPDATE proveedores SET nombre = ?, telefono = ?, email = ?, direccion = ? WHERE id = ?',
-            [name, phone, email, address, id]
-        );
+        await transaccion(async (c) => {
+            const antes = await fila(c, 'proveedores', id);
+            await c.query('UPDATE proveedores SET nombre = ?, telefono = ?, email = ?, direccion = ? WHERE id = ?', [name, phone, email, address, id]);
+            await auditar(c, { accion: 'editar', entidad: 'proveedor', entidadId: id, resumen: `Proveedor ${name}`, antes, despues: await fila(c, 'proveedores', id), usuario: usuarioDe(req) });
+        });
         res.json({ id, ...req.body });
     } catch (error) { next(error); }
 });
@@ -184,7 +188,11 @@ app.delete('/api/suppliers/:id', async (req, res, next) => {
     try {
         const [[{ n }]] = await db.query('SELECT COUNT(*) AS n FROM compras WHERE proveedor_id = ?', [req.params.id]);
         if (Number(n) > 0) return res.status(400).json({ error: `Este proveedor tiene ${n} compra(s) registradas: no se puede eliminar` });
-        await db.query('DELETE FROM proveedores WHERE id = ?', [req.params.id]);
+        await transaccion(async (c) => {
+            const antes = await fila(c, 'proveedores', req.params.id);
+            await c.query('DELETE FROM proveedores WHERE id = ?', [req.params.id]);
+            await auditar(c, { accion: 'borrar', entidad: 'proveedor', entidadId: req.params.id, resumen: `Proveedor ${antes?.nombre || ''} (sin compras)`, antes, usuario: usuarioDe(req) });
+        });
         res.json({ message: 'Supplier deleted' });
     } catch (error) { next(error); }
 });
@@ -291,6 +299,8 @@ app.post('/api/products', async (req, res, next) => {
             await moverStock(connection, { inventarioId: result.insertId, cantidad: stockInicial, tipo: 'inicial', costoUnitario: num(costPrice) || 0,
                 origenTipo: 'producto', origenId: result.insertId, motivo: 'Stock inicial al crear el producto', usuarioId: req.user?.id });
         }
+        await auditar(connection, { accion: 'crear', entidad: 'producto', entidadId: result.insertId, resumen: `Producto ${name}`,
+            despues: await fila(connection, 'inventario', result.insertId), usuario: usuarioDe(req) });
         await connection.commit();
         res.status(201).json({ id: result.insertId, ...req.body });
     } catch (error) {
@@ -315,6 +325,7 @@ app.put('/api/products/:id', async (req, res, next) => {
             return res.status(404).json({ error: 'Producto no encontrado' });
         }
         const esKit = (await componentesDe(connection, Number(id))).length > 0;
+        const fichaAntes = await fila(connection, 'inventario', id);
         const stockActual = Number(actual[0].stock) || 0;
         const costoActual = Number(actual[0].precio_costo) || 0;
         // El costo de un kit lo calculan sus componentes: el de su ficha no se toca
@@ -355,6 +366,8 @@ app.put('/api/products/:id', async (req, res, next) => {
             await moverStock(connection, { inventarioId: Number(id), cantidad: diferencia, tipo: 'ajuste', origenTipo: 'ajuste',
                 motivo: req.body.adjustmentReason || 'Edición manual del stock', usuarioId: req.user?.id });
         }
+        await auditar(connection, { accion: 'editar', entidad: 'producto', entidadId: id, resumen: `Producto ${name}`,
+            antes: fichaAntes, despues: await fila(connection, 'inventario', id), usuario: usuarioDe(req) });
         await connection.commit();
         res.json({ id, ...req.body });
     } catch (error) {
@@ -379,11 +392,15 @@ app.delete('/api/products/:id', async (req, res, next) => {
                 WHERE kc.componente_id = ? AND i.activo = 1`, [req.params.id]);
             if (kits.length) return res.status(400).json({ error: `«${item.nombre}» es componente de ${kits.map((k) => `«${k.nombre}»`).join(', ')}: quítalo del kit primero` });
         }
-        if (esquema.inventarioTipos) {
-            await db.query('UPDATE inventario SET activo = 0 WHERE id = ?', [req.params.id]);
-        } else {
-            await db.query('DELETE FROM inventario WHERE id = ?', [req.params.id]);
-        }
+        await transaccion(async (c) => {
+            const antes = await fila(c, 'inventario', req.params.id);
+            if (esquema.inventarioTipos) {
+                await c.query('UPDATE inventario SET activo = 0 WHERE id = ?', [req.params.id]);
+            } else {
+                await c.query('DELETE FROM inventario WHERE id = ?', [req.params.id]);
+            }
+            await auditar(c, { accion: 'desactivar', entidad: 'producto', entidadId: req.params.id, resumen: `Producto ${antes?.nombre || ''} desactivado`, antes, usuario: usuarioDe(req) });
+        });
         res.json({ message: 'Product deleted' });
     } catch (error) { next(error); }
 });
@@ -424,6 +441,8 @@ app.post('/api/products/:id/adjustments', async (req, res, next) => {
             return res.status(400).json({ error: 'El ajuste no cambia el stock' });
         }
         const r = await moverStock(connection, { inventarioId: Number(req.params.id), cantidad, tipo: 'ajuste', origenTipo: 'ajuste', motivo, usuarioId: req.user?.id });
+        await auditar(connection, { accion: 'ajustar', entidad: 'inventario', entidadId: req.params.id, resumen: `Ajuste ${cantidad > 0 ? '+' : ''}${cantidad}: ${motivo}`,
+            antes: { stock: Number(actual[0].stock) }, despues: { stock: r.stock, motivo }, usuario: usuarioDe(req) });
         await connection.commit();
         res.status(201).json({ stock: r.stock });
     } catch (error) {
@@ -451,7 +470,13 @@ app.get('/api/settings', async (req, res, next) => {
 
 app.put('/api/settings', async (req, res, next) => {
     try {
+        const antes = await leerConfiguraciones(db);
         const valores = await guardarConfiguraciones(db, req.body?.valores, { usuarioId: req.user?.id });
+        const cambios = Object.keys(valores).filter((k) => String(valores[k]) !== String(antes[k]));
+        if (cambios.length) {
+            await transaccion((c) => auditar(c, { accion: 'editar', entidad: 'configuracion', resumen: `Configuraciones: ${cambios.join(', ')}`,
+                antes: Object.fromEntries(cambios.map((k) => [k, antes[k]])), despues: Object.fromEntries(cambios.map((k) => [k, valores[k]])), usuario: usuarioDe(req) }));
+        }
         res.json({ definiciones: definicionesPublicas(), valores });
     } catch (error) { next(error); }
 });
@@ -519,8 +544,11 @@ app.put('/api/recipes', async (req, res, next) => {
     try {
         connection = await db.getConnection();
         await connection.beginTransaction();
+        const [antes] = await connection.query('SELECT ambito, ml, rol, inventario_id, cantidad FROM recetas ORDER BY ambito, ml, orden, id');
         await connection.query('DELETE FROM recetas');
         if (limpias.length) await connection.query('INSERT INTO recetas (ambito, ml, rol, inventario_id, cantidad, orden) VALUES ?', [limpias]);
+        await auditar(connection, { accion: 'editar', entidad: 'recetas', resumen: `Recetas: ${limpias.length} línea(s)`, antes,
+            despues: limpias.map(([ambito, ml, rol, inventario_id, cantidad]) => ({ ambito, ml, rol, inventario_id, cantidad })), usuario: usuarioDe(req) });
         await connection.commit();
         res.json({ ok: true, count: limpias.length });
     } catch (error) {
@@ -592,6 +620,9 @@ app.put('/api/kits/:id/components', async (req, res, next) => {
                 return res.status(400).json({ error: 'Este ítem es componente de otro kit: no puede tener componentes' });
             }
         }
+        const [compAntes] = await connection.query('SELECT componente_id, cantidad FROM kit_componentes WHERE kit_id = ? ORDER BY componente_id', [kitId]);
+        await auditar(connection, { accion: 'editar', entidad: 'kit', entidadId: kitId, resumen: `Composición del kit ${kit[0].nombre}`, antes: compAntes,
+            despues: [...lineas].map(([componente_id, cantidad]) => ({ componente_id, cantidad })), usuario: usuarioDe(req) });
         await connection.query('DELETE FROM kit_componentes WHERE kit_id = ?', [kitId]);
         for (const [id, cantidad] of lineas) {
             await connection.query('INSERT INTO kit_componentes (kit_id, componente_id, cantidad) VALUES (?, ?, ?)', [kitId, id, cantidad]);
@@ -622,11 +653,13 @@ app.get('/api/customers', async (req, res, next) => {
 app.post('/api/customers', async (req, res, next) => {
     const { nombre, telefono, cedula, ciudad, direccion } = req.body;
     try {
-        const [result] = await db.query(
-            'INSERT INTO clientes (nombre, telefono, cedula, ciudad, direccion) VALUES (?, ?, ?, ?, ?)',
-            [nombre, telefono || null, cedula || null, ciudad || null, direccion || null]
-        );
-        res.status(201).json({ id: result.insertId, ...req.body });
+        const id = await transaccion(async (c) => {
+            const [result] = await c.query('INSERT INTO clientes (nombre, telefono, cedula, ciudad, direccion) VALUES (?, ?, ?, ?, ?)',
+                [nombre, telefono || null, cedula || null, ciudad || null, direccion || null]);
+            await auditar(c, { accion: 'crear', entidad: 'cliente', entidadId: result.insertId, resumen: `Cliente ${nombre}`, despues: await fila(c, 'clientes', result.insertId), usuario: usuarioDe(req) });
+            return result.insertId;
+        });
+        res.status(201).json({ id, ...req.body });
     } catch (error) { next(error); }
 });
 
@@ -634,10 +667,12 @@ app.put('/api/customers/:id', async (req, res, next) => {
     const { id } = req.params;
     const { nombre, telefono, cedula, ciudad, direccion } = req.body;
     try {
-        await db.query(
-            'UPDATE clientes SET nombre = ?, telefono = ?, cedula = ?, ciudad = ?, direccion = ? WHERE id = ?',
-            [nombre, telefono || null, cedula || null, ciudad || null, direccion || null, id]
-        );
+        await transaccion(async (c) => {
+            const antes = await fila(c, 'clientes', id);
+            await c.query('UPDATE clientes SET nombre = ?, telefono = ?, cedula = ?, ciudad = ?, direccion = ? WHERE id = ?',
+                [nombre, telefono || null, cedula || null, ciudad || null, direccion || null, id]);
+            await auditar(c, { accion: 'editar', entidad: 'cliente', entidadId: id, resumen: `Cliente ${nombre}`, antes, despues: await fila(c, 'clientes', id), usuario: usuarioDe(req) });
+        });
         res.json({ id, ...req.body });
     } catch (error) { next(error); }
 });
@@ -647,7 +682,11 @@ app.delete('/api/customers/:id', async (req, res, next) => {
         // Con ventas, el cliente es parte de la historia (y quizá debe dinero): no se borra
         const [[{ n }]] = await db.query('SELECT COUNT(*) AS n FROM ventas WHERE cliente_id = ?', [req.params.id]);
         if (Number(n) > 0) return res.status(400).json({ error: `Este cliente tiene ${n} venta(s) registradas: no se puede eliminar` });
-        await db.query('DELETE FROM clientes WHERE id = ?', [req.params.id]);
+        await transaccion(async (c) => {
+            const antes = await fila(c, 'clientes', req.params.id);
+            await c.query('DELETE FROM clientes WHERE id = ?', [req.params.id]);
+            await auditar(c, { accion: 'borrar', entidad: 'cliente', entidadId: req.params.id, resumen: `Cliente ${antes?.nombre || ''} (sin ventas)`, antes, usuario: usuarioDe(req) });
+        });
         res.json({ message: 'Customer deleted' });
     } catch (error) { next(error); }
 });
@@ -768,6 +807,8 @@ app.post('/api/sales', async (req, res, next) => {
         connection = await db.getConnection();
         await connection.beginTransaction();
 
+        // Un mes cerrado no recibe documentos nuevos
+        if (esquema.trazabilidad) await exigirPeriodoAbierto(connection, fecha, 'ventas');
         let finalCustomerId;
         if (esquema.blindaje) {
             await validarLineasVenta(connection, items);
@@ -789,8 +830,8 @@ app.post('/api/sales', async (req, res, next) => {
         }
 
         const [saleResult] = await connection.query(
-            'INSERT INTO ventas (total, fecha, cliente_id, estado, metodo) VALUES (?, ?, ?, ?, ?)',
-            [total, fecha, finalCustomerId, status, method]
+            `INSERT INTO ventas (total, fecha, cliente_id, estado, metodo${esquema.trazabilidad ? ', creado_por' : ''}) VALUES (?, ?, ?, ?, ?${esquema.trazabilidad ? ', ?' : ''})`,
+            [total, fecha, finalCustomerId, status, method, ...(esquema.trazabilidad ? [req.user?.id || null] : [])]
         );
         const saleId = saleResult.insertId;
 
@@ -799,6 +840,8 @@ app.post('/api/sales', async (req, res, next) => {
         }
 
         for (const item of items) await insertarDetalle(connection, saleId, item, req.user?.id);
+        await auditar(connection, { accion: 'crear', entidad: 'venta', entidadId: saleId, resumen: `Venta #${saleId} por $${Math.round(total).toLocaleString('es-CO')}`,
+            despues: await documentoVenta(connection, saleId), usuario: usuarioDe(req) });
 
         await connection.commit();
         res.status(201).json({ id: saleId, ...req.body, total, status });
@@ -840,7 +883,10 @@ app.post('/api/sales/:id/payments', async (req, res, next) => {
             return res.status(400).json({ error: `El abono supera el saldo pendiente ($${Math.round(saldo).toLocaleString('es-CO')})` });
         }
 
-        await insertarPago(connection, { ventaId: id, monto: amount, fecha, metodo: method, crear: !esquema.blindaje, usuarioId: req.user?.id });
+        if (esquema.trazabilidad) await exigirPeriodoAbierto(connection, fecha, 'abonos');
+        const pagoId = await insertarPago(connection, { ventaId: id, monto: amount, fecha, metodo: method, crear: !esquema.blindaje, usuarioId: req.user?.id });
+        await auditar(connection, { accion: 'abonar', entidad: 'venta', entidadId: id, resumen: `Abono de $${Math.round(amount).toLocaleString('es-CO')} (${method || 'Efectivo'}) a la venta #${id}`,
+            despues: await fila(connection, 'pagos', pagoId), usuario: usuarioDe(req) });
         await connection.query('UPDATE ventas SET estado = ? WHERE id = ?', [saldo - amount <= 0.01 ? 'paid' : 'pending', id]);
 
         await connection.commit();
@@ -879,6 +925,12 @@ app.put('/api/sales/:id', async (req, res, next) => {
             return res.status(400).json({ error: 'La venta está anulada: no se puede editar' });
         }
         const fecha = esquema.blindaje ? fechaDocumento(date, { original: actual[0].fecha }) : date;
+        // Ni la fecha original ni la nueva pueden caer en un mes cerrado
+        if (esquema.trazabilidad) {
+            await exigirPeriodoAbierto(connection, actual[0].fecha, 'ventas');
+            await exigirPeriodoAbierto(connection, fecha, 'ventas');
+        }
+        const ventaAntes = await documentoVenta(connection, id);
 
         // Editar productos o precios no debe cambiar un estado de pago ya real:
         // se recalcula con los abonos registrados. Sin abonos se conserva el estado anterior.
@@ -914,8 +966,11 @@ app.put('/api/sales/:id', async (req, res, next) => {
 
         await connection.query('UPDATE ventas SET total = ?, fecha = ?, cliente_id = ?, estado = ?, metodo = ? WHERE id = ?',
             [total, fecha, finalCustomerId, status, method, id]);
+        const auditarEdicion = async () => auditar(connection, { accion: 'editar', entidad: 'venta', entidadId: id, resumen: `Venta #${id} editada`,
+            antes: ventaAntes, despues: await documentoVenta(connection, id), usuario: usuarioDe(req) });
 
         for (const item of items) await insertarDetalle(connection, id, item, req.user?.id);
+        await auditarEdicion();
 
         await connection.commit();
         res.json({ id, ...req.body, total, status });
@@ -939,7 +994,7 @@ app.delete('/api/sales/:id', async (req, res, next) => {
         }
         // Con la caja por sesiones nada se borra: se anula y el dinero vuelve en la caja abierta
         if (esquema.caja) {
-            const r = await anularVenta(connection, id, { motivo: req.query.reason || 'Venta anulada desde el panel', usuarioId: req.user?.id });
+            const r = await anularVenta(connection, id, { motivo: req.query.reason || 'Venta anulada desde el panel', usuarioId: req.user?.id, usuario: usuarioDe(req) });
             await connection.commit();
             return res.json({ message: 'Venta anulada: inventario devuelto y devolución registrada en la caja', ...r });
         }
@@ -1032,6 +1087,7 @@ app.post('/api/purchases', async (req, res, next) => {
     try {
         if (esquema.blindaje) c.fecha = fechaDocumento(c.fecha, { campo: 'La fecha de la compra' });
         const id = await transaccion(async (connection) => {
+            if (esquema.trazabilidad) await exigirPeriodoAbierto(connection, c.fecha, 'compras');
             if (esquema.blindaje) await validarItemCompra(connection, c.invId);
             const metodoId = esquema.caja ? await metodoPagoId(connection, c.metodo, { crear: false }) : null;
             const [result] = await connection.query(
@@ -1040,6 +1096,9 @@ app.post('/api/purchases', async (req, res, next) => {
             );
             await entradaCompra(connection, result.insertId, c, req.user?.id);
             await dineroCompra(connection, result.insertId, c.monto, metodoId, await nombreItem(connection, c.invId), req.user?.id);
+            if (esquema.trazabilidad) await connection.query('UPDATE compras SET creado_por = ? WHERE id = ?', [req.user?.id || null, result.insertId]);
+            await auditar(connection, { accion: 'crear', entidad: 'compra', entidadId: result.insertId, resumen: `Compra #${result.insertId}: ${await nombreItem(connection, c.invId)} por $${Math.round(c.monto).toLocaleString('es-CO')}`,
+                despues: await fila(connection, 'compras', result.insertId), usuario: usuarioDe(req) });
             return result.insertId;
         });
         res.status(201).json({ id, ...req.body, amount: c.monto });
@@ -1053,8 +1112,13 @@ app.put('/api/purchases/:id', async (req, res, next) => {
     try {
         await transaccion(async (connection) => {
             const orig = await exigirVigente(connection, 'compras', id, 'La compra');
+            const compraAntes = await fila(connection, 'compras', id);
             if (esquema.blindaje) {
                 c.fecha = fechaDocumento(c.fecha, { original: orig.fecha, campo: 'La fecha de la compra' });
+                if (esquema.trazabilidad) {
+                    await exigirPeriodoAbierto(connection, orig.fecha, 'compras');
+                    await exigirPeriodoAbierto(connection, c.fecha, 'compras');
+                }
                 await validarItemCompra(connection, c.invId);
             }
             const metodoId = esquema.caja ? await metodoPagoId(connection, c.metodo, { crear: false }) : null;
@@ -1064,6 +1128,8 @@ app.put('/api/purchases/:id', async (req, res, next) => {
             await entradaCompra(connection, Number(id), c, req.user?.id);
             // Si cambió el monto o el método, la diferencia queda en la caja abierta
             await dineroCompra(connection, id, c.monto, metodoId, await nombreItem(connection, c.invId), req.user?.id);
+            await auditar(connection, { accion: 'editar', entidad: 'compra', entidadId: id, resumen: `Compra #${id} editada`,
+                antes: compraAntes, despues: await fila(connection, 'compras', id), usuario: usuarioDe(req) });
         });
         res.json({ id, ...req.body, amount: c.monto });
     } catch (error) { next(error); }
@@ -1082,8 +1148,11 @@ app.delete('/api/purchases/:id', async (req, res, next) => {
                 return;
             }
             const [[compra]] = await connection.query('SELECT inventario_id, metodo_pago_id FROM compras WHERE id = ?', [id]);
+            const compraAntes = await fila(connection, 'compras', id);
             await connection.query('UPDATE compras SET anulada_en = NOW(), anulada_por = ?, motivo_anulacion = ? WHERE id = ?', [req.user?.id || null, motivo, id]);
             await dineroCompra(connection, id, 0, compra.metodo_pago_id, `anulada (${await nombreItem(connection, compra.inventario_id)})`, req.user?.id);
+            await auditar(connection, { accion: 'anular', entidad: 'compra', entidadId: id, resumen: `Compra #${id} anulada: ${motivo}`,
+                antes: compraAntes, despues: await fila(connection, 'compras', id), usuario: usuarioDe(req) });
         });
         res.json({ message: esquema.caja ? 'Compra anulada: stock y caja ajustados' : 'Purchase deleted and stock adjusted' });
     } catch (error) { next(error); }
@@ -1104,6 +1173,7 @@ app.post('/api/receptions', async (req, res, next) => {
         const fecha = fechaDocumento(req.body.date, { campo: 'La fecha de la recepción' });
         const factura = req.body.invoice ? String(req.body.invoice).trim().substring(0, 60) : null;
         const r = await transaccion(async (connection) => {
+            if (esquema.trazabilidad) await exigirPeriodoAbierto(connection, fecha, 'recepciones de mercancía');
             const metodoId = await metodoPagoId(connection, req.body.method, { crear: false });
             const proveedor = Number.parseInt(req.body.supplierId, 10) || null;
             if (proveedor) {
@@ -1122,6 +1192,10 @@ app.post('/api/receptions', async (req, res, next) => {
                 await dineroCompra(connection, compra.insertId, c.monto, metodoId, `${await nombreItem(connection, c.invId)}${factura ? ` (factura ${factura})` : ''}`, req.user?.id);
                 total += c.monto;
             }
+            if (esquema.trazabilidad) await connection.query('UPDATE compras SET creado_por = ? WHERE recepcion_id = ?', [req.user?.id || null, rec.insertId]);
+            const [lineasRec] = await connection.query('SELECT id, inventario_id, cantidad, precio_unitario, monto FROM compras WHERE recepcion_id = ? ORDER BY id', [rec.insertId]);
+            await auditar(connection, { accion: 'crear', entidad: 'recepcion', entidadId: rec.insertId, resumen: `Recepción #${rec.insertId}${factura ? ` (factura ${factura})` : ''}: ${lineas.length} producto(s) por $${Math.round(total).toLocaleString('es-CO')}`,
+                despues: { ...(await fila(connection, 'recepciones', rec.insertId)), lineas: lineasRec }, usuario: usuarioDe(req) });
             return { id: rec.insertId, total: redondear2(total), lines: lineas.length };
         });
         res.status(201).json(r);
@@ -1153,6 +1227,8 @@ app.delete('/api/receptions/:id', async (req, res, next) => {
                 await connection.query('UPDATE compras SET anulada_en = NOW(), anulada_por = ?, motivo_anulacion = ? WHERE id = ?', [req.user?.id || null, motivo, l.id]);
                 await dineroCompra(connection, l.id, 0, l.metodo_pago_id, `anulada (${await nombreItem(connection, l.inventario_id)})`, req.user?.id);
             }
+            await auditar(connection, { accion: 'anular', entidad: 'recepcion', entidadId: req.params.id, resumen: `Recepción #${req.params.id} anulada (${lineas.length} línea(s)): ${motivo}`,
+                antes: { lineas }, usuario: usuarioDe(req) });
             return lineas.length;
         });
         res.json({ message: `Recepción anulada: ${n} línea(s)` });
@@ -1182,6 +1258,9 @@ app.post('/api/inventory/count', async (req, res, next) => {
                 if (!diferencia) continue;
                 await moverStock(connection, { inventarioId: id, cantidad: diferencia, tipo: 'ajuste', origenTipo: 'ajuste', motivo, usuarioId: req.user?.id });
                 hechos.push({ productId: id, name: item.nombre, before: Number(item.stock), counted: contado, difference: diferencia });
+            }
+            if (hechos.length) {
+                await auditar(connection, { accion: 'ajustar', entidad: 'conteo', resumen: `${motivo}: ${hechos.length} ajuste(s)`, despues: hechos, usuario: usuarioDe(req) });
             }
             return hechos;
         });
@@ -1250,6 +1329,7 @@ app.post('/api/expenses', async (req, res, next) => {
         const date = esquema.blindaje ? fechaDocumento(req.body.date, { campo: 'La fecha del gasto' }) : req.body.date;
         const monto = redondear2(amount);
         const id = await transaccion(async (connection) => {
+            if (esquema.trazabilidad) await exigirPeriodoAbierto(connection, date, 'gastos');
             const categoriaId = await categoriaGastoId(connection, category, { crear: !esquema.blindaje });
             if (!esquema.categoriasGasto) {
                 const [r] = await connection.query('INSERT INTO gastos (descripcion, monto, categoria, fecha) VALUES (?, ?, ?, ?)', [description, monto, category, date]);
@@ -1260,6 +1340,9 @@ app.post('/api/expenses', async (req, res, next) => {
                 `INSERT INTO gastos (descripcion, monto, categoria, categoria_id, fecha${esquema.caja ? ', metodo_pago_id' : ''}) VALUES (?, ?, ?, ?, ?${esquema.caja ? ', ?' : ''})`,
                 [description, monto, category || 'Otros', categoriaId, date, ...(esquema.caja ? [metodoId] : [])]);
             await dineroGasto(connection, r.insertId, monto, metodoId, description, req.user?.id);
+            if (esquema.trazabilidad) await connection.query('UPDATE gastos SET creado_por = ? WHERE id = ?', [req.user?.id || null, r.insertId]);
+            await auditar(connection, { accion: 'crear', entidad: 'gasto', entidadId: r.insertId, resumen: `Gasto #${r.insertId}: ${description} por $${Math.round(monto).toLocaleString('es-CO')}`,
+                despues: await fila(connection, 'gastos', r.insertId), usuario: usuarioDe(req) });
             return r.insertId;
         });
         res.status(201).json({ id, ...req.body });
@@ -1275,6 +1358,11 @@ app.put('/api/expenses/:id', async (req, res, next) => {
         await transaccion(async (connection) => {
             const orig = await exigirVigente(connection, 'gastos', id, 'El gasto');
             const date = esquema.blindaje ? fechaDocumento(req.body.date, { original: orig.fecha, campo: 'La fecha del gasto' }) : req.body.date;
+            if (esquema.trazabilidad) {
+                await exigirPeriodoAbierto(connection, orig.fecha, 'gastos');
+                await exigirPeriodoAbierto(connection, date, 'gastos');
+            }
+            const gastoAntes = await fila(connection, 'gastos', id);
             const categoriaId = await categoriaGastoId(connection, category, { crear: !esquema.blindaje });
             if (!esquema.categoriasGasto) {
                 await connection.query('UPDATE gastos SET descripcion = ?, monto = ?, categoria = ?, fecha = ? WHERE id = ?', [description, monto, category, date, id]);
@@ -1284,6 +1372,8 @@ app.put('/api/expenses/:id', async (req, res, next) => {
             await connection.query(`UPDATE gastos SET descripcion = ?, monto = ?, categoria = ?, categoria_id = ?, fecha = ?${esquema.caja ? ', metodo_pago_id = ?' : ''} WHERE id = ?`,
                 [description, monto, category || 'Otros', categoriaId, date, ...(esquema.caja ? [metodoId] : []), id]);
             await dineroGasto(connection, id, monto, metodoId, description, req.user?.id);
+            await auditar(connection, { accion: 'editar', entidad: 'gasto', entidadId: id, resumen: `Gasto #${id} editado`,
+                antes: gastoAntes, despues: await fila(connection, 'gastos', id), usuario: usuarioDe(req) });
         });
         res.json({ id, ...req.body });
     } catch (error) { next(error); }
@@ -1300,8 +1390,11 @@ app.delete('/api/expenses/:id', async (req, res, next) => {
                 return;
             }
             const [[g]] = await connection.query('SELECT descripcion, metodo_pago_id FROM gastos WHERE id = ?', [id]);
+            const gastoAntes = await fila(connection, 'gastos', id);
             await connection.query('UPDATE gastos SET anulada_en = NOW(), anulada_por = ?, motivo_anulacion = ? WHERE id = ?', [req.user?.id || null, motivo, id]);
             await dineroGasto(connection, id, 0, g.metodo_pago_id, `anulado (${g.descripcion})`, req.user?.id);
+            await auditar(connection, { accion: 'anular', entidad: 'gasto', entidadId: id, resumen: `Gasto #${id} anulado: ${motivo}`,
+                antes: gastoAntes, despues: await fila(connection, 'gastos', id), usuario: usuarioDe(req) });
         });
         res.json({ message: esquema.caja ? 'Gasto anulado: la caja se ajustó' : 'Expense deleted' });
     } catch (error) { next(error); }
@@ -1364,7 +1457,12 @@ app.get('/api/cash/sessions/:id', async (req, res, next) => {
 app.post('/api/cash/movements', async (req, res, next) => {
     if (!esquema.caja) return sinCaja(res);
     try {
-        await transaccion((c) => movimientoManual(c, { tipo: req.body.type, monto: req.body.amount, motivo: req.body.reason, usuarioId: req.user?.id }));
+        await transaccion(async (c) => {
+            await movimientoManual(c, { tipo: req.body.type, monto: req.body.amount, motivo: req.body.reason, usuarioId: req.user?.id });
+            await auditar(c, { accion: req.body.type === 'retiro' ? 'retirar' : 'ingresar', entidad: 'caja',
+                resumen: `${req.body.type === 'retiro' ? 'Retiro' : 'Ingreso'} de efectivo $${Math.round(Number(req.body.amount) || 0).toLocaleString('es-CO')}: ${req.body.reason}`,
+                despues: { tipo: req.body.type, monto: Number(req.body.amount), motivo: req.body.reason }, usuario: usuarioDe(req) });
+        });
         res.status(201).json({ ok: true });
     } catch (error) { next(error); }
 });
@@ -1373,8 +1471,14 @@ app.post('/api/cash/movements', async (req, res, next) => {
 app.post('/api/cash/close', async (req, res, next) => {
     if (!esquema.caja) return sinCaja(res);
     try {
-        const r = await transaccion((c) => cerrarSesion(c, { sesionId: req.body.sessionId, contado: req.body.countedCash,
-            retirado: req.body.withdrawn, notas: req.body.notes, usuarioId: req.user?.id }));
+        const r = await transaccion(async (c) => {
+            const cierre = await cerrarSesion(c, { sesionId: req.body.sessionId, contado: req.body.countedCash,
+                retirado: req.body.withdrawn, notas: req.body.notes, usuarioId: req.user?.id });
+            await auditar(c, { accion: 'cerrar', entidad: 'caja', entidadId: cierre.closedId,
+                resumen: `Cierre de caja #${cierre.closedId}: contado $${Math.round(cierre.countedCash).toLocaleString('es-CO')}, diferencia $${Math.round(cierre.difference).toLocaleString('es-CO')}`,
+                despues: { ...cierre, retirado: Number(req.body.withdrawn) || 0, notas: req.body.notes || null, sesion: await fila(c, 'sesiones_caja', cierre.closedId) }, usuario: usuarioDe(req) });
+            return cierre;
+        });
         res.status(201).json(r);
     } catch (error) { next(error); }
 });
@@ -1384,6 +1488,91 @@ app.get('/api/cash/audit', async (req, res, next) => {
     if (!esquema.caja) return res.json({ disponible: false, diferencias: [] });
     try {
         res.json({ disponible: true, diferencias: await auditarDinero(db) });
+    } catch (error) { next(error); }
+});
+
+// --- CONTABILIDAD (migración 018): resultados, salud, periodos, bitácora y libros ---
+const sinContabilidad = (res) => res.status(503).json({ error: 'La contabilidad aún no está disponible (migración 018 pendiente)' });
+const rangoDe = (q) => {
+    if (q.periodo) return limitesPeriodo(q.periodo);
+    const re = /^\d{4}-\d{2}-\d{2}$/;
+    if (!re.test(q.desde || '') || !re.test(q.hasta || '') || q.desde > q.hasta) throw Object.assign(new Error('Indica el periodo (AAAA-MM) o desde y hasta (AAAA-MM-DD)'), { status: 400 });
+    return { desde: q.desde, hasta: q.hasta };
+};
+
+app.get('/api/contabilidad/resultados', async (req, res, next) => {
+    try {
+        const { desde, hasta } = rangoDe(req.query);
+        res.json(await resultados(db, desde, hasta));
+    } catch (error) { next(error); }
+});
+
+app.get('/api/contabilidad/salud', async (req, res, next) => {
+    try { res.json(await salud(db)); } catch (error) { next(error); }
+});
+
+app.get('/api/contabilidad/periodos', async (req, res, next) => {
+    if (!esquema.trazabilidad) return sinContabilidad(res);
+    try { res.json(await listarPeriodos(db)); } catch (error) { next(error); }
+});
+
+// Cerrar un mes: { periodo: 'AAAA-MM', notas }
+app.post('/api/contabilidad/periodos', async (req, res, next) => {
+    if (!esquema.trazabilidad) return sinContabilidad(res);
+    try {
+        const r = await transaccion((c) => cerrarPeriodo(c, req.body.periodo, { usuario: usuarioDe(req), notas: req.body.notes }));
+        res.status(201).json(r);
+    } catch (error) { next(error); }
+});
+
+app.post('/api/contabilidad/periodos/:periodo/reabrir', async (req, res, next) => {
+    if (!esquema.trazabilidad) return sinContabilidad(res);
+    try {
+        await transaccion((c) => reabrirPeriodo(c, req.params.periodo, { motivo: req.body.reason, usuario: usuarioDe(req) }));
+        res.json({ ok: true });
+    } catch (error) { next(error); }
+});
+
+// Bitácora: ?entidad=&entidadId=&q=&desde=&hasta=&pagina=
+app.get('/api/contabilidad/auditoria', async (req, res, next) => {
+    if (!esquema.trazabilidad) return sinContabilidad(res);
+    try {
+        const cond = [];
+        const p = [];
+        if (req.query.entidad) { cond.push('entidad = ?'); p.push(String(req.query.entidad)); }
+        if (req.query.entidadId) { cond.push('entidad_id = ?'); p.push(String(req.query.entidadId)); }
+        if (req.query.desde) { cond.push('creado_en >= ?'); p.push(`${req.query.desde} 00:00:00`); }
+        if (req.query.hasta) { cond.push('creado_en <= ?'); p.push(`${req.query.hasta} 23:59:59`); }
+        if (req.query.q) { cond.push('(resumen LIKE ? OR usuario LIKE ?)'); p.push(`%${req.query.q}%`, `%${req.query.q}%`); }
+        const where = cond.length ? `WHERE ${cond.join(' AND ')}` : '';
+        const pagina = Math.max(1, Number.parseInt(req.query.pagina, 10) || 1);
+        const [[{ total }]] = await db.query(`SELECT COUNT(*) total FROM auditoria ${where}`, p);
+        const [rows] = await db.query(`SELECT id, creado_en, usuario, accion, entidad, entidad_id, resumen, antes, despues, hash
+            FROM auditoria ${where} ORDER BY id DESC LIMIT 50 OFFSET ?`, [...p, (pagina - 1) * 50]);
+        res.json({ total: Number(total), pagina, registros: rows });
+    } catch (error) { next(error); }
+});
+
+app.get('/api/contabilidad/libros', (req, res) => res.json(librosDisponibles()));
+
+// Respaldo completo de la base en JSON (queda en la bitácora para que Salud sepa cuándo fue el último)
+app.get('/api/contabilidad/respaldo', async (req, res, next) => {
+    try {
+        const r = await respaldoCompleto(db);
+        const filas = Object.values(r.tablas).reduce((s, t) => s + t.length, 0);
+        await transaccion((c) => auditar(c, { accion: 'respaldar', entidad: 'base', resumen: `Respaldo completo: ${Object.keys(r.tablas).length} tablas, ${filas} filas`, usuario: usuarioDe(req) }));
+        res.set({ 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': `attachment; filename="respaldo-data_${r.generado.slice(0, 10)}.json"` });
+        res.send(JSON.stringify(r));
+    } catch (error) { next(error); }
+});
+
+// Un libro en CSV para Excel: ?libro=ventas&periodo=AAAA-MM (o desde/hasta)
+app.get('/api/contabilidad/exportar', async (req, res, next) => {
+    try {
+        const { desde, hasta } = rangoDe(req.query);
+        const { nombre, contenido } = await exportarLibro(db, String(req.query.libro || ''), desde, hasta);
+        res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${nombre}"` });
+        res.send(contenido);
     } catch (error) { next(error); }
 });
 

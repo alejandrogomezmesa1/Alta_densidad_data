@@ -513,6 +513,86 @@ let pid;
     await libroCuadra(G, 'todas las pruebas');
 }
 
+// ---------- 8. Contabilidad: auditoría, hora, resultados, periodos y libros ----------
+{
+    const G = 'Contabilidad';
+    const ahora = new Date(Date.now() - 5 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+    const ultimoMov = (await uno('SELECT creado_en FROM movimientos_inventario ORDER BY id DESC LIMIT 1')).creado_en;
+    const minutos = Math.abs(new Date(ultimoMov.replace(' ', 'T') + 'Z') - new Date(ahora.replace(' ', 'T') + 'Z')) / 60000;
+    reg(G, 'los movimientos quedan en hora de Colombia', minutos < 30, `último ${ultimoMov} · ahora ${ahora}`);
+
+    const aud = await call('GET', '/contabilidad/auditoria?entidad=venta');
+    const acciones = new Set(aud.body.registros.map((r) => r.accion));
+    reg(G, 'la bitácora registra ventas creadas, editadas y anuladas', ['crear', 'editar', 'anular'].every((a) => acciones.has(a)), [...acciones].join(', '));
+    const conAntes = aud.body.registros.find((r) => r.accion === 'editar');
+    reg(G, 'la edición guarda cómo estaba antes y cómo quedó', !!conAntes?.antes && !!conAntes?.despues && conAntes.antes !== conAntes.despues);
+    for (const e of ['compra', 'gasto', 'recepcion', 'producto', 'caja', 'inventario']) {
+        reg(G, `la bitácora registra cambios en ${e}`, (await call('GET', `/contabilidad/auditoria?entidad=${e}`)).body.total > 0);
+    }
+
+    // Libros inmutables en la base
+    const intento = async (sql) => { try { await db.query(sql); return 'pasó'; } catch (e) { return e.message; } };
+    reg(G, 'la base impide borrar movimientos de inventario', /inmutable/.test(await intento('DELETE FROM movimientos_inventario ORDER BY id DESC LIMIT 1')));
+    reg(G, 'la base impide modificar movimientos de caja', /inmutable/.test(await intento('UPDATE movimientos_caja SET monto = 0 ORDER BY id DESC LIMIT 1')));
+    reg(G, 'la base impide alterar la bitácora', /inmutable/.test(await intento('UPDATE auditoria SET resumen = \'x\' ORDER BY id DESC LIMIT 1')));
+
+    const sal = await call('GET', '/contabilidad/salud');
+    const rojos = sal.body.controles.filter((c) => !c.ok);
+    reg(G, 'salud contable sin problemas críticos', sal.body.ok, rojos.map((c) => `${c.titulo}: ${c.detalle}`).join(' | '));
+    reg(G, 'la cadena de auditoría verifica', sal.body.controles.find((c) => c.clave === 'auditoria')?.ok, sal.body.controles.find((c) => c.clave === 'auditoria')?.detalle);
+
+    // Resultados del mes contra un cálculo independiente
+    const mes = hoy.slice(0, 7);
+    const res1 = (await call('GET', `/contabilidad/resultados?periodo=${mes}`)).body;
+    const [[esperado]] = await db.query(`SELECT COALESCE(SUM(total), 0) t FROM ventas WHERE DATE_FORMAT(fecha, '%Y-%m') = ? AND (anulada_en IS NULL OR anulada_en > ?)`, [mes, `${res1.hasta} 23:59:59`]);
+    reg(G, 'ventas brutas del mes = suma de ventas vigentes', Math.abs(res1.ventas.brutas - Number(esperado.t)) < 0.01, `${res1.ventas.brutas} vs ${esperado.t}`);
+    reg(G, 'utilidad bruta = ventas netas − costo de ventas', Math.abs(res1.utilidadBruta - (res1.ventas.netas - res1.costoVentas.neto)) < 0.01);
+    reg(G, 'el resultado trae dinero, cartera e inventario valorizado', !!res1.dinero && res1.cartera.saldo >= 0 && res1.inventario.final.valor > 0, `inventario $${res1.inventario.final.valor}`);
+
+    // Cierre del mes anterior y su bloqueo
+    const [y, m] = hoy.split('-').map(Number);
+    const anterior = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+    reg(G, 'el mes en curso no se puede cerrar', (await call('POST', '/contabilidad/periodos', { periodo: mes })).status === 400);
+    const cierre = await call('POST', '/contabilidad/periodos', { periodo: anterior, notes: 'Prueba' });
+    reg(G, `cerrar ${anterior} guarda su foto con huella`, cierre.status === 201 && /^[a-f0-9]{64}$/.test(cierre.body.hash), cierre.body.error || '');
+    const enCerrado = `${anterior}-15`;
+    const vCerr = await venta([{ productId: perfume.id, quantity: 1, unitPrice: Number(perfume.precio) }], { date: enCerrado, initialPayment: Number(perfume.precio) });
+    reg(G, 'no se registran ventas con fecha en un mes cerrado', vCerr.status === 400, vCerr.body.error);
+    reg(G, 'no se registran gastos con fecha en un mes cerrado', (await call('POST', '/expenses', { description: 'X', amount: 1000, category: 'Otros', date: enCerrado })).status === 400);
+    const vieja = await uno('SELECT id FROM ventas WHERE fecha < ? AND anulada_en IS NULL AND origen = \'pos\' ORDER BY id DESC LIMIT 1', [`${mes}-01 00:00:00`]);
+    if (vieja) {
+        const edit = await call('PUT', `/sales/${vieja.id}`, { date: hoy, customerName: 'X', method: 'Efectivo', items: [{ productId: perfume.id, quantity: 1, unitPrice: 1000 }] });
+        reg(G, 'no se edita una venta de un mes cerrado', edit.status === 400, edit.body.error);
+    }
+    reg(G, 'los meses se cierran en orden', (await call('POST', '/contabilidad/periodos', { periodo: '2020-01' })).status === 400);
+    const periodos = (await call('GET', '/contabilidad/periodos')).body;
+    reg(G, 'la foto del mes cerrado verifica su huella', periodos[0]?.periodo === anterior && periodos[0].verificado === true);
+    reg(G, 'reabrir exige motivo', (await call('POST', `/contabilidad/periodos/${anterior}/reabrir`, { reason: 'x' })).status === 400);
+    reg(G, 'reabrir el último mes con motivo', (await call('POST', `/contabilidad/periodos/${anterior}/reabrir`, { reason: 'Prueba de reapertura del cierre' })).status === 200);
+    const vAbierto = await venta([{ productId: perfume.id, quantity: 1, unitPrice: Number(perfume.precio) }], { date: enCerrado, initialPayment: Number(perfume.precio) });
+    reg(G, 'reabierto, el mes vuelve a recibir documentos', vAbierto.status === 201, vAbierto.body.error || '');
+    if (vAbierto.status === 201) await call('DELETE', `/sales/${vAbierto.body.id}`);
+    reg(G, 'cierre y reapertura quedan en la bitácora', (await call('GET', `/contabilidad/auditoria?entidad=periodo&entidadId=${anterior}`)).body.total === 2);
+
+    // Libros para el contador
+    const exp = await fetch(`${CONFIG.api}/contabilidad/exportar?libro=ventas&periodo=${mes}`, { headers: { Authorization: `Bearer ${token}` } });
+    const bytes = new Uint8Array(await exp.arrayBuffer());
+    const textoCsv = new TextDecoder().decode(bytes);
+    // BOM (EF BB BF): Excel abre el archivo en UTF-8 con tildes y ñ
+    const bom = bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF;
+    reg(G, 'exporta el libro de ventas en CSV para Excel (UTF-8 con BOM, «;»)', exp.status === 200 && bom && textoCsv.includes('Fecha;Venta;') && textoCsv.split('\r\n').length > 1, `${textoCsv.split('\r\n').length - 1} línea(s)`);
+    const resp = await fetch(`${CONFIG.api}/contabilidad/respaldo`, { headers: { Authorization: `Bearer ${token}` } });
+    const rj = await resp.json();
+    reg(G, 'el respaldo completo trae todas las tablas', resp.status === 200 && ['ventas', 'pagos', 'movimientos_inventario', 'movimientos_caja', 'auditoria', 'periodos_contables'].every((t) => Array.isArray(rj.tablas?.[t])),
+        `${Object.keys(rj.tablas || {}).length} tablas`);
+    reg(G, 'el respaldo no incluye las claves de los usuarios', (rj.tablas?.usuarios || []).every((u) => !('password' in u)));
+    reg(G, 'salud sabe cuándo fue el último respaldo', (await call('GET', '/contabilidad/salud')).body.controles.find((c) => c.clave === 'respaldo')?.ok === true);
+    for (const l of ['cobros', 'compras', 'gastos', 'caja', 'inventario', 'auditoria']) {
+        const r = await fetch(`${CONFIG.api}/contabilidad/exportar?libro=${l}&periodo=${mes}`, { headers: { Authorization: `Bearer ${token}` } });
+        reg(G, `exporta el libro de ${l}`, r.status === 200);
+    }
+}
+
 const fallas = resultados.filter((r) => r.ok === false);
 console.log(`\n${resultados.filter((r) => r.ok === true).length} OK · ${fallas.length} fallas · ${resultados.filter((r) => r.ok === null).length} pendientes`);
 await db.end();

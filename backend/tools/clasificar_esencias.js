@@ -20,6 +20,7 @@ const POR_NOMBRE = {
 };
 
 const conn = await mysql.createConnection({ uri: process.env.DATA_DB_URL });
+await conn.query("SET time_zone = '-05:00'"); // hora de Colombia, igual que el servidor (db.js)
 try {
     const [filas] = await conn.query("SELECT id, nombre, clase_esencia FROM inventario WHERE tipo = 'esencia' AND activo = 1 ORDER BY nombre");
     const plan = []; const dudas = [];

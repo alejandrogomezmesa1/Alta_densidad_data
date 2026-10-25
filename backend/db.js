@@ -16,4 +16,10 @@ const pool = mysql.createPool({
     dateStrings: true
 });
 
+// Toda la contabilidad va en hora de Colombia: las fechas que pone la base (NOW(), CURRENT_TIMESTAMP:
+// movimientos, anulaciones, sesiones de caja) deben coincidir con las de los documentos. Railway
+// corre en UTC, así que cada conexión fija su zona horaria apenas se abre.
+export const ZONA_HORARIA = '-05:00';
+pool.on('connection', (conexion) => { conexion.query(`SET time_zone = '${ZONA_HORARIA}'`); });
+
 export default pool;

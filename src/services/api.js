@@ -68,6 +68,20 @@ class ApiService {
     }
   }
 
+  // Descarga un archivo (CSV, PDF…) del servidor con la sesión y lo guarda con su nombre
+  async descargar(endpoint, nombre) {
+    const response = await fetch(`${API_URL}${endpoint}`, { headers: { Authorization: `Bearer ${this.getToken()}` } });
+    if (!response.ok) {
+      const e = await response.json().catch(() => ({}));
+      throw new Error(e.error || 'No se pudo descargar el archivo');
+    }
+    const url = URL.createObjectURL(await response.blob());
+    const a = document.createElement('a');
+    a.href = url; a.download = nombre;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
   // Quick Methods
   get(endpoint) { return this.request(endpoint); }
   post(endpoint, body) { return this.request(endpoint, { method: 'POST', body: JSON.stringify(body) }); }

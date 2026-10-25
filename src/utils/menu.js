@@ -1,7 +1,7 @@
 // Secciones del menú lateral (las usan el Sidebar y la barra superior)
 import {
   LayoutDashboard, Package, ShoppingCart, TrendingUp, Receipt, Users, Wallet, ShieldCheck, Clock,
-  Gift, Settings, FlaskConical, ShoppingBag, PackagePlus, Search
+  Gift, Settings, FlaskConical, ShoppingBag, PackagePlus, Search, BookOpenCheck
 } from 'lucide-react';
 
 // Arriba lo de todos los días; abajo los registros y la administración
@@ -14,6 +14,7 @@ export const MENU = [
   ]},
   { title: 'Resumen', items: [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { id: 'contabilidad', icon: BookOpenCheck, label: 'Contabilidad' },
   ]},
   { title: 'Registros', items: [
     { id: 'sales', icon: TrendingUp, label: 'Ventas' },

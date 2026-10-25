@@ -1339,3 +1339,57 @@ button, a, input, select {
 @media (max-width: 560px) {
   .dash-4 { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ── Contabilidad ── */
+.conta-barra { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+.conta-barra label { display: flex; align-items: center; gap: 0.6rem; font-size: 12px; letter-spacing: var(--ls-ui); text-transform: uppercase; color: var(--c-mute); }
+.conta-barra input[type="month"] { width: auto; }
+.conta-nota { font-size: 0.82rem; color: var(--c-mute); line-height: 1.55; margin: 0; }
+.conta-titulo { font-size: 0.78rem !important; letter-spacing: 0.12em; text-transform: uppercase; margin: 0 0 1rem !important; color: var(--accent-primary); }
+.conta-linea { display: flex; justify-content: space-between; gap: 1rem; padding: 0.55rem 0; border-bottom: 1px solid var(--glass-border); font-size: 0.92rem; }
+.conta-linea small { color: var(--c-mute); }
+.conta-linea > span:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.conta-linea.fuerte { font-weight: 500; border-bottom: 1px solid var(--c-ink); }
+.conta-linea.fuerte > span:last-child { font-size: 1.05rem; }
+.conta-control { display: flex; gap: 0.8rem; align-items: flex-start; padding: 0.9rem 0; border-bottom: 1px solid var(--glass-border); }
+.conta-control div { display: flex; flex-direction: column; gap: 3px; }
+.conta-control small, .conta-periodo small { color: var(--c-mute); font-size: 0.8rem; }
+.conta-campo { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1rem; font-size: 11px; letter-spacing: var(--ls-ui); text-transform: uppercase; color: var(--c-mute); }
+.conta-campo input { text-transform: none; letter-spacing: normal; }
+.conta-periodo { display: flex; justify-content: space-between; gap: 1rem; padding: 0.9rem 0; border-bottom: 1px solid var(--glass-border); }
+.conta-periodo > div { display: flex; flex-direction: column; gap: 3px; }
+.conta-filtros { display: grid; grid-template-columns: 180px minmax(0, 1fr) 150px 150px; gap: 0.75rem; padding: 1.25rem; border-bottom: 1px solid var(--glass-border); }
+.conta-registro { border-bottom: 1px solid var(--glass-border); }
+.conta-registro-cabeza {
+  display: grid; grid-template-columns: 16px 150px 90px minmax(0, 1fr) 120px; gap: 0.75rem; align-items: center;
+  width: 100%; padding: 0.75rem 1.25rem; text-align: left; color: var(--c-ink); background: transparent; cursor: pointer; font-size: 0.85rem;
+}
+.conta-registro-cabeza:hover { background: color-mix(in srgb, var(--c-ink) 4%, transparent); }
+.conta-registro-fecha, .conta-registro-usuario { color: var(--c-mute); font-size: 0.78rem; }
+.conta-registro-resumen { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conta-accion { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-primary); }
+.conta-accion--anular, .conta-accion--borrar, .conta-accion--reabrir { color: var(--error); }
+.conta-accion--editar, .conta-accion--ajustar { color: var(--warning); }
+.conta-registro-detalle { padding: 0 1.25rem 1rem 3.2rem; display: grid; gap: 0.6rem; }
+.conta-registro-detalle small { color: var(--c-mute); word-break: break-all; }
+.conta-diff { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.conta-diff th, .conta-diff td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--glass-border); vertical-align: top; word-break: break-word; }
+.conta-diff th { color: var(--c-mute); font-weight: 500; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+.conta-diff td:nth-child(2) { color: var(--error); }
+.conta-diff td:nth-child(3) { color: var(--success); }
+.conta-json { max-height: 320px; overflow: auto; font-size: 0.75rem; background: color-mix(in srgb, var(--c-ink) 4%, transparent); padding: 0.75rem; margin: 0; }
+/* Lista vertical: siempre filas completas, sin importar cuántos libros haya */
+.conta-libros { display: flex; flex-direction: column; }
+.conta-libro {
+  display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 0.9rem; align-items: center; width: 100%; text-align: left;
+  padding: 0.95rem 0.25rem; border-bottom: 1px solid var(--glass-border); background: transparent; color: var(--c-ink); cursor: pointer;
+}
+.conta-libro:hover { color: var(--accent-primary); }
+.conta-libro small { color: var(--c-mute); font-size: 0.78rem; }
+@media (max-width: 760px) {
+  .conta-filtros { grid-template-columns: minmax(0, 1fr); }
+  .conta-registro-cabeza { grid-template-columns: 16px minmax(0, 1fr); }
+  .conta-registro-cabeza .conta-registro-fecha, .conta-registro-cabeza .conta-accion, .conta-registro-cabeza .conta-registro-usuario { grid-column: 2; }
+  .conta-libro { grid-template-columns: 20px minmax(0, 1fr); }
+  .conta-libro small { grid-column: 2; }
+}

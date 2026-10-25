@@ -16,6 +16,7 @@ import { insertarPago } from './catalogos.js';
 import { catalogoDecants, consumoDeReceta, venderReceta, devolverVenta, guardarConsumosKit } from './recetas.js';
 import { fechaLocal, redondear2 } from './validaciones.js';
 import { anularVenta } from './anulaciones.js';
+import { auditar, documentoVenta, TIENDA_WEB } from './auditoria.js';
 import { preciosMayoristas } from './revendedores.js';
 
 const MAX_SKEW_MS = 60 * 1000;
@@ -260,6 +261,8 @@ const crearRouter = (db) => {
                 await guardarConsumosKit(connection, { ventaId, detalleId: detalle.insertId, consumos: consumosKit, descripcion: l.description });
             }
 
+            await auditar(connection, { accion: 'crear', entidad: 'venta', entidadId: ventaId, resumen: `Venta web ${ref} por $${Math.round(total).toLocaleString('es-CO')}`,
+                despues: await documentoVenta(connection, ventaId), usuario: TIENDA_WEB });
             await connection.commit();
             if (sinStock.length) console.warn(`[INTEGRACION] Venta web ${ref} dejó stock negativo en inventario: ${sinStock.join(', ')}`);
             res.status(201).json({ saleId: ventaId, stockInsuficiente: sinStock });
@@ -286,7 +289,7 @@ const crearRouter = (db) => {
             const ventaId = ventas[0].id;
             // Con la caja por sesiones el reembolso anula la venta (queda como historia) y devuelve el dinero en la caja abierta
             if (esquema.caja) {
-                if (!ventas[0].anulada_en) await anularVenta(connection, ventaId, { motivo: `Reembolso del pedido web ${ref}` });
+                if (!ventas[0].anulada_en) await anularVenta(connection, ventaId, { motivo: `Reembolso del pedido web ${ref}`, usuario: TIENDA_WEB });
                 await connection.commit();
                 return res.json({ cancelled: true, saleId: ventaId });
             }

@@ -80,12 +80,13 @@ export async function moverStock(conn, m) {
 
     await conn.query('UPDATE inventario SET stock = ?, precio_costo = ? WHERE id = ?', [stock, costo, item.id]);
     // Sin la migración 006 el stock cambia igual, pero todavía no hay libro donde registrarlo
+    // costo_promedio (migración 018): el costo que queda tras el movimiento, para valorizar a cualquier fecha
     if (esquema.libro) await conn.query(
         `INSERT INTO movimientos_inventario
-            (inventario_id, tipo, cantidad, stock_resultante, costo_unitario, origen_tipo, origen_id, motivo, usuario_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (inventario_id, tipo, cantidad, stock_resultante, costo_unitario, origen_tipo, origen_id, motivo, usuario_id${esquema.trazabilidad ? ', costo_promedio' : ''})
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?${esquema.trazabilidad ? ', ?' : ''})`,
         [item.id, m.tipo, cantidad, stock, m.costoUnitario ?? costoAnterior, m.origenTipo || null, m.origenId || null,
-         m.motivo ? String(m.motivo).substring(0, 255) : null, m.usuarioId || null]
+         m.motivo ? String(m.motivo).substring(0, 255) : null, m.usuarioId || null, ...(esquema.trazabilidad ? [costo] : [])]
     );
     if (stock < 0) console.warn(`[INVENTARIO] "${item.nombre}" quedó en ${stock} por ${m.tipo} ${m.origenTipo || ''} ${m.origenId || ''}`);
     return { stockAnterior, stock, costo };
@@ -152,9 +153,10 @@ export async function registrarCambioCosto(conn, { inventarioId, stock, costoAnt
     if (!esquema.blindaje) return;
     const pesos = (n) => `$${Number(n).toLocaleString('es-CO', { maximumFractionDigits: 4 })}`;
     await conn.query(
-        `INSERT INTO movimientos_inventario (inventario_id, tipo, cantidad, stock_resultante, costo_unitario, origen_tipo, motivo, usuario_id)
-         VALUES (?, 'cambio_costo', 0, ?, ?, 'ajuste', ?, ?)`,
-        [inventarioId, stock, costoNuevo, `${motivo || 'Costo editado en la ficha'}: ${pesos(costoAnterior)} → ${pesos(costoNuevo)}`.substring(0, 255), usuarioId || null]);
+        `INSERT INTO movimientos_inventario (inventario_id, tipo, cantidad, stock_resultante, costo_unitario, origen_tipo, motivo, usuario_id${esquema.trazabilidad ? ', costo_promedio' : ''})
+         VALUES (?, 'cambio_costo', 0, ?, ?, 'ajuste', ?, ?${esquema.trazabilidad ? ', ?' : ''})`,
+        [inventarioId, stock, costoNuevo, `${motivo || 'Costo editado en la ficha'}: ${pesos(costoAnterior)} → ${pesos(costoNuevo)}`.substring(0, 255), usuarioId || null,
+         ...(esquema.trazabilidad ? [costoNuevo] : [])]);
 }
 
 // Pedido de ítems → cantidades por ítem real, con los kits reemplazados por sus componentes

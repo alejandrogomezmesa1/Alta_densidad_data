@@ -35,6 +35,7 @@ const fmt = (n) => Number(n).toLocaleString('es-CO', { maximumFractionDigits: 2 
 const mismo = (a, b) => String(a).trim().replace(/\s+/g, ' ').toLowerCase() === String(b).trim().replace(/\s+/g, ' ').toLowerCase();
 
 const conn = await mysql.createConnection({ uri: process.env.DATA_DB_URL });
+await conn.query("SET time_zone = '-05:00'"); // hora de Colombia, igual que el servidor (db.js)
 try {
     const [migs] = await conn.query('SELECT version FROM schema_migrations');
     const versiones = new Set(migs.map((m) => m.version));

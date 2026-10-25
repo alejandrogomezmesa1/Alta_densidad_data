@@ -8,9 +8,11 @@
 import { esquema } from './estado.js';
 import { devolverVenta } from './recetas.js';
 import { sincronizarDinero } from './caja.js';
+import { auditar, documentoVenta } from './auditoria.js';
 
-export async function anularVenta(conn, ventaId, { motivo, usuarioId } = {}) {
+export async function anularVenta(conn, ventaId, { motivo, usuarioId, usuario } = {}) {
     const id = Number(ventaId);
+    const antes = await documentoVenta(conn, id);
     const [[venta]] = await conn.query('SELECT id, anulada_en FROM ventas WHERE id = ? FOR UPDATE', [id]);
     if (!venta) throw Object.assign(new Error('Venta no encontrada'), { status: 404 });
     if (venta.anulada_en) throw Object.assign(new Error('Esta venta ya está anulada'), { status: 400 });
@@ -23,6 +25,9 @@ export async function anularVenta(conn, ventaId, { motivo, usuarioId } = {}) {
         await sincronizarDinero(conn, { origenTipo: 'pago', origenId: p.id, tipo: 'cobro', monto: 0, metodoPagoId: p.metodo_pago_id,
             descripcion: `Devolución por anulación de la venta #${id}`, usuarioId });
     }
+    // Una venta de un mes cerrado también se puede anular: el efecto (devolución, inventario) va en la fecha de hoy
+    await auditar(conn, { accion: 'anular', entidad: 'venta', entidadId: id, resumen: `Venta #${id} anulada: ${texto}`,
+        antes, despues: await documentoVenta(conn, id), usuario: usuario || (usuarioId ? { id: usuarioId } : null) });
     return { saleId: id, refundedPayments: pagos.length };
 }
 
