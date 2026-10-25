@@ -16,7 +16,7 @@ export const formatoCantidad = (valor, unidad) =>
 // ── Semáforo de stock (módulo Configuraciones) ──
 // Rojo = agotado (0 o menos) · Amarillo = advertencia (en el límite o por debajo) · Verde = disponible.
 // El límite es el stock mínimo del ítem si lo tiene; si no, el de Configuraciones según su unidad.
-export const CONFIG_DEFECTO = { stock_advertencia_und: 1, stock_advertencia_ml: 30 };
+export const CONFIG_DEFECTO = { stock_advertencia_und: 1, stock_advertencia_ml: 30, revendedor_descuento: 20, revendedor_margen_minimo: 15 };
 
 export const NIVELES_STOCK = {
   agotado: { etiqueta: 'Agotado', color: 'var(--error)' },

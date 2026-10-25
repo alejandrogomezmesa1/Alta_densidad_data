@@ -21,6 +21,18 @@ export const DEFINICIONES = [
         etiqueta: 'Advertencia en esencias y líquidos',
         ayuda: 'Para lo que se mide en ml (esencias, bases, feromonas): con estos ml o menos se marca en amarillo.',
         min: 0, max: 100000, paso: 1, defecto: 30, web: true
+    },
+    {
+        clave: 'revendedor_descuento', grupo: 'Revendedores · lista de precios', tipo: 'numero', unidad: '%',
+        etiqueta: 'Descuento del revendedor sobre el precio al público',
+        ayuda: 'El precio del revendedor (lo que le cuesta cada perfume) es el precio de venta menos este porcentaje, redondeado a $1.000. Se usa al generar el PDF para revendedores.',
+        min: 0, max: 90, paso: 1, defecto: 20
+    },
+    {
+        clave: 'revendedor_margen_minimo', grupo: 'Revendedores · lista de precios', tipo: 'numero', unidad: '%',
+        etiqueta: 'Margen mínimo sobre el costo',
+        ayuda: 'El precio del revendedor nunca queda por debajo del costo más este porcentaje: si el descuento lo rompe, se sube a ese piso. Si ni así queda por debajo del precio al público, el perfume sale de la lista.',
+        min: 0, max: 200, paso: 1, defecto: 15
     }
 ];
 
