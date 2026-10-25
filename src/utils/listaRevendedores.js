@@ -1,11 +1,12 @@
 // Lista de precios para revendedores (PDF)
 // ------------------------------------------------------------
-// Tu precio (lo que le cuesta al revendedor) = precio al público − descuento, redondeado a $1.000.
+// Tu precio (lo que le cuesta al revendedor) = precio al público − un descuento fijo según su rango
+// (hasta $75.000: −$10.000 · hasta $95.000: −$15.000 · más: −$20.000, editable en Configuraciones).
 // Piso: nunca por debajo de costo + margen mínimo; si el piso no deja nada por debajo del precio al
-// público, el perfume sale de la lista y se reporta. Descuento y margen vienen de Configuraciones.
+// público, el perfume sale de la lista y se reporta.
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { CONFIG_DEFECTO, pesos } from './inventario';
+import { CONFIG_DEFECTO, descuentoRevendedor, pesos } from './inventario';
 
 const COLORES = { hueso: [244, 241, 234], hueso2: [234, 229, 218], filete: [214, 208, 195], tinta: [11, 11, 12], oro: [154, 123, 63], gris: [107, 103, 95] };
 const FUENTES = { CG: 'CG-Regular.ttf', Jost: 'Jost-Regular.ttf', 'Jost-Medium': 'Jost-Medium.ttf', 'Jost-Light': 'Jost-Light.ttf' };
@@ -34,7 +35,6 @@ const fecha = (d) => d.toLocaleDateString('es-CO', { day: '2-digit', month: '2-d
 /** Calcula las filas de la lista: { filas, fuera, alPiso, sinCosto } */
 export function calcularLista(productos, { categorias, incluirAgotados, config }) {
   const c = { ...CONFIG_DEFECTO, ...config };
-  const descuento = Number(c.revendedor_descuento) / 100;
   const margen = Number(c.revendedor_margen_minimo) / 100;
   const filas = [];
   const fuera = [];
@@ -45,10 +45,10 @@ export function calcularLista(productos, { categorias, incluirAgotados, config }
     const publico = Number(p.price) || 0;
     if (publico <= 0 || (!incluirAgotados && Number(p.stock) <= 0)) continue;
     const costo = Number(p.costPrice) || 0;
-    let precio = mil(publico * (1 - descuento));
+    let precio = publico - descuentoRevendedor(publico, c);
     if (costo > 0) {
       const piso = mil(costo * (1 + margen), true);
-      if (piso >= publico) { fuera.push({ nombre: p.name, publico, costo }); continue; }
+      if (piso >= publico || precio <= 0) { fuera.push({ nombre: p.name, publico, costo }); continue; }
       if (precio < piso) { precio = piso; alPiso += 1; }
     } else sinCosto += 1;
     filas.push({ nombre: p.name, categoria: p.category, precio, publico });

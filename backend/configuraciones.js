@@ -22,16 +22,41 @@ export const DEFINICIONES = [
         ayuda: 'Para lo que se mide en ml (esencias, bases, feromonas): con estos ml o menos se marca en amarillo.',
         min: 0, max: 100000, paso: 1, defecto: 30, web: true
     },
+    // Precio del revendedor = precio al público − un descuento fijo según el rango de precio
     {
-        clave: 'revendedor_descuento', grupo: 'Revendedores · lista de precios', tipo: 'numero', unidad: '%',
-        etiqueta: 'Descuento del revendedor sobre el precio al público',
-        ayuda: 'El precio del revendedor (lo que le cuesta cada perfume) es el precio de venta menos este porcentaje, redondeado a $1.000. Se usa al generar el PDF para revendedores.',
-        min: 0, max: 90, paso: 1, defecto: 20
+        clave: 'revendedor_tope_bajo', grupo: 'Revendedores · lista de precios', tipo: 'numero', unidad: '$',
+        etiqueta: 'Rango bajo: precios al público hasta',
+        ayuda: 'Los perfumes que cuestan al público hasta este valor llevan el descuento del rango bajo.',
+        min: 0, max: 10000000, paso: 1000, defecto: 75000
+    },
+    {
+        clave: 'revendedor_desc_bajo', grupo: 'Revendedores · lista de precios', tipo: 'numero', unidad: '$',
+        etiqueta: 'Descuento del rango bajo',
+        ayuda: 'Lo que se le resta al precio al público para el revendedor (ej. $70.000 − $10.000 = $60.000).',
+        min: 0, max: 1000000, paso: 1000, defecto: 10000
+    },
+    {
+        clave: 'revendedor_tope_medio', grupo: 'Revendedores · lista de precios', tipo: 'numero', unidad: '$',
+        etiqueta: 'Rango medio: precios al público hasta',
+        ayuda: 'Por encima del rango bajo y hasta este valor llevan el descuento del rango medio; por encima, el del rango alto.',
+        min: 0, max: 10000000, paso: 1000, defecto: 95000
+    },
+    {
+        clave: 'revendedor_desc_medio', grupo: 'Revendedores · lista de precios', tipo: 'numero', unidad: '$',
+        etiqueta: 'Descuento del rango medio',
+        ayuda: 'Ej. $85.000 − $15.000 = $70.000.',
+        min: 0, max: 1000000, paso: 1000, defecto: 15000
+    },
+    {
+        clave: 'revendedor_desc_alto', grupo: 'Revendedores · lista de precios', tipo: 'numero', unidad: '$',
+        etiqueta: 'Descuento del rango alto',
+        ayuda: 'Para los perfumes por encima del rango medio. Ej. $110.000 − $20.000 = $90.000.',
+        min: 0, max: 1000000, paso: 1000, defecto: 20000
     },
     {
         clave: 'revendedor_margen_minimo', grupo: 'Revendedores · lista de precios', tipo: 'numero', unidad: '%',
         etiqueta: 'Margen mínimo sobre el costo',
-        ayuda: 'El precio del revendedor nunca queda por debajo del costo más este porcentaje: si el descuento lo rompe, se sube a ese piso. Si ni así queda por debajo del precio al público, el perfume sale de la lista.',
+        ayuda: 'El precio del revendedor nunca queda por debajo del costo más este porcentaje (redondeado a $1.000 hacia arriba): si el descuento lo rompe, se sube a ese piso. Si ni así queda por debajo del precio al público, el perfume sale de la lista.',
         min: 0, max: 200, paso: 1, defecto: 15
     }
 ];

@@ -38,8 +38,9 @@ const ListaRevendedores = ({ abierta, onCerrar, notify, config }) => {
       {!vista ? <p style={{ color: 'var(--text-muted)' }}>Cargando precios…</p> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            <b>Precio del revendedor</b> = precio al público − {c.revendedor_descuento} %, redondeado a $1.000, y nunca menos que el costo + {c.revendedor_margen_minimo} %.
-            Estos dos valores se cambian en Configuraciones.
+            <b>Precio del revendedor</b> = precio al público menos: {pesos(c.revendedor_desc_bajo)} hasta {pesos(c.revendedor_tope_bajo)} ·
+            {' '}{pesos(c.revendedor_desc_medio)} hasta {pesos(c.revendedor_tope_medio)} · {pesos(c.revendedor_desc_alto)} por encima.
+            Nunca menos que el costo + {c.revendedor_margen_minimo} %. Los rangos y montos se cambian en Configuraciones.
           </p>
           <div>
             <span className="paso">Líneas que van en la lista</span>

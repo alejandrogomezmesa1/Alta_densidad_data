@@ -16,7 +16,21 @@ export const formatoCantidad = (valor, unidad) =>
 // ── Semáforo de stock (módulo Configuraciones) ──
 // Rojo = agotado (0 o menos) · Amarillo = advertencia (en el límite o por debajo) · Verde = disponible.
 // El límite es el stock mínimo del ítem si lo tiene; si no, el de Configuraciones según su unidad.
-export const CONFIG_DEFECTO = { stock_advertencia_und: 1, stock_advertencia_ml: 30, revendedor_descuento: 20, revendedor_margen_minimo: 15 };
+export const CONFIG_DEFECTO = {
+  stock_advertencia_und: 1, stock_advertencia_ml: 30,
+  // Revendedores: descuento fijo en pesos según el rango del precio al público
+  revendedor_tope_bajo: 75000, revendedor_desc_bajo: 10000,
+  revendedor_tope_medio: 95000, revendedor_desc_medio: 15000,
+  revendedor_desc_alto: 20000, revendedor_margen_minimo: 15
+};
+
+// Descuento del revendedor para un precio al público (rangos de Configuraciones)
+export const descuentoRevendedor = (publico, config = CONFIG_DEFECTO) => {
+  const c = { ...CONFIG_DEFECTO, ...config };
+  if (publico <= Number(c.revendedor_tope_bajo)) return Number(c.revendedor_desc_bajo);
+  if (publico <= Number(c.revendedor_tope_medio)) return Number(c.revendedor_desc_medio);
+  return Number(c.revendedor_desc_alto);
+};
 
 export const NIVELES_STOCK = {
   agotado: { etiqueta: 'Agotado', color: 'var(--error)' },
