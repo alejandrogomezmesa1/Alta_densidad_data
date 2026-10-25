@@ -7,7 +7,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { CONFIG_DEFECTO, pesos } from './inventario';
 
-const COLORES = { hueso: [244, 241, 234], hueso2: [234, 229, 218], filete: [214, 208, 195], tinta: [11, 11, 12], oro: [154, 123, 63], gris: [107, 103, 95], vino: [90, 18, 32] };
+const COLORES = { hueso: [244, 241, 234], hueso2: [234, 229, 218], filete: [214, 208, 195], tinta: [11, 11, 12], oro: [154, 123, 63], gris: [107, 103, 95] };
 const FUENTES = { CG: 'CG-Regular.ttf', Jost: 'Jost-Regular.ttf', 'Jost-Medium': 'Jost-Medium.ttf', 'Jost-Light': 'Jost-Light.ttf' };
 
 const aBase64 = (buffer) => {
@@ -51,7 +51,7 @@ export function calcularLista(productos, { categorias, incluirAgotados, config }
       if (piso >= publico) { fuera.push({ nombre: p.name, publico, costo }); continue; }
       if (precio < piso) { precio = piso; alPiso += 1; }
     } else sinCosto += 1;
-    filas.push({ nombre: p.name, categoria: p.category, precio, publico, agotado: Number(p.stock) <= 0 });
+    filas.push({ nombre: p.name, categoria: p.category, precio, publico });
   }
   filas.sort((a, b) => a.categoria.localeCompare(b.categoria) || a.nombre.localeCompare(b.nombre, 'es'));
   return { filas, fuera, alPiso, sinCosto };
@@ -78,8 +78,7 @@ export async function generarListaRevendedores(productos, opciones) {
 
   // Cómo leer la lista
   const nota = `Tu precio es lo que te cuesta cada perfume. Precio al público es el que sugerimos para la venta: la diferencia es tu ganancia. `
-    + `Precios por unidad en pesos colombianos, sujetos a disponibilidad y vigentes hasta el ${fecha(vigencia)}.`
-    + (opciones.incluirAgotados ? ' Los marcados «Agotado» se despachan cuando vuelvan a llegar: pregunta por WhatsApp.' : '');
+    + `Precios por unidad en pesos colombianos, sujetos a disponibilidad y vigentes hasta el ${fecha(vigencia)}.`;
   doc.setFontSize(8.4);
   const lineas = doc.splitTextToSize(nota, ancho - 2 * margen - 12);
   const altoCaja = 10 + lineas.length * 4.3;
@@ -104,14 +103,6 @@ export async function generarListaRevendedores(productos, opciones) {
     },
     didParseCell: (d) => {
       if (d.section === 'head' && d.column.index > (varias ? 1 : 0)) d.cell.styles.halign = 'right';
-    },
-    // «AGOTADO» en vino, más pequeño, después del nombre
-    didDrawCell: (d) => {
-      if (d.section !== 'body' || d.column.index !== 0 || !filas[d.row.index]?.agotado) return;
-      doc.setFont('Jost', 'normal'); doc.setFontSize(8.6);
-      const x = d.cell.x + 1 + doc.getTextWidth(filas[d.row.index].nombre) + 2.5;
-      doc.setFont('Jost-Light', 'normal'); doc.setFontSize(6.6); doc.setTextColor(...COLORES.vino);
-      doc.text('AGOTADO', x, d.cell.y + d.cell.height / 2 + 1.1);
     },
     willDrawPage: (d) => { if (d.pageNumber > 1) fondo(); }
   });

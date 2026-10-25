@@ -51,7 +51,7 @@ const ListaRevendedores = ({ abierta, onCerrar, notify, config }) => {
             </div>
           </div>
           <div className="chips">
-            <button className={`chip${incluirAgotados ? ' active' : ''}`} onClick={() => setIncluirAgotados(true)}>Incluir agotados (marcados)</button>
+            <button className={`chip${incluirAgotados ? ' active' : ''}`} onClick={() => setIncluirAgotados(true)}>Incluir agotados</button>
             <button className={`chip${!incluirAgotados ? ' active' : ''}`} onClick={() => setIncluirAgotados(false)}>Solo con stock</button>
           </div>
           <div style={{ padding: '0.9rem 1rem', border: '1px solid var(--glass-border)', fontSize: '0.9rem', lineHeight: 1.7 }}>
