@@ -17,6 +17,8 @@ import { devolverVenta, guardarConsumosKit, catalogoDecants, CATEGORIA_DECANTS }
 import { fechaDocumento, resolverCliente, validarLineasVenta, validarItemCompra, redondear2 } from './validaciones.js';
 import { auditar, usuarioDe, fila, documentoVenta } from './auditoria.js';
 import { exigirPeriodoAbierto, resultados, salud, listarPeriodos, cerrarPeriodo, reabrirPeriodo, limitesPeriodo, exportarLibro, librosDisponibles, respaldoCompleto } from './contabilidad.js';
+import { iniciarCierresAutomaticos, revisarCierres } from './automaticos.js';
+import { listarTarjetas, buscarTarjeta, tarjetaPublica, emitirTarjeta, anularTarjeta, validarRedencion, redimirTarjeta, METODO_TARJETA } from './tarjetas.js';
 
 dotenv.config();
 
@@ -798,8 +800,7 @@ app.post('/api/sales', async (req, res, next) => {
 
     // El total y el estado se calculan en el servidor, no se confía en el cliente
     const total = totalDeItems(items);
-    const initialPayment = Math.min(Math.max(0, toNumber(req.body.initialPayment)), total);
-    const status = initialPayment >= total ? 'paid' : 'pending';
+    const codigoTarjeta = esquema.tarjetas ? String(req.body.giftCardCode || '').trim() : '';
 
     let connection;
     try {
@@ -809,12 +810,18 @@ app.post('/api/sales', async (req, res, next) => {
 
         // Un mes cerrado no recibe documentos nuevos
         if (esquema.trazabilidad) await exigirPeriodoAbierto(connection, fecha, 'ventas');
+        // Tarjeta de regalo: se aplica primero (un solo uso); el resto se paga con el método elegido
+        const tarjeta = codigoTarjeta ? await validarRedencion(connection, codigoTarjeta, { total, fecha }) : null;
+        const aplicado = tarjeta ? tarjeta.aplicado : 0;
+        const initialPayment = Math.min(Math.max(0, toNumber(req.body.initialPayment)), Math.round((total - aplicado) * 100) / 100);
+        const status = aplicado + initialPayment >= total - 0.01 ? 'paid' : 'pending';
+        const metodoVenta = tarjeta && initialPayment <= 0 ? METODO_TARJETA : method;
         let finalCustomerId;
         if (esquema.blindaje) {
             await validarLineasVenta(connection, items);
             finalCustomerId = await resolverCliente(connection, req.body);
             // De contado puede ser «Consumidor final»; a crédito hay que saber quién debe
-            if (esquema.caja && !finalCustomerId && initialPayment < total) {
+            if (esquema.caja && !finalCustomerId && status !== 'paid') {
                 await connection.rollback();
                 return res.status(400).json({ error: 'Una venta a crédito necesita el nombre del cliente' });
             }
@@ -831,20 +838,23 @@ app.post('/api/sales', async (req, res, next) => {
 
         const [saleResult] = await connection.query(
             `INSERT INTO ventas (total, fecha, cliente_id, estado, metodo${esquema.trazabilidad ? ', creado_por' : ''}) VALUES (?, ?, ?, ?, ?${esquema.trazabilidad ? ', ?' : ''})`,
-            [total, fecha, finalCustomerId, status, method, ...(esquema.trazabilidad ? [req.user?.id || null] : [])]
+            [total, fecha, finalCustomerId, status, metodoVenta, ...(esquema.trazabilidad ? [req.user?.id || null] : [])]
         );
         const saleId = saleResult.insertId;
 
+        if (tarjeta) await redimirTarjeta(connection, tarjeta, { ventaId: saleId, fecha, usuarioId: req.user?.id });
         if (initialPayment > 0) {
             await insertarPago(connection, { ventaId: saleId, monto: initialPayment, fecha, metodo: method, crear: !esquema.blindaje, usuarioId: req.user?.id });
         }
 
         for (const item of items) await insertarDetalle(connection, saleId, item, req.user?.id);
-        await auditar(connection, { accion: 'crear', entidad: 'venta', entidadId: saleId, resumen: `Venta #${saleId} por $${Math.round(total).toLocaleString('es-CO')}`,
+        await auditar(connection, { accion: 'crear', entidad: 'venta', entidadId: saleId,
+            resumen: `Venta #${saleId} por $${Math.round(total).toLocaleString('es-CO')}${tarjeta ? ` (tarjeta de regalo ${tarjeta.tarjeta.codigo}: $${Math.round(aplicado).toLocaleString('es-CO')})` : ''}`,
             despues: await documentoVenta(connection, saleId), usuario: usuarioDe(req) });
 
         await connection.commit();
-        res.status(201).json({ id: saleId, ...req.body, total, status });
+        res.status(201).json({ id: saleId, ...req.body, total, status,
+            giftCard: tarjeta ? { code: tarjeta.tarjeta.codigo, applied: aplicado, leftover: tarjeta.excedente } : null });
     } catch (error) {
         if (connection) await connection.rollback();
         next(error);
@@ -1404,7 +1414,8 @@ app.delete('/api/expenses/:id', async (req, res, next) => {
 app.get('/api/payment-methods', async (req, res, next) => {
     try {
         if (!esquema.metodosPago) return res.json([{ id: null, name: 'Efectivo', isCash: 1 }, { id: null, name: 'Transferencia', isCash: 0 }]);
-        const [rows] = await db.query('SELECT id, nombre as name, es_efectivo as isCash FROM metodos_pago WHERE activo = 1 ORDER BY orden, nombre');
+        // La tarjeta de regalo no se elige como método: se usa con su código al vender
+        const [rows] = await db.query(`SELECT id, nombre as name, es_efectivo as isCash FROM metodos_pago WHERE activo = 1${esquema.tarjetas ? ' AND mueve_caja = 1' : ''} ORDER BY orden, nombre`);
         res.json(rows);
     } catch (error) { next(error); }
 });
@@ -1576,6 +1587,72 @@ app.get('/api/contabilidad/exportar', async (req, res, next) => {
     } catch (error) { next(error); }
 });
 
+// --- TARJETAS DE REGALO (migración 020) ---
+const sinTarjetas = (res) => res.status(503).json({ error: 'Las tarjetas de regalo aún no están disponibles (migración 020 pendiente)' });
+
+app.get('/api/gift-cards', async (req, res, next) => {
+    if (!esquema.tarjetas) return sinTarjetas(res);
+    try { res.json(await listarTarjetas(db, { q: req.query.q, estado: req.query.status })); } catch (error) { next(error); }
+});
+
+app.get('/api/gift-cards/code/:code', async (req, res, next) => {
+    if (!esquema.tarjetas) return sinTarjetas(res);
+    try {
+        const t = await buscarTarjeta(db, req.params.code);
+        if (!t) return res.status(404).json({ error: 'No existe una tarjeta con ese código' });
+        res.json(tarjetaPublica(t));
+    } catch (error) { next(error); }
+});
+
+app.post('/api/gift-cards', async (req, res, next) => {
+    if (!esquema.tarjetas) return sinTarjetas(res);
+    try {
+        const fecha = fechaDocumento(req.body.date, { campo: 'La fecha de la tarjeta' }).slice(0, 10);
+        const t = await transaccion(async (c) => {
+            await exigirPeriodoAbierto(c, fecha, 'tarjetas de regalo');
+            const nueva = await emitirTarjeta(c, { valor: toNumber(req.body.value), fecha, comprador: req.body.buyer, para: req.body.recipient,
+                notas: req.body.notes, metodoPagoId: req.body.methodId, usuarioId: req.user?.id });
+            await auditar(c, { accion: 'crear', entidad: 'tarjeta_regalo', entidadId: nueva.id,
+                resumen: `Tarjeta de regalo ${nueva.codigo} por $${Math.round(nueva.valor).toLocaleString('es-CO')} (vence ${String(nueva.vence).slice(0, 10)})`,
+                despues: nueva, usuario: usuarioDe(req) });
+            return nueva;
+        });
+        res.status(201).json(tarjetaPublica(t));
+    } catch (error) { next(error); }
+});
+
+app.post('/api/gift-cards/:id/void', async (req, res, next) => {
+    if (!esquema.tarjetas) return sinTarjetas(res);
+    try {
+        const t = await transaccion(async (c) => {
+            const antes = await fila(c, 'tarjetas_regalo', req.params.id);
+            await anularTarjeta(c, req.params.id, { motivo: req.body.reason, usuarioId: req.user?.id });
+            const despues = await fila(c, 'tarjetas_regalo', req.params.id);
+            await auditar(c, { accion: 'anular', entidad: 'tarjeta_regalo', entidadId: req.params.id,
+                resumen: `Tarjeta de regalo ${despues.codigo} anulada: ${despues.motivo_anulacion}`, antes, despues, usuario: usuarioDe(req) });
+            return despues;
+        });
+        res.json({ ok: true, code: t.codigo });
+    } catch (error) { next(error); }
+});
+
+// Tareas automáticas (cierres a las 23:59 y reintentos)
+app.get('/api/contabilidad/automaticos', async (req, res, next) => {
+    if (!esquema.automaticos) return res.json({ disponible: false, tareas: [] });
+    try {
+        const [rows] = await db.query('SELECT clave, tipo, ejecutada_en, ok, detalle FROM tareas_automaticas ORDER BY ejecutada_en DESC LIMIT 100');
+        res.json({ disponible: true, tareas: rows });
+    } catch (error) { next(error); }
+});
+
+app.post('/api/contabilidad/automaticos/ejecutar', async (req, res, next) => {
+    if (!esquema.automaticos) return res.status(503).json({ error: 'Cierres automáticos no disponibles (migración 019 pendiente)' });
+    try {
+        const resultado = await revisarCierres(db, { forzar: true });
+        res.json({ ok: true, resultado });
+    } catch (error) { next(error); }
+});
+
 // --- CIERRES DE CAJA DEL SISTEMA ANTERIOR (solo lectura desde la migración 016) ---
 app.get('/api/cash-closings', async (req, res, next) => {
     try {
@@ -1634,3 +1711,4 @@ app.listen(PORT, () => {
 });
 
 iniciarServidorIntegracion(db);
+iniciarCierresAutomaticos(db);

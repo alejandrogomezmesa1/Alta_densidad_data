@@ -212,7 +212,7 @@ const CashRegister = (props) => {
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>#{h.id} · desde {fechaHora(h.openedAt)}{h.closedBy ? ` · cerró ${h.closedBy}` : ''}</div>
                   </td>
                   <td style={{ padding: '0.85rem 1rem' }}><span className="mobile-label">Debía haber</span>{pesos(h.expectedCash)}</td>
-                  <td style={{ padding: '0.85rem 1rem' }}><span className="mobile-label">Contado</span>{h.countedCash === null ? '—' : pesos(h.countedCash)}</td>
+                  <td style={{ padding: '0.85rem 1rem' }}><span className="mobile-label">Contado</span>{h.countedCash !== null ? pesos(h.countedCash) : h.type === 'normal' ? <small title="La cerró el sistema a las 23:59: nadie contó el efectivo">automático · sin arqueo</small> : '—'}</td>
                   <td style={{ padding: '0.85rem 1rem' }}><span className="mobile-label">Diferencia</span><Diferencia valor={h.difference} /></td>
                   <td style={{ padding: '0.85rem 1rem' }}><span className="mobile-label">Quedó</span>{h.countedCash === null ? '—' : pesos(h.countedCash - (h.withdrawn || 0))}</td>
                 </tr>
@@ -290,7 +290,7 @@ const CashRegister = (props) => {
             {detalle.session.notes && <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem', lineHeight: 1.6 }}>{detalle.session.notes}</p>}
             <Fila etiqueta="Base al abrir" valor={pesos(detalle.session.initialCash)} />
             <Fila etiqueta="Debía haber" valor={pesos(detalle.session.expectedCash)} />
-            <Fila etiqueta="Contado" valor={detalle.session.countedCash === null ? '—' : pesos(detalle.session.countedCash)} />
+            <Fila etiqueta="Contado" valor={detalle.session.countedCash === null && detalle.session.type !== 'normal' ? '—' : detalle.session.countedCash === null ? 'Cierre automático de las 23:59 (sin arqueo)' : pesos(detalle.session.countedCash)} />
             <Fila etiqueta="Diferencia" valor={<Diferencia valor={detalle.session.difference} />} />
             <Fila etiqueta="Retirado al cerrar" valor={detalle.session.withdrawn === null ? '—' : pesos(detalle.session.withdrawn)} />
             {detalle.summary.byMethod.filter((m) => !m.isCash).map((m) => <Fila key={m.method} etiqueta={m.method} valor={conSigno(m.total)} color="var(--info)" />)}

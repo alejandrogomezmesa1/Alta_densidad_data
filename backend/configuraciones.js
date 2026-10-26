@@ -22,6 +22,18 @@ export const DEFINICIONES = [
         ayuda: 'Para lo que se mide en ml (esencias, bases, feromonas): con estos ml o menos se marca en amarillo.',
         min: 0, max: 100000, paso: 1, defecto: 30, web: true
     },
+    {
+        clave: 'cierre_automatico_caja', grupo: 'Cierres automáticos (23:59, hora de Colombia)', tipo: 'booleano',
+        etiqueta: 'Cerrar la caja todos los días a las 23:59',
+        ayuda: 'Si a las 23:59 la caja tiene movimientos y nadie la cerró, se cierra sola marcada «sin arqueo» y la siguiente arranca con el efectivo que debía haber. Si la cierras tú antes contando el efectivo, vale tu cierre.',
+        defecto: true
+    },
+    {
+        clave: 'cierre_automatico_mes', grupo: 'Cierres automáticos (23:59, hora de Colombia)', tipo: 'booleano',
+        etiqueta: 'Cerrar el mes contable el último día a las 23:59',
+        ayuda: 'Cierra el mes (y los meses anteriores pendientes, en orden) con su foto y su huella. Si la salud contable tiene problemas no cierra: reintenta cada hora y lo avisa en Contabilidad → Salud contable.',
+        defecto: true
+    },
     // Precio mayorista = precio al público − un descuento fijo según el rango (backend/revendedores.js)
     {
         clave: 'revendedor_tope_bajo', grupo: 'Mayoristas · lista de precios', tipo: 'numero', unidad: '$',

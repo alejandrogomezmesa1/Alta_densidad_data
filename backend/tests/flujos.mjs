@@ -591,6 +591,111 @@ let pid;
         const r = await fetch(`${CONFIG.api}/contabilidad/exportar?libro=${l}&periodo=${mes}`, { headers: { Authorization: `Bearer ${token}` } });
         reg(G, `exporta el libro de ${l}`, r.status === 200);
     }
+
+    // ── Tarjetas de regalo ──
+    {
+    const G = 'Tarjetas de regalo';
+    const pid = (await call('POST', '/products', { name: 'PRUEBA Tarjeta', category: 'Prueba', price: 70000, costPrice: 20000, stock: 20, type: 'terminado' })).body.id;
+    const cerca = (a, b) => Math.abs(a - b) < 0.01;
+    const esperadoCaja = async () => (await call('GET', '/cash/current')).body.summary.expectedCash;
+    const metodosTr = (await call('GET', '/payment-methods')).body;
+    reg(G, 'la tarjeta de regalo no aparece como método elegible', !metodosTr.some((m) => /tarjeta de regalo/i.test(m.name)));
+    const efectivo = metodosTr.find((m) => Number(m.isCash) === 1);
+    const caja0 = await esperadoCaja();
+    const ventasMes0 = (await call('GET', `/contabilidad/resultados?periodo=${hoy.slice(0, 7)}`)).body.ventas.brutas;
+    const t1 = await call('POST', '/gift-cards', { value: 100000, buyer: 'Ana', recipient: 'Laura', methodId: efectivo.id, date: hoy });
+    reg(G, 'se vende una tarjeta con código AD-XXXX-XXXX', t1.status === 201 && /^AD-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(t1.body.code), t1.body.code || JSON.stringify(t1.body));
+    const [y0, m0, d0] = hoy.split('-').map(Number);
+    const venceEsperado = new Date(Date.UTC(y0, m0 - 1 + 6, Math.min(d0, new Date(Date.UTC(y0, m0 + 6, 0)).getUTCDate()))).toISOString().slice(0, 10);
+    reg(G, 'vence a los 6 meses de la compra', t1.body.expires === venceEsperado, `${t1.body.expires} vs ${venceEsperado}`);
+    reg(G, 'su valor entra a la caja (efectivo)', cerca(await esperadoCaja(), caja0 + 100000));
+    reg(G, 'venderla no cuenta como venta', cerca((await call('GET', `/contabilidad/resultados?periodo=${hoy.slice(0, 7)}`)).body.ventas.brutas, ventasMes0));
+    reg(G, 'valor mínimo exigido', (await call('POST', '/gift-cards', { value: 10, methodId: efectivo.id, date: hoy })).status === 400);
+    const consulta = await call('GET', `/gift-cards/code/${t1.body.code.toLowerCase().replace(/-/g, ' ')}`);
+    reg(G, 'se encuentra aunque escriban el código en minúsculas y con espacios', consulta.status === 200 && consulta.body.status === 'activa');
+
+    // Compra menor que la tarjeta: la paga toda, sobran 30.000 que no se devuelven
+    const caja1 = await esperadoCaja();
+    const vt = await venta([{ productId: pid, quantity: 1, unitPrice: 70000 }], { giftCardCode: t1.body.code, initialPayment: 0 });
+    reg(G, 'una venta de 70.000 queda pagada con la tarjeta', vt.status === 201 && vt.body.status === 'paid' && vt.body.giftCard?.applied === 70000, JSON.stringify(vt.body).slice(0, 200));
+    reg(G, 'lo que sobra (30.000) queda registrado y no se devuelve', vt.body.giftCard?.leftover === 30000);
+    reg(G, 'usarla no mueve la caja (ese dinero ya entró)', cerca(await esperadoCaja(), caja1));
+    reg(G, 'no se puede usar dos veces', (await venta([{ productId: pid, quantity: 1, unitPrice: 10000 }], { giftCardCode: t1.body.code, initialPayment: 10000 })).status === 400);
+    reg(G, 'una tarjeta usada no se anula (se anula la venta)', (await call('POST', `/gift-cards/${t1.body.id}/void`, { reason: 'Prueba de anulación' })).status === 400);
+    reg(G, 'el libro de dinero sigue cuadrando', ((await call('GET', '/cash/audit')).body.diferencias || []).length === 0);
+    const res1 = (await call('GET', `/contabilidad/resultados?periodo=${hoy.slice(0, 7)}`)).body;
+    reg(G, 'el sobrante cuenta como ingreso en el estado de resultados', res1.otrosIngresos >= 30000 && res1.tarjetasRegalo?.usadas?.excedente >= 30000, JSON.stringify(res1.tarjetasRegalo));
+
+    // Anular la venta devuelve la tarjeta a activa
+    await call('DELETE', `/sales/${vt.body.id}?reason=Prueba`);
+    const t1b = (await call('GET', `/gift-cards/code/${t1.body.code}`)).body;
+    reg(G, 'anular la venta deja la tarjeta otra vez activa', t1b.status === 'activa' && !t1b.saleId);
+    reg(G, 'y la caja no cambia', cerca(await esperadoCaja(), caja1));
+
+    // Compra mayor: tarjeta + efectivo por la diferencia
+    const vm = await venta([{ productId: pid, quantity: 1, unitPrice: 150000 }], { giftCardCode: t1.body.code, initialPayment: 50000 });
+    reg(G, 'compra de 150.000: tarjeta de 100.000 + 50.000 en efectivo', vm.status === 201 && vm.body.status === 'paid' && vm.body.giftCard?.applied === 100000);
+    reg(G, 'solo la diferencia entra a la caja', cerca(await esperadoCaja(), caja1 + 50000));
+    reg(G, 'el estado de cada venta coincide con sus pagos', (await call('GET', '/contabilidad/salud')).body.controles.find((c) => c.clave === 'estado_pago')?.ok === true);
+
+    // Anular una tarjeta sin usar: el dinero sale de la caja
+    const t2 = await call('POST', '/gift-cards', { value: 50000, methodId: efectivo.id, date: hoy });
+    const caja2 = await esperadoCaja();
+    reg(G, 'anular exige motivo', (await call('POST', `/gift-cards/${t2.body.id}/void`, { reason: '' })).status === 400);
+    const an = await call('POST', `/gift-cards/${t2.body.id}/void`, { reason: 'Se equivocaron de valor' });
+    reg(G, 'anular una tarjeta sin usar saca su dinero de la caja', an.status === 200 && cerca(await esperadoCaja(), caja2 - 50000));
+    reg(G, 'una tarjeta anulada no se puede usar', (await venta([{ productId: pid, quantity: 1, unitPrice: 10000 }], { giftCardCode: t2.body.code, initialPayment: 0 })).status === 400);
+
+    // Vencida: vendida hace 7 meses
+    const hace7 = new Date(Date.UTC(y0, m0 - 1 - 7, 15)).toISOString().slice(0, 10);
+    const t3 = await call('POST', '/gift-cards', { value: 40000, methodId: efectivo.id, date: hace7 });
+    if (t3.status === 201) {
+        reg(G, 'una tarjeta de hace 7 meses aparece vencida', (await call('GET', `/gift-cards/code/${t3.body.code}`)).body.status === 'vencida');
+        reg(G, 'una tarjeta vencida no se puede usar', (await venta([{ productId: pid, quantity: 1, unitPrice: 10000 }], { giftCardCode: t3.body.code, initialPayment: 0 })).status === 400);
+    } else {
+        reg(G, 'una tarjeta con fecha en un mes cerrado se rechaza', t3.status === 400, t3.body.error);
+    }
+    reg(G, 'código inexistente rechazado', (await venta([{ productId: pid, quantity: 1, unitPrice: 10000 }], { giftCardCode: 'AD-ZZZZ-ZZZZ', initialPayment: 0 })).status === 400);
+    reg(G, 'el libro de dinero cuadra al final', ((await call('GET', '/cash/audit')).body.diferencias || []).length === 0, JSON.stringify((await call('GET', '/cash/audit')).body.diferencias?.slice(0, 3)));
+    reg(G, 'la lista de tarjetas responde', Array.isArray((await call('GET', '/gift-cards')).body));
+    }
+
+    // ── Cierre automático de caja (función del servidor contra la base de prueba) ──
+    {
+    const G = 'Fase F · Cierre automático de caja';
+        const { esquema } = await import('../estado.js');
+        Object.assign(esquema, { caja: true, trazabilidad: true, automaticos: true, tarjetas: true, metodosPago: true, blindaje: true });
+        const { cerrarCajaAuto } = await import('../automaticos.js');
+        const pool = mysql.createPool({ ...CONFIG.db, connectionLimit: 2, dateStrings: true });
+        pool.on('connection', (c) => c.query("SET time_zone = '-05:00'"));
+        const antes = (await call('GET', '/cash/current')).body;
+        const clave = `9999-01-${String(Math.floor(Math.random() * 28) + 1).padStart(2, '0')}`;
+        const r = await cerrarCajaAuto(pool, clave);
+        const cerrada = (await call('GET', `/cash/sessions/${antes.session.id}`)).body.session;
+        const nueva = (await call('GET', '/cash/current')).body.session;
+        reg(G, 'cierra la caja abierta', r.ok && r.resultado.cerrado === true && cerrada && !cerrada.open, JSON.stringify(r).slice(0, 200));
+        reg(G, 'queda sin arqueo (sin contado ni diferencia)', cerrada?.countedCash === null && cerrada?.difference === null);
+        reg(G, 'la siguiente arranca con el efectivo que debía haber', nueva.id !== antes.session.id && Math.abs(nueva.initialCash - antes.summary.expectedCash) < 0.01);
+        const r2 = await cerrarCajaAuto(pool, clave);
+        reg(G, 'el candado impide cerrarla dos veces el mismo día', r2.omitido === true);
+        const r3 = await cerrarCajaAuto(pool, `${clave.slice(0, 8)}${clave.slice(8) === '28' ? '27' : '28'}`);
+        reg(G, 'una caja sin movimientos no se cierra vacía', r3.ok && r3.resultado.cerrado === false);
+        reg(G, 'queda una sola caja abierta', (await call('GET', '/contabilidad/salud')).body.controles.find((c) => c.clave === 'caja_unica')?.ok === true);
+        await pool.end();
+    }
+
+    // ── Fase F · Cierres automáticos ──
+    {
+    const G = 'Fase F · Cierres automáticos (23:59)';
+    const autoList = await call('GET', '/contabilidad/automaticos');
+    reg(G, 'endpoint de tareas automáticas disponible', autoList.status === 200 && autoList.body.disponible === true);
+
+    const ejecAuto = await call('POST', '/contabilidad/automaticos/ejecutar');
+    reg(G, 'ejecución forzada de tareas automáticas responde ok', ejecAuto.status === 200 && ejecAuto.body.ok === true);
+
+    const [candados] = await db.query('SELECT COUNT(*) AS total, COUNT(DISTINCT clave) AS unicos FROM tareas_automaticas');
+    reg(G, 'candado: las tareas automáticas tienen claves únicas', Number(candados[0].total) === Number(candados[0].unicos));
+    }
 }
 
 const fallas = resultados.filter((r) => r.ok === false);

@@ -14,6 +14,7 @@ import Vender from './components/Vender';
 import Recibir from './components/Recibir';
 import Consultar from './components/Consultar';
 import Contabilidad from './components/Contabilidad';
+import TarjetasRegalo from './components/TarjetasRegalo';
 import Suppliers from './components/Suppliers';
 import Clients from './components/Clients';
 import Login from './components/Login';
@@ -200,6 +201,8 @@ function App() {
         return <Consultar {...commonProps} />;
       case 'contabilidad':
         return <Contabilidad {...commonProps} />;
+      case 'giftcards':
+        return <TarjetasRegalo {...commonProps} />;
       case 'dashboard':
         return <Dashboard {...commonProps} sales={sales} inventory={inventory} purchases={purchases} expenses={expenses} setActiveTab={setActiveTab} />;
       case 'inventory':

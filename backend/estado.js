@@ -15,7 +15,9 @@ export const esquema = {
     blindaje: false,         // 015: cantidades decimales, cambio de costo y consumos por línea
     caja: false,             // 016: sesiones de caja, libro de dinero y anulaciones
     recepciones: false,      // 017: recepciones de mercancía (factura con varias líneas)
-    trazabilidad: false      // 018: hora única, auditoría encadenada, periodos y libros inmutables
+    trazabilidad: false,     // 018: hora única, auditoría encadenada, periodos y libros inmutables
+    automaticos: false,      // 019: cierres automáticos de caja y de mes
+    tarjetas: false          // 020: tarjetas de regalo
 };
 
 export const actualizarEsquema = (aplicadas) => {
@@ -34,4 +36,6 @@ export const actualizarEsquema = (aplicadas) => {
     esquema.caja = aplicadas.has('016');
     esquema.recepciones = aplicadas.has('017');
     esquema.trazabilidad = aplicadas.has('018');
+    esquema.automaticos = aplicadas.has('019');
+    esquema.tarjetas = aplicadas.has('020');
 };

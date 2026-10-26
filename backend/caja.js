@@ -131,14 +131,24 @@ export const sesionPublica = (s) => ({
  * se retira, y abre la siguiente con el efectivo que queda en el cajón (contado − retirado).
  * sesionId evita cerrar dos veces: si otra persona ya cerró, la abierta es otra y se rechaza.
  */
-export async function cerrarSesion(conn, { sesionId, contado, retirado = 0, notas, usuarioId }) {
+export async function cerrarSesion(conn, { sesionId, contado, retirado = 0, notas, usuarioId, automatico = false }) {
     const sesion = await sesionAbierta(conn, { bloquear: true });
     if (Number(sesionId) !== sesion.id) throw err(409, 'Esta caja ya se cerró: recarga para ver la sesión actual');
+    const resumen = await resumenSesion(conn, sesion);
+    // Cierre automático (23:59): nadie contó el efectivo. Queda sin contado ni diferencia (no «cuadra»:
+    // no se sabe) y la siguiente sesión arranca con lo que debía haber en el cajón.
+    if (automatico) {
+        await conn.query(
+            `UPDATE sesiones_caja SET abierta = NULL, cerrada_en = NOW(), cerrada_por = NULL, efectivo_esperado = ?, efectivo_contado = NULL,
+             diferencia = NULL, efectivo_retirado = 0, resumen = ?, notas = ? WHERE id = ?`,
+            [resumen.expectedCash, JSON.stringify(resumen), notas || 'Cierre automático de las 23:59 (sin arqueo)', sesion.id]);
+        const [nueva] = await conn.query("INSERT INTO sesiones_caja (tipo, abierta, abierta_en, efectivo_inicial) VALUES ('normal', 1, NOW(), ?)", [resumen.expectedCash]);
+        return { closedId: sesion.id, expectedCash: resumen.expectedCash, countedCash: null, difference: null, newSessionId: nueva.insertId, automatico: true };
+    }
     const efectivo = r2(contado);
     const retiro = r2(retirado || 0);
     if (!(efectivo >= 0)) throw err(400, 'Escribe el efectivo contado en el cajón (0 o más)');
     if (!(retiro >= 0) || retiro > efectivo) throw err(400, 'Lo retirado no puede ser negativo ni mayor que lo contado');
-    const resumen = await resumenSesion(conn, sesion);
     const diferencia = r2(efectivo - resumen.expectedCash);
     await conn.query(
         `UPDATE sesiones_caja SET abierta = NULL, cerrada_en = NOW(), cerrada_por = ?, efectivo_esperado = ?, efectivo_contado = ?,
@@ -152,10 +162,16 @@ export async function cerrarSesion(conn, { sesionId, contado, retirado = 0, nota
 
 // Documentos cuyo libro de dinero no suma su monto vigente (debe estar vacío)
 export async function auditarDinero(db) {
+    // Cada documento contra lo que dejó en el libro. Los pagos con un método que no mueve la caja (tarjeta
+    // de regalo) deben dejar 0; la venta de una tarjeta deja su valor.
     const tablas = [['pago', 'pagos', 1], ['gasto', 'gastos', -1], ['compra', 'compras', -1]];
+    if (esquema.tarjetas) tablas.push(['tarjeta', 'tarjetas_regalo', 1]);
     const diferencias = [];
     for (const [tipo, tabla, signo] of tablas) {
-        const [rows] = await db.query(`SELECT d.id, d.monto, d.anulada_en, COALESCE(SUM(mc.monto), 0) AS libro FROM ${tabla} d
+        const monto = tipo === 'tarjeta' ? 'd.valor'
+            : tipo === 'pago' && esquema.tarjetas ? '(SELECT IF(mp.mueve_caja = 0, 0, d.monto) FROM metodos_pago mp WHERE mp.id = d.metodo_pago_id)'
+                : 'd.monto';
+        const [rows] = await db.query(`SELECT d.id, COALESCE(${monto}, d.${tipo === 'tarjeta' ? 'valor' : 'monto'}) AS monto, d.anulada_en, COALESCE(SUM(mc.monto), 0) AS libro FROM ${tabla} d
             LEFT JOIN movimientos_caja mc ON mc.origen_tipo = ? AND mc.origen_id = d.id GROUP BY d.id`, [tipo]);
         for (const r of rows) {
             const documento = r.anulada_en ? 0 : signo * Number(r.monto);

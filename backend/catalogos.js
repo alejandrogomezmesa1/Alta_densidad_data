@@ -34,8 +34,12 @@ export async function insertarPago(conn, { ventaId, monto, fecha, metodo, crear 
         const id = await metodoPagoId(conn, nombre, { crear });
         const [r] = await conn.query(`INSERT INTO pagos (venta_id, monto, fecha, metodo, metodo_pago_id${esquema.trazabilidad ? ', creado_por' : ''}) VALUES (?, ?, ?, ?, ?${esquema.trazabilidad ? ', ?' : ''})`,
             [ventaId, monto, fecha, nombre, id, ...(esquema.trazabilidad ? [usuarioId || null] : [])]);
-        await sincronizarDinero(conn, { origenTipo: 'pago', origenId: r.insertId, tipo: 'cobro', monto: Number(monto), metodoPagoId: id,
-            descripcion: `Pago de la venta #${ventaId}`, usuarioId });
+        // La tarjeta de regalo no mueve la caja: su dinero entró cuando se vendió
+        const [[m]] = esquema.tarjetas ? await conn.query('SELECT mueve_caja FROM metodos_pago WHERE id = ?', [id]) : [[null]];
+        if (!m || Number(m.mueve_caja) !== 0) {
+            await sincronizarDinero(conn, { origenTipo: 'pago', origenId: r.insertId, tipo: 'cobro', monto: Number(monto), metodoPagoId: id,
+                descripcion: `Pago de la venta #${ventaId}`, usuarioId });
+        }
         return r.insertId;
     }
     const [r] = await conn.query('INSERT INTO pagos (venta_id, monto, fecha, metodo) VALUES (?, ?, ?, ?)', [ventaId, monto, fecha, nombre]);

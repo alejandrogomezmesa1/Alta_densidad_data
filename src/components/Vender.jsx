@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, Trash2, User, CheckCircle2, Minus, Plus, AlertTriangle, X } from 'lucide-react';
+import { Search, Trash2, User, CheckCircle2, Minus, Plus, AlertTriangle, X, Ticket } from 'lucide-react';
 import { NumericFormat } from 'react-number-format';
 import { api } from '../services/api';
 import { coincide, normalizar, formatoCantidad, nivelStock, NIVELES_STOCK, pesos, hoyBogota } from '../utils/inventario';
@@ -30,6 +30,9 @@ const Vender = ({ products = [], customers = [], notify, onDone, config }) => {
   const [otraFecha, setOtraFecha] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [ultima, setUltima] = useState(null);
+  const [tarjeta, setTarjeta] = useState(null); // tarjeta de regalo validada: { code, value, expires }
+  const [codigoTarjeta, setCodigoTarjeta] = useState('');
+  const [verTarjeta, setVerTarjeta] = useState(false);
   const buscador = useRef(null);
   const venta = useRef(null);
 
@@ -52,9 +55,12 @@ const Vender = ({ products = [], customers = [], notify, onDone, config }) => {
   }, [products, busqueda, filtro]);
 
   const total = r2(carrito.reduce((s, l) => s + (Number(l.cantidad) || 0) * (Number(l.precio) || 0), 0));
+  // La tarjeta de regalo se aplica primero; lo que falte se cobra con el método elegido
+  const conTarjeta = tarjeta ? r2(Math.min(tarjeta.value, total)) : 0;
+  const porCobrar = r2(total - conTarjeta);
   const metodoActual = metodos.find((m) => m.name === metodo);
-  const pagaAhora = pagaCompleto ? total : Math.min(Number(abono) || 0, total);
-  const cambio = pagaCompleto && Number(metodoActual?.isCash) === 1 && Number(recibe) > 0 ? Number(recibe) - total : null;
+  const pagaAhora = pagaCompleto ? porCobrar : Math.min(Number(abono) || 0, porCobrar);
+  const cambio = pagaCompleto && porCobrar > 0 && Number(metodoActual?.isCash) === 1 && Number(recibe) > 0 ? Number(recibe) - porCobrar : null;
   const sinCliente = !cliente.id && !cliente.nombre.trim();
 
   // Problemas por línea, para avisar antes de cobrar
@@ -109,7 +115,26 @@ const Vender = ({ products = [], customers = [], notify, onDone, config }) => {
     setMetodo('Efectivo');
     setFecha(hoyBogota());
     setOtraFecha(false);
+    setTarjeta(null);
+    setCodigoTarjeta('');
+    setVerTarjeta(false);
     buscador.current?.focus();
+  };
+
+  const aplicarTarjeta = async () => {
+    const codigo = codigoTarjeta.trim();
+    if (!codigo) return;
+    try {
+      const t = await api.get(`/gift-cards/code/${encodeURIComponent(codigo)}`);
+      if (t.status !== 'activa') {
+        notify?.(t.status === 'redimida' ? `La tarjeta ${t.code} ya se usó (venta #${t.saleId})` : t.status === 'vencida' ? `La tarjeta ${t.code} venció el ${t.expires}` : `La tarjeta ${t.code} está anulada`, 'error');
+        return;
+      }
+      setTarjeta(t);
+      setCodigoTarjeta(t.code);
+    } catch (e) {
+      notify?.(e.message, 'error');
+    }
   };
 
   const cobrar = async () => {
@@ -117,12 +142,13 @@ const Vender = ({ products = [], customers = [], notify, onDone, config }) => {
     setGuardando(true);
     try {
       const r = await api.post('/sales', {
-        date: fecha, method: metodo, initialPayment: pagaAhora,
+        date: fecha, method: metodo, initialPayment: pagaAhora, giftCardCode: tarjeta?.code,
         customerId: cliente.id || undefined, customerName: cliente.nombre.trim() || undefined,
         idDocument: cliente.cedula || undefined, phone: cliente.telefono || undefined,
         items: carrito.map((l) => ({ productId: l.productId, quantity: Number(l.cantidad), unitPrice: Number(l.precio), allowBelowCost: l.bajoCosto }))
       });
-      setUltima({ id: r.id, total, pagado: pagaAhora, cambio, metodo, cliente: cliente.nombre.trim() || 'Consumidor final' });
+      setUltima({ id: r.id, total, pagado: pagaAhora + conTarjeta, cambio, metodo: tarjeta ? (pagaAhora > 0 ? `tarjeta de regalo + ${metodo}` : 'tarjeta de regalo') : metodo,
+        cliente: cliente.nombre.trim() || 'Consumidor final', sobrante: tarjeta ? r2(tarjeta.value - conTarjeta) : 0 });
       notify?.(`Venta #${r.id} registrada`, 'success');
       limpiar();
       onDone?.();
@@ -150,6 +176,7 @@ const Vender = ({ products = [], customers = [], notify, onDone, config }) => {
               Venta #{ultima.id} · {ultima.cliente} · {pesos(ultima.total)} por {ultima.metodo}
               {ultima.pagado < ultima.total && ` · queda debiendo ${pesos(ultima.total - ultima.pagado)}`}
               {ultima.cambio > 0 && <b> · Cambio: {pesos(ultima.cambio)}</b>}
+              {ultima.sobrante > 0 && ` · de la tarjeta sobraron ${pesos(ultima.sobrante)} (no se devuelven)`}
             </span>
           </div>
           <button className="btn-icon" onClick={() => setUltima(null)} aria-label="Cerrar aviso"><X size={14} /></button>
@@ -266,6 +293,25 @@ const Vender = ({ products = [], customers = [], notify, onDone, config }) => {
 
           <div className="premium-card">
             <span className="paso">3 · Cobrar</span>
+            {tarjeta ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', padding: '0.75rem', marginBottom: '1rem', border: '1px solid var(--accent-primary)', borderRadius: 8 }}>
+                <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', fontSize: '0.9rem' }}>
+                  <Ticket size={16} /> <span><b>{tarjeta.code}</b> · paga {pesos(conTarjeta)}{tarjeta.value > total && total > 0 ? ` (sobran ${pesos(tarjeta.value - total)}, no se devuelven)` : ''} · vence {tarjeta.expires}</span>
+                </span>
+                <button className="btn-icon" onClick={() => { setTarjeta(null); setCodigoTarjeta(''); }} aria-label="Quitar la tarjeta"><X size={14} /></button>
+              </div>
+            ) : verTarjeta ? (
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                <input autoFocus value={codigoTarjeta} onChange={(e) => setCodigoTarjeta(e.target.value)} placeholder="Código: AD-XXXX-XXXX"
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); aplicarTarjeta(); } }} style={{ flex: '1 1 180px', textTransform: 'uppercase' }} />
+                <button className="btn-secondary" onClick={aplicarTarjeta} disabled={!codigoTarjeta.trim()}>Aplicar</button>
+              </div>
+            ) : (
+              <button onClick={() => setVerTarjeta(true)} style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginBottom: '1rem', color: 'var(--text-secondary)', textDecoration: 'underline', fontSize: '0.9rem' }}>
+                <Ticket size={15} /> Paga con tarjeta de regalo
+              </button>
+            )}
+            {porCobrar > 0 && <>
             <div className="chips">
               {metodos.map((m) => <button key={m.name} className={`chip${metodo === m.name ? ' active' : ''}`} onClick={() => setMetodo(m.name)}>{m.name}</button>)}
             </div>
@@ -278,7 +324,7 @@ const Vender = ({ products = [], customers = [], notify, onDone, config }) => {
                 Abona ahora
                 <NumericFormat value={abono} prefix="$" thousandSeparator="." decimalSeparator="," allowNegative={false} onValueChange={(v) => setAbono(v.value)} placeholder="$0" />
                 <span style={{ fontSize: '0.85rem', textTransform: 'none', letterSpacing: 0, color: sinCliente ? 'var(--error)' : 'var(--text-secondary)' }}>
-                  {sinCliente ? 'Escribe el nombre del cliente: queda debiendo.' : `Queda debiendo ${pesos(total - pagaAhora)}`}
+                  {sinCliente ? 'Escribe el nombre del cliente: queda debiendo.' : `Queda debiendo ${pesos(porCobrar - pagaAhora)}`}
                 </span>
               </label>
             )}
@@ -289,6 +335,7 @@ const Vender = ({ products = [], customers = [], notify, onDone, config }) => {
                 {cambio !== null && <span style={{ fontWeight: 500, fontSize: '1.25rem', textTransform: 'none', letterSpacing: 0, color: cambio < 0 ? 'var(--error)' : 'var(--success)' }}>{cambio < 0 ? `Faltan ${pesos(-cambio)}` : `Cambio: ${pesos(cambio)}`}</span>}
               </label>
             )}
+            </>}
             <div style={{ marginTop: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
               {otraFecha
                 ? <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>Fecha <input type="date" value={fecha} max={hoyBogota()} onChange={(e) => setFecha(e.target.value)} style={{ width: 'auto' }} /></label>
@@ -296,7 +343,7 @@ const Vender = ({ products = [], customers = [], notify, onDone, config }) => {
             </div>
             <button className="btn-primary" onClick={cobrar} disabled={guardando || bloqueos.length > 0} title={bloqueos[0] || ''}
               style={{ width: '100%', height: 58, fontSize: '1.05rem', marginTop: '1.25rem' }}>
-              {guardando ? 'Registrando…' : pagaCompleto ? `Cobrar ${pesos(total)}` : `Registrar venta (${pesos(pagaAhora)} ahora)`}
+              {guardando ? 'Registrando…' : tarjeta && porCobrar <= 0 ? 'Registrar venta (paga la tarjeta)' : pagaCompleto ? `Cobrar ${pesos(porCobrar)}${tarjeta ? ' + tarjeta' : ''}` : `Registrar venta (${pesos(pagaAhora)} ahora)`}
             </button>
             {bloqueos.length > 0 && carrito.length > 0 && <p style={{ marginTop: '0.6rem', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>{bloqueos[0]}</p>}
           </div>

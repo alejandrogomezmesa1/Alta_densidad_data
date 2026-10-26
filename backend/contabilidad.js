@@ -14,6 +14,7 @@ import crypto from 'crypto';
 import { esquema } from './estado.js';
 import { auditar, verificarCadena } from './auditoria.js';
 import { auditarStock } from './inventario.js';
+import { tarjetasDelPeriodo } from './tarjetas.js';
 import { auditarDinero } from './caja.js';
 
 const err = (status, mensaje) => Object.assign(new Error(mensaje), { status });
@@ -32,7 +33,8 @@ const siguiente = (periodo) => {
     const [y, m] = periodo.split('-').map(Number);
     return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
 };
-const hoyLocal = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().slice(0, 10);
+const ahoraLocal = () => new Date(Date.now() - 5 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16);
+const hoyLocal = () => ahoraLocal().slice(0, 10);
 
 // ── Bloqueo de periodos cerrados ──
 export async function ultimoCierre(conn) {
@@ -88,6 +90,10 @@ export async function resultados(db, desde, hasta) {
     const gastos = r2(gastosCat.reduce((s, g) => s + num(g.total), 0) - num(gAnul.total));
     const mermas = r2(num(aj.faltantes) - num(aj.sobrantes));
     const utilidadBruta = r2(ventasNetas - costoNeto);
+    // Tarjetas de regalo: venderlas no es venta (es un anticipo); lo que sobra al usarlas y las que se
+    // vencen sin usar sí son ingreso de la tienda
+    const tarjetas = await tarjetasDelPeriodo(db, desde, hasta);
+    const otrosIngresos = tarjetas ? tarjetas.ingreso : 0;
 
     return {
         desde, hasta,
@@ -100,7 +106,9 @@ export async function resultados(db, desde, hasta) {
         margenBruto: ventasNetas > 0 ? Math.round((utilidadBruta / ventasNetas) * 1000) / 10 : 0,
         gastos: { total: gastos, anulacionesAnteriores: r2(gAnul.total), porCategoria: gastosCat.map((g) => ({ categoria: g.categoria || 'Sin categoría', n: num(g.n), total: r2(g.total) })) },
         ajustesInventario: { faltantes: r2(aj.faltantes), sobrantes: r2(aj.sobrantes), neto: mermas },
-        utilidadOperativa: r2(utilidadBruta - gastos - mermas),
+        tarjetasRegalo: tarjetas,
+        otrosIngresos,
+        utilidadOperativa: r2(utilidadBruta + otrosIngresos - gastos - mermas),
         compras: { n: num(comp.n), total: r2(comp.total), anulacionesAnteriores: r2(cAnul.total), neto: r2(num(comp.total) - num(cAnul.total)) },
         dinero: await dineroDelPeriodo(db, ini, fin),
         cartera: await carteraAl(db, fin),
@@ -204,6 +212,15 @@ export async function salud(db) {
         const mesAnterior = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
         agregar('periodos', 'Los meses terminados están cerrados', Boolean(c && c.periodo >= mesAnterior),
             c ? `Último mes cerrado: ${c.periodo}${c.periodo < mesAnterior ? ` (falta cerrar hasta ${mesAnterior})` : ''}` : 'Todavía no se ha cerrado ningún mes', 'aviso');
+        if (esquema.automaticos) {
+            const [[falla]] = await db.query(
+                "SELECT clave, detalle, ejecutada_en FROM tareas_automaticas WHERE ok = 0 ORDER BY ejecutada_en DESC LIMIT 1"
+            ).catch(() => [[null]]);
+            if (falla) {
+                agregar('cierre_automatico_falla', 'Cierre automático pendiente', false,
+                    `Falló ${falla.clave}: ${falla.detalle || 'Error desconocido'}. Se reintenta cada hora.`, 'aviso');
+            }
+        }
     }
     return { ok: controles.every((c) => c.ok || c.nivel !== 'critico'), controles, revisado: new Date().toISOString() };
 }
@@ -222,10 +239,13 @@ export async function listarPeriodos(db) {
 }
 const sha256 = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
 
-export async function cerrarPeriodo(conn, periodo, { usuario, notas } = {}) {
+export async function cerrarPeriodo(conn, periodo, { usuario, notas, automatico = false } = {}) {
     if (!esquema.trazabilidad) throw err(503, 'Los cierres contables aún no están disponibles (migración 018 pendiente)');
     const { desde, hasta } = limitesPeriodo(periodo);
-    if (hasta >= hoyLocal()) throw err(400, `El mes ${periodo} todavía no ha terminado: se cierra a partir del día siguiente a su último día`);
+    // A mano, desde el día siguiente al último del mes; el cierre automático, desde las 23:59 del último día
+    const ahora = ahoraLocal();
+    const terminado = hasta < ahora.slice(0, 10) || (automatico && hasta === ahora.slice(0, 10) && ahora.slice(11) >= '23:59');
+    if (!terminado) throw err(400, `El mes ${periodo} todavía no ha terminado: se cierra a partir del día siguiente a su último día`);
     const [[existente]] = await conn.query('SELECT estado FROM periodos_contables WHERE periodo = ? FOR UPDATE', [periodo]);
     if (existente?.estado === 'cerrado') throw err(400, `El periodo ${periodo} ya está cerrado`);
     const ultimo = await ultimoCierre(conn);
@@ -242,6 +262,31 @@ export async function cerrarPeriodo(conn, periodo, { usuario, notas } = {}) {
     [periodo, desde, hasta, usuario?.id || null, resumen, hash, notas ? String(notas).slice(0, 500) : null]);
     await auditar(conn, { accion: 'cerrar', entidad: 'periodo', entidadId: periodo, resumen: `Cierre contable de ${periodo}`, despues: { hash, ...JSON.parse(resumen) }, usuario });
     return { periodo, hash };
+}
+
+/**
+ * Meses por cerrar, en orden, hasta `limite` (AAAA-MM): desde el siguiente al último cerrado o, si no
+ * hay ninguno, desde el primer mes con movimiento (ventas, pagos, compras o gastos).
+ */
+export async function mesesPendientes(conn, limite) {
+    const ultimo = await ultimoCierre(conn);
+    let desde = ultimo ? siguiente(ultimo.periodo) : null;
+    if (!desde) {
+        const [[auto]] = await conn.query("SELECT DATE_FORMAT(aplicado_en, '%Y-%m') AS desde FROM ajustes_aplicados WHERE clave = 'automaticos_desde'").catch(() => [[null]]);
+        if (auto?.desde) {
+            desde = auto.desde;
+        } else {
+            const [[r]] = await conn.query(`SELECT DATE_FORMAT(LEAST(
+                COALESCE((SELECT MIN(fecha) FROM ventas), '9999-12-31'), COALESCE((SELECT MIN(fecha) FROM pagos), '9999-12-31'),
+                COALESCE((SELECT MIN(fecha) FROM compras), '9999-12-31'), COALESCE((SELECT MIN(fecha) FROM gastos), '9999-12-31')), '%Y-%m') AS primero`);
+            desde = r.primero && r.primero !== '9999-12' ? r.primero : limite;
+        }
+    }
+    const lista = [];
+    if (desde && desde <= limite) {
+        for (let p = desde; p <= limite; p = siguiente(p)) lista.push(p);
+    }
+    return lista;
 }
 
 // Solo el último mes cerrado, con motivo: queda en la bitácora con la foto que tenía

@@ -50,10 +50,12 @@ function Resultados({ notify }) {
             {r.gastos.porCategoria.map((g) => <Linea key={g.categoria} etiqueta={g.categoria} nota={`${g.n}`} valor={g.total} nivel={1} />)}
             {r.gastos.anulacionesAnteriores > 0 && <Linea etiqueta="Gastos anulados de meses anteriores" valor={-r.gastos.anulacionesAnteriores} nivel={1} />}
             <Linea etiqueta="Ajustes de inventario (faltantes − sobrantes)" valor={r.ajustesInventario.neto} signo="-" />
+            {r.otrosIngresos > 0 && <Linea etiqueta="Tarjetas de regalo no usadas" nota="sobrantes y vencidas" valor={r.otrosIngresos} signo="+" />}
             <Linea etiqueta="Utilidad operativa" valor={r.utilidadOperativa} fuerte />
             <p className="conta-nota" style={{ marginTop: '1rem' }}>
               Base de causación: cada venta, gasto y compra cuenta en el mes de su fecha; si se anula en un mes posterior, ese mes la resta.
               El costo de ventas es el costo promedio de cada producto en el momento de venderlo.
+              Vender una tarjeta de regalo no es venta (es un anticipo): cuenta la venta en que se usa; lo que sobra y las vencidas son ingreso.
             </p>
           </section>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -70,6 +72,9 @@ function Resultados({ notify }) {
             <section className="premium-card">
               <h4 className="conta-titulo">Al cierre del mes</h4>
               <Linea etiqueta="Cartera (lo que deben los clientes)" nota={`${r.cartera.ventas} venta${r.cartera.ventas === 1 ? '' : 's'}`} valor={r.cartera.saldo} />
+              {r.tarjetasRegalo && r.tarjetasRegalo.pendientes.n > 0 && (
+                <Linea etiqueta="Tarjetas de regalo por usar (lo que debe la tienda)" nota={`${r.tarjetasRegalo.pendientes.n}`} valor={r.tarjetasRegalo.pendientes.total} />
+              )}
               <Linea etiqueta="Inventario al inicio" valor={r.inventario.inicial?.valor || 0} nota={r.inventario.inicial?.aproximado ? 'aproximado' : null} />
               <Linea etiqueta="Compras del mes" valor={r.compras.neto} nota={`${r.compras.n}`} />
               <Linea etiqueta="Inventario al cierre (a costo)" valor={r.inventario.final?.valor || 0} nota={r.inventario.final?.aproximado ? 'aproximado' : null} fuerte />
@@ -149,7 +154,7 @@ function Cierres({ notify, confirm }) {
         <h4 className="conta-titulo">Cerrar un mes</h4>
         <p className="conta-nota" style={{ marginBottom: '1rem' }}>
           Cerrar un mes guarda la foto de sus cifras con una huella digital y bloquea los documentos con fecha de ese mes.
-          Se cierra en orden, cuando el mes ya terminó y la salud contable no tiene problemas. Lo que se anule después cuenta en el mes en que se anula.
+          Se cierra en orden, cuando el mes ya terminó y la salud contable no tiene problemas. Lo que se anule después cuenta en el mes en que se anula. También se cierran automáticamente a las 23:59 el último día del mes (configurable en Sistema → Configuraciones).
         </p>
         {porCerrar ? (
           <>
@@ -174,7 +179,7 @@ function Cierres({ notify, confirm }) {
             <div>
               <b style={{ textTransform: 'capitalize' }}>{nombreMes(p.periodo)}</b>
               <small>
-                {p.estado === 'cerrado' ? `Cerrado ${fechaHora(p.cerrado_en)}${p.cerrado_por ? ` por ${p.cerrado_por}` : ''}` : `Reabierto ${fechaHora(p.reabierto_en)}: ${p.motivo_reapertura}`}
+                {p.estado === 'cerrado' ? `Cerrado ${fechaHora(p.cerrado_en)}${p.cerrado_por ? ` por ${p.cerrado_por}` : ' (automático)'}` : `Reabierto ${fechaHora(p.reabierto_en)}: ${p.motivo_reapertura}`}
               </small>
               <small title={p.hash}>{p.verificado ? '✓ Foto íntegra' : '✗ La foto no coincide con su huella'} · huella {p.hash.slice(0, 12)}…</small>
             </div>

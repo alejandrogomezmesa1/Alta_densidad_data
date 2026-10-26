@@ -7,6 +7,7 @@
 // ============================================================
 import { esquema } from './estado.js';
 import { devolverVenta } from './recetas.js';
+import { liberarTarjetaDeVenta } from './tarjetas.js';
 import { sincronizarDinero } from './caja.js';
 import { auditar, documentoVenta } from './auditoria.js';
 
@@ -25,10 +26,12 @@ export async function anularVenta(conn, ventaId, { motivo, usuarioId, usuario } 
         await sincronizarDinero(conn, { origenTipo: 'pago', origenId: p.id, tipo: 'cobro', monto: 0, metodoPagoId: p.metodo_pago_id,
             descripcion: `Devolución por anulación de la venta #${id}`, usuarioId });
     }
+    // La tarjeta de regalo con que se pagó vuelve a quedar activa (con su vencimiento original)
+    const tarjetas = await liberarTarjetaDeVenta(conn, id);
     // Una venta de un mes cerrado también se puede anular: el efecto (devolución, inventario) va en la fecha de hoy
     await auditar(conn, { accion: 'anular', entidad: 'venta', entidadId: id, resumen: `Venta #${id} anulada: ${texto}`,
         antes, despues: await documentoVenta(conn, id), usuario: usuario || (usuarioId ? { id: usuarioId } : null) });
-    return { saleId: id, refundedPayments: pagos.length };
+    return { saleId: id, refundedPayments: pagos.length, giftCardsReleased: tarjetas };
 }
 
 export const ventaAnulada = async (conn, id) => {
